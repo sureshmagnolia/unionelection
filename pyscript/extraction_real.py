@@ -1,74 +1,53 @@
-"""
-extraction_real.py — Uses pdfminer.six for real PDF extraction.
-Replaces extraction.py when pdfminer is available in PyScript.
-"""
-
-from js import document, console, localStorage, FileReader, URL
+# pyscript/extraction_real.py
+# WARNING: Requires pdfminer.six installed in py-env; may be heavy for browser.
+from js import document, console, localStorage, URL, Blob, FileReader
 from pyodide.ffi import create_proxy
-import asyncio
-import json
+import asyncio, json, re
 from pdfminer.high_level import extract_text
 
 def log(msg):
-    status = document.getElementById("status")
-    status.innerHTML += f"&gt; {msg}<br>"
-    status.scrollTop = status.scrollHeight
+    s = document.getElementById("status")
+    if s: s.innerText += f"> {msg}\n"; s.scrollTop = s.scrollHeight
 
-async def read_file_to_temp(file):
-    """Reads browser file into PyScript virtual FS (/tmp/tmp.pdf)."""
-    future = asyncio.Future()
+async def read_array_buffer(file):
+    fut = asyncio.Future()
+    def onload(evt): fut.set_result(evt.target.result.to_py())
+    fr = __new__(FileReader())
+    fr.onload = create_proxy(onload)
+    fr.readAsArrayBuffer(file)
+    return await fut
 
-    def onload(evt):
-        data = evt.target.result.to_py()
-        with open("/tmp/tmp.pdf", "wb") as f:
-            f.write(data)
-        future.set_result("/tmp/tmp.pdf")
+def parse_pdf_bytes(bytes_data):
+    # write to a temp file in pyodide FS then extract_text
+    path = "/tmp/tmp.pdf"
+    with open(path, "wb") as f:
+        f.write(bytes_data)
+    text = extract_text(path)
+    return text
 
-    reader = FileReader.new()
-    reader.onload = create_proxy(onload)
-    reader.readAsArrayBuffer(file)
-    return await future
-
-def parse_pdf(path):
-    """Extracts text from PDF using pdfminer."""
-    return extract_text(path)
-
-async def start_extraction(event=None):
-    log("Starting PDFMiner extraction...")
+async def start_extraction_real(event=None):
+    log("Starting advanced PDF extraction (pdfminer)...")
     input_el = document.getElementById("pdf-file")
-    if not input_el.files.length:
-        log("No PDF selected.")
+    if not input_el or input_el.files.length == 0:
+        log("No files selected.")
         return
-
     combined = []
     for i in range(input_el.files.length):
         f = input_el.files.item(i)
-        path = await read_file_to_temp(f)
-        text = parse_pdf(path)
-        combined.extend(extract_students_from_text(text))
-        await asyncio.sleep(0.05)
-
+        log(f"Reading {f.name}")
+        arr = await read_array_buffer(f)
+        text = parse_pdf_bytes(arr)
+        # use same regex extractor
+        pattern = r"(\d{4,})\s+([A-Za-z][A-Za-z\s\.\-']{1,80}?)\s+([A-Z]{2,}[0-9A-Z\-]*)"
+        matches = re.findall(pattern, text)
+        for m in matches:
+            combined.append({"reg_no": m[0].strip(), "name": m[1].strip(), "course_code": m[2].strip()})
     localStorage.setItem("uocExam_extractedData", json.dumps(combined))
-    log(f"✅ Saved {len(combined)} records to localStorage.")
-    create_csv_download(combined)
-
-def extract_students_from_text(text):
-    import re
-    pattern = r"(\d{5,})\s+([A-Za-z][A-Za-z\s]+)\s+([A-Z]{3}\d+[A-Z]*\d*)"
-    matches = re.findall(pattern, text)
-    return [{"reg_no": r, "name": n.strip(), "course_code": c} for r, n, c in matches]
-
-def create_csv_download(data):
-    if not data:
-        return
-    keys = ["reg_no", "name", "course_code"]
-    header = ",".join(keys)
-    rows = [header] + [",".join(str(d.get(k, "")) for k in keys) for d in data]
-    csv_text = "\n".join(rows)
-    blob = __new__(Blob([csv_text], { "type": "text/csv" }))
+    # create download link
+    keys = ["reg_no","name","course_code"]
+    rows = [",".join(keys)] + [",".join([escape_csv(str(r.get(k,""))) for k in keys]) for r in combined]
+    blob = Blob.new(["\n".join(rows)], { "type": "text/csv" })
     url = URL.createObjectURL(blob)
-    link = document.createElement("a")
-    link.href = url
-    link.download = "Extracted_Data.csv"
-    link.textContent = "📥 Download Extracted_Data.csv"
-    document.getElementById("status").appendChild(link)
+    a = document.createElement("a"); a.href = url; a.download = "Combined_Nominal_Roll.csv"; a.textContent = "📥 Download Combined_Nominal_Roll.csv"
+    document.getElementById("status").appendChild(a)
+    log(f"Saved {len(combined)} records.")
