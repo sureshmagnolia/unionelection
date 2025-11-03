@@ -1,4 +1,3 @@
-// scripts/navigation.js
 document.addEventListener("DOMContentLoaded", () => {
   const navButtons = document.querySelectorAll(".nav-button");
   const views = document.querySelectorAll(".view-section");
@@ -10,19 +9,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btn) btn.classList.add("nav-button-active");
     const view = document.getElementById(targetId);
     if (view) view.classList.add("active");
-
-    try { localStorage.setItem("uocExam_activeTab", targetId); } catch (e) { console.warn(e); }
+    localStorage.setItem("uocExam_activeTab", targetId);
   }
 
-  navButtons.forEach(btn => {
-    btn.addEventListener("click", () => activate(btn.dataset.target));
-  });
+  navButtons.forEach(btn => btn.addEventListener("click", () => activate(btn.dataset.target)));
 
   const last = localStorage.getItem("uocExam_activeTab");
-  if (last && document.getElementById(last)) {
-    activate(last);
-  } else {
-    const first = navButtons[0];
-    if (first) activate(first.dataset.target);
-  }
+  if (last && document.getElementById(last)) activate(last);
+  else if (navButtons.length) activate(navButtons[0].dataset.target);
 });
