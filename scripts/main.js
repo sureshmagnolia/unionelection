@@ -1,30 +1,34 @@
-// main.js — Core actions for extractor and reports
+// scripts/main.js
 document.addEventListener("DOMContentLoaded", () => {
   const runBtn = document.getElementById("run-button");
   const spinner = document.getElementById("spinner");
   const status = document.getElementById("status");
 
-  if (runBtn) {
-    runBtn.addEventListener("click", () => {
-      status.textContent = "> Starting extraction...\n";
-      spinner.classList.remove("hidden");
-      runBtn.disabled = true;
+  // If PyScript is present, PyScript module will wire up start_extraction.
+  // But keep a friendly JS fallback simulation if PyScript not loaded.
+  runBtn.addEventListener("click", async () => {
+    status.textContent = "> Starting extraction...\n";
+    spinner.classList.remove("hidden");
+    runBtn.disabled = true;
 
-      // Simulated long task
-      setTimeout(() => {
+    // If pyscript has defined a global start_extraction function, call it
+    if (typeof window.start_extraction === "function") {
+      try {
+        await window.start_extraction(); // extraction.py can set this
+      } catch (e) {
+        console.error(e);
+        status.textContent += `> Error in PyScript extraction: ${e}\n`;
+      } finally {
         spinner.classList.add("hidden");
         runBtn.disabled = false;
-        status.textContent += "> Extraction complete. Data saved.\n";
-      }, 2000);
-    });
-  }
-});
+      }
+      return;
+    }
 
-/* ---- Reports placeholder ---- */
-function generateReport() {
-  const reportDiv = document.getElementById("report-output");
-  reportDiv.innerHTML = `
-    <div class="bg-gray-50 p-3 rounded-md border border-gray-300 mt-3">
-      <p class="text-sm text-gray-700">Report generation placeholder — connect data processing here.</p>
-    </div>`;
-}
+    // JS fallback: simulate
+    await new Promise(res => setTimeout(res, 1200));
+    status.textContent += "> Simulation complete. No PyScript detected.\n";
+    spinner.classList.add("hidden");
+    runBtn.disabled = false;
+  });
+});
