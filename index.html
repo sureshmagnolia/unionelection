@@ -3,26 +3,21 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>UOC Exam Management (Modular)</title>
+  <title>UOC Exam Management (PyScript)</title>
 
-  <!-- Tailwind (dev CDN) -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Main styles -->
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/print.css" media="print">
 
-  <!-- PyScript (optional) -->
+  <!-- PyScript -->
   <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
   <script defer src="https://pyscript.net/latest/pyscript.js"></script>
-
-  <style>
-    /* quick safety: make pre logs monospace and small */
-    pre#status { white-space:pre-wrap; font-family:monospace; font-size:12px; }
-  </style>
 </head>
-<body class="bg-gray-100 font-sans">
 
+<body class="bg-gray-100 font-sans">
   <!-- NAV -->
   <nav id="main-nav" class="bg-indigo-700 text-white sticky top-0 z-50 shadow-md">
     <div class="text-center py-3 bg-indigo-800">
@@ -41,19 +36,19 @@
 
   <!-- MAIN -->
   <main id="app-content" class="container max-w-3xl mx-auto p-4">
+
     <!-- Extractor -->
     <section id="view-extractor" class="view-section active">
       <div class="bg-white p-6 rounded-lg shadow">
         <h2 class="text-2xl font-semibold mb-4">Data Extractor</h2>
-
-        <p class="text-sm text-gray-600 mb-3">
-          Upload PDF nominal rolls. Extracted data will be saved locally and downloadable as CSV.
-        </p>
+        <p class="text-sm text-gray-600 mb-3">Upload PDF nominal rolls. Extracted data will be saved locally and downloadable as CSV.</p>
 
         <input type="file" id="pdf-file" accept=".pdf" multiple
                class="block w-full text-sm text-gray-500 mb-4 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
 
-        <button id="run-button" class="w-full inline-flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-md font-semibold">
+        <!-- ✅ PyScript-driven button -->
+        <button id="run-button" py-click="start_extraction()"
+                class="w-full inline-flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-md font-semibold">
           <span id="spinner" class="loader-spin hidden"></span>
           <span>Run Batch Extraction</span>
         </button>
@@ -132,28 +127,28 @@
         <p class="text-sm text-gray-600 mb-3">Load a CSV to edit records inline, save corrections locally and export corrected CSV.</p>
 
         <input type="file" id="csv-upload" accept=".csv" class="block w-full text-sm text-gray-500 mb-3">
-
         <div class="flex gap-3">
           <button id="load-csv-btn" class="btn-save bg-teal-600 hover:bg-teal-700">Load CSV</button>
           <button id="save-corrections-btn" class="btn-save bg-green-600 hover:bg-green-700">Save Corrections</button>
           <button id="download-csv-btn" class="btn-save bg-indigo-600 hover:bg-indigo-700">Download Corrected CSV</button>
           <button id="merge-corrections-btn" class="btn-save bg-yellow-600 hover:bg-yellow-700">Merge to Extracted Data</button>
         </div>
-
         <div id="csv-table-container" class="mt-4 overflow-auto"></div>
       </div>
     </section>
 
   </main>
 
-  <!-- Scripts -->
+  <!-- JS modules -->
   <script defer src="scripts/navigation.js"></script>
   <script defer src="scripts/storage.js"></script>
-  <script defer src="scripts/main.js"></script>
   <script defer src="scripts/reports.js"></script>
   <script defer src="scripts/csv_manager.js"></script>
 
-  <!-- PyScript extraction (optional) -->
+  <!-- PyScript configuration -->
+  <py-config>
+    packages = []
+  </py-config>
   <py-script src="pyscript/extraction.py"></py-script>
 </body>
 </html>
