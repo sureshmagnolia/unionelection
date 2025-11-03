@@ -1,66 +1,48 @@
 // scripts/reports.js
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("Reports module loaded");
+  console.log("reports.js loaded");
 });
 
-/**
- * Generates all reports from extracted data, room layout, and absentees.
- */
 function generateReport() {
   const extractedRaw = localStorage.getItem("uocExam_extractedData");
   const savedRaw = localStorage.getItem("uocExamAppData");
+  const out = document.getElementById("report-output");
+  out.innerHTML = "";
 
-  const output = document.getElementById("report-output");
-  output.innerHTML = "";
-
-  if (!extractedRaw || !savedRaw) {
-    output.innerHTML = `<p class="text-red-600 font-medium">⚠️ Missing extracted data or saved settings.</p>`;
+  if (!extractedRaw) {
+    out.innerHTML = `<p class="text-red-600 font-medium">⚠️ No extracted data found. Run extraction or upload corrected CSV.</p>`;
+    return;
+  }
+  if (!savedRaw) {
+    out.innerHTML = `<p class="text-red-600 font-medium">⚠️ No saved settings found. Please fill Settings and Room Settings.</p>`;
     return;
   }
 
   const extracted = JSON.parse(extractedRaw);
   const saved = JSON.parse(savedRaw);
+  const absentees = (saved.absentees || "").split(/[\s,]+/).filter(a=>a);
+  const present = extracted.filter(s => !absentees.includes(s.reg_no));
 
-  const absentees = (saved.absentees || "")
-    .split(/[\s,]+/)
-    .filter((a) => a.trim().length > 0);
-
-  // Filter absentees
-  const present = extracted.filter((s) => !absentees.includes(s.reg_no));
-
-  // Build HTML report
   let html = `
     <div class="print-container">
       <div class="print-title">${saved.examName || "Exam Report"}</div>
       <div class="print-meta">Date: ${saved.examDate || "-"}</div>
-      <div class="print-meta">Total Students: ${extracted.length}</div>
+      <div class="print-meta">Total Extracted: ${extracted.length}</div>
       <div class="print-meta">Absentees: ${absentees.length}</div>
       <div class="print-meta">Present: ${present.length}</div>
 
       <table class="print-table mt-3">
-        <thead>
-          <tr><th>#</th><th>Register No</th><th>Name</th><th>Course Code</th></tr>
-        </thead>
+        <thead><tr><th>#</th><th>Reg No</th><th>Name</th><th>Course</th></tr></thead>
         <tbody>
   `;
 
-  present.forEach((s, idx) => {
-    html += `<tr>
-      <td>${idx + 1}</td>
-      <td>${s.reg_no}</td>
-      <td>${s.name}</td>
-      <td>${s.course_code}</td>
-    </tr>`;
+  present.forEach((s, i) => {
+    html += `<tr><td>${i+1}</td><td>${s.reg_no}</td><td>${s.name}</td><td>${s.course_code || ""}</td></tr>`;
   });
 
-  html += `
-        </tbody></table>
-        <div class="signature-line">
-          <div>Invigilator Signature</div>
-          <div>Chief Superintendent</div>
-        </div>
-    </div>
-  `;
+  html += `</tbody></table>
+    <div class="signature-line"><div>Invigilator Signature</div><div>Chief Superintendent</div></div>
+    </div>`;
 
-  output.innerHTML = html;
+  out.innerHTML = html;
 }
