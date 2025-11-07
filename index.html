@@ -1,151 +1,345 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>UOC Exam Management V10.0</title>
-
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="styles/main.css">
-  <link rel="stylesheet" href="styles/print.css" media="print">
-
-  <!-- PyScript -->
-  <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
-  <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UOC Exam — Room Assign (Single-file)</title>
+  <style>
+    :root{--bg:#f7fafc;--card:#fff;--accent:#0ea5a4;--muted:#6b7280}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;background:var(--bg);color:#111}
+    .container{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;align-items:center;gap:16px}
+    h1{margin:0;font-size:20px}
+    .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(15,23,42,0.06);margin-top:14px}
+    .grid{display:grid;gap:12px}
+    .cols-2{grid-template-columns:1fr 420px}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea,button{font-size:14px;padding:8px;border-radius:8px;border:1px solid #e6eef0;width:100%;box-sizing:border-box}
+    button{background:var(--accent);color:white;border:none;cursor:pointer}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(14,165,164,0.14)}
+    .small{padding:6px 8px;font-size:13px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eef2f6;text-align:left;font-size:13px}
+    .muted{color:var(--muted)}
+    .flex{display:flex;gap:8px;align-items:center}
+    .tabs{display:flex;gap:8px}
+    .tab{padding:8px 12px;border-radius:8px;cursor:pointer}
+    .tab.active{background:linear-gradient(90deg,#ecfeff,#f0f9ff);border:1px solid rgba(14,165,164,0.12)}
+    .preview{max-height:280px;overflow:auto;border-radius:8px;padding:8px;background:#fcfeff;border:1px solid #eef7f6}
+    .log{white-space:pre-wrap;font-family:monospace;font-size:12px;color:#0f172a}
+    @media (max-width:900px){.cols-2{grid-template-columns:1fr}
+      header{flex-direction:column;align-items:flex-start;gap:6px}
+    }
+  </style>
 </head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>UOC Exam — Room Assignment (single-file)</h1>
+        <div style="font-size:13px;color:var(--muted)">Upload CSV of students or paste data, create rooms & capacities, auto-assign and export.</div>
+      </div>
+    </header>
 
-<body class="bg-gray-100 font-sans">
-  <!-- NAV -->
-  <nav id="main-nav" class="bg-indigo-700 text-white sticky top-0 z-50 shadow-md">
-    <div class="text-center py-3 bg-indigo-800">
-      <h1 class="text-xl font-extrabold tracking-wider">UOC Exam Management</h1>
+    <div class="card grid cols-2">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong>Students</strong>
+          <div class="flex">
+            <input id="fileInput" type="file" accept="text/csv" style="width:250px" />
+            <button id="pasteBtn" class="small ghost">Paste CSV / TSV</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:10px">
+          <label>Preview / Paste area</label>
+          <textarea id="rawData" rows="7" placeholder="RegNo,Name,DOB,Course (optional). Example:\nABC123,John Doe,12-05-2000,BSC" style="width:100%"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="parseBtn">Parse Students</button>
+            <button id="clearStudents" class="ghost">Clear</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <label>Parsed students (<span id="studentCount">0</span>)</label>
+          <div id="studentsPreview" class="preview muted">No students parsed yet.</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="saveStudents">Save to local</button>
+            <button id="downloadStudents" class="ghost">Download CSV</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong>Rooms</strong>
+          <div class="flex">
+            <button id="addRoomBtn" class="small">Add Room</button>
+            <button id="clearRooms" class="small ghost">Clear</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <label>Create / Edit Rooms</label>
+          <div id="roomsList"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="defaultCapacity" type="number" min="1" placeholder="Default cap" style="width:130px" />
+            <button id="applyDefault" class="ghost">Apply to empty</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <label>Assignment</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="autoAssignBtn">Auto Assign</button>
+            <button id="clearAssign" class="ghost">Clear Assignment</button>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button id="exportAssignments">Export Assignments (CSV)</button>
+            <button id="printReport" class="ghost">Print Report</button>
+          </div>
+        </div>
+
+      </div>
     </div>
-    <div class="container max-w-3xl mx-auto flex flex-wrap justify-center gap-2 py-2">
-      <button data-target="view-extractor" class="nav-button bg-blue-600">Main Extractor</button>
-      <button data-target="view-settings" class="nav-button bg-green-600">Settings</button>
-      <button data-target="view-room" class="nav-button bg-purple-600">Room Settings</button>
-      <button data-target="view-qpcodes" class="nav-button bg-yellow-600">QP Codes</button>
-      <button data-target="view-reports" class="nav-button bg-red-600">Reports</button>
-      <button data-target="view-absentees" class="nav-button bg-pink-600">Absentees</button>
-      <button data-target="view-csv" class="nav-button bg-teal-600">CSV Correction</button>
+
+    <div class="card" style="margin-top:14px">
+      <strong>Assignments / Logs</strong>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div style="flex:1">
+          <label>Assignments Table</label>
+          <div id="assignTable" class="preview muted">No assignments yet.</div>
+        </div>
+        <div style="width:360px">
+          <label>Activity Log</label>
+          <div id="log" class="preview log">Ready.</div>
+        </div>
+      </div>
     </div>
-  </nav>
 
-  <!-- MAIN -->
-  <main id="app-content" class="container max-w-3xl mx-auto p-4">
+  </div>
 
-    <!-- Extractor -->
-    <section id="view-extractor" class="view-section active">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-semibold mb-4">Data Extractor</h2>
-        <p class="text-sm text-gray-600 mb-3">Upload PDF nominal rolls. Extracted data will be saved locally and downloadable as CSV.</p>
+  <script>
+    // Simple single-file working app for room assignment
+    // Data structures
+    const STORAGE_PREFIX = 'uoc_exam_v1_';
+    const studentsKey = STORAGE_PREFIX + 'students';
+    const roomsKey = STORAGE_PREFIX + 'rooms';
+    const assignmentsKey = STORAGE_PREFIX + 'assigns';
 
-        <input type="file" id="pdf-file" accept=".pdf" multiple
-               class="block w-full text-sm text-gray-500 mb-4 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+    let students = []; // {reg,name,dob,course}
+    let rooms = []; // {id,name,capacity}
+    let assignments = {}; // roomId -> [studentIndices]
 
-        <!-- ✅ PyScript-driven button -->
-        <button id="run-button" py-click="start_extraction()"
-                class="w-full inline-flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-md font-semibold">
-          <span id="spinner" class="loader-spin hidden"></span>
-          <span>Run Batch Extraction</span>
-        </button>
+    const el = id => document.getElementById(id);
+    const log = (m) => {
+      const lg = el('log');
+      lg.textContent = new Date().toLocaleTimeString() + ' - ' + m + '\n' + lg.textContent;
+    }
 
-        <div class="mt-6">
-          <h3 class="font-medium text-gray-700 mb-2">Processing Log:</h3>
-          <pre id="status" class="bg-gray-900 text-gray-200 p-3 rounded-md h-48 overflow-y-auto"></pre>
-        </div>
-      </div>
-    </section>
+    // CSV parser (simple)
+    function parseCSVText(text){
+      // try split lines, detect delimiter
+      const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+      if(lines.length===0) return [];
+      // detect delimiter from first line
+      const first = lines[0];
+      const delim = first.includes(',') ? ',' : (first.includes('\t') ? '\t' : ',');
+      const cols = lines.map(l=>l.split(delim).map(c=>c.trim()));
+      // If header row contains Reg or RegNo, drop it
+      let start = 0;
+      const header = cols[0].map(c=>c.toLowerCase());
+      if(header.some(h=>h.includes('reg'))||header.some(h=>h.includes('roll'))||header.some(h=>h.includes('name'))){start=1}
+      const mapped = [];
+      for(let i=start;i<cols.length;i++){
+        const row = cols[i];
+        if(row.length===0) continue;
+        const reg = row[0] || '';
+        const name = row[1] || '';
+        const dob = row[2] || '';
+        const course = row[3] || '';
+        if(!reg && !name) continue;
+        mapped.push({reg,name,dob,course});
+      }
+      return mapped;
+    }
 
-    <!-- Settings -->
-    <section id="view-settings" class="view-section hidden">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-semibold mb-4">General Settings</h2>
-        <label class="block text-sm font-medium text-gray-700">Exam Name</label>
-        <input id="exam-name" type="text" class="input-text" placeholder="Third Semester FYUG 2025">
-        <label class="block text-sm font-medium text-gray-700 mt-3">Exam Date</label>
-        <input id="exam-date" type="date" class="input-text">
-        <div class="mt-4">
-          <button class="btn-save" onclick="saveAppState()">Save Settings</button>
-        </div>
-      </div>
-    </section>
+    // File input
+    el('fileInput').addEventListener('change', e=>{
+      const f = e.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = function(ev){ el('rawData').value = ev.target.result; log('Loaded file: '+f.name); }
+      reader.readAsText(f);
+    });
 
-    <!-- Room Settings -->
-    <section id="view-room" class="view-section hidden">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-semibold mb-4">Room Settings</h2>
-        <textarea id="room-settings" class="input-text h-40" placeholder="One room per line. Format: RoomName=Capacity (e.g. A101=30)"></textarea>
-        <div class="mt-4">
-          <button class="btn-save" onclick="saveAppState()">Save Room Data</button>
-        </div>
-      </div>
-    </section>
+    // Parse button
+    el('parseBtn').addEventListener('click', ()=>{
+      const text = el('rawData').value.trim();
+      if(!text){ alert('Paste or upload CSV/TSV data first'); return; }
+      students = parseCSVText(text);
+      renderStudents();
+      log('Parsed '+students.length+' students');
+    });
 
-    <!-- QP Codes -->
-    <section id="view-qpcodes" class="view-section hidden">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-semibold mb-4">Question Paper Codes</h2>
-        <textarea id="qp-codes" class="input-text h-40" placeholder="CourseCode=QPCode per line"></textarea>
-        <div class="mt-4">
-          <button class="btn-save" onclick="saveAppState()">Save QP Codes</button>
-        </div>
-      </div>
-    </section>
+    el('pasteBtn').addEventListener('click', ()=>{ el('rawData').focus(); alert('Paste your CSV/TSV content into the text area and click Parse Students'); });
+    el('clearStudents').addEventListener('click', ()=>{ if(confirm('Clear parsed students?')){ students=[]; renderStudents(); localStorage.removeItem(studentsKey); log('Cleared students'); }});
 
-    <!-- Reports -->
-    <section id="view-reports" class="view-section hidden">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-semibold mb-4">Reports</h2>
-        <div class="flex gap-3">
-          <button class="btn-save" onclick="generateReport()">Generate Report</button>
-          <button class="btn-save" onclick="window.print()">Print</button>
-        </div>
-        <div id="report-output" class="mt-4"></div>
-      </div>
-    </section>
+    function renderStudents(){
+      el('studentCount').textContent = students.length;
+      const pv = el('studentsPreview');
+      if(students.length===0){ pv.textContent='No students parsed yet.'; return; }
+      const rows = students.slice(0,300).map(s=>s.reg+ ' — ' + s.name + (s.course? (' ('+s.course+')') : '')); // limit preview
+      pv.textContent = rows.join('\n');
+    }
 
-    <!-- Absentees -->
-    <section id="view-absentees" class="view-section hidden">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-semibold mb-4">Absentees</h2>
-        <textarea id="absentee-list" class="input-text h-40" placeholder="Enter register numbers separated by commas or newlines"></textarea>
-        <div class="mt-4">
-          <button class="btn-save" onclick="saveAppState()">Save Absentees</button>
-        </div>
-      </div>
-    </section>
+    el('saveStudents').addEventListener('click', ()=>{ localStorage.setItem(studentsKey, JSON.stringify(students)); log('Saved '+students.length+' students to localStorage'); alert('Saved'); });
+    el('downloadStudents').addEventListener('click', ()=>{ if(students.length===0){alert('No students');return;} downloadCSV(studentsToCsv(), 'students_export.csv'); });
 
-    <!-- CSV Correction -->
-    <section id="view-csv" class="view-section hidden">
-      <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-semibold mb-4">CSV Correction & Upload</h2>
-        <input type="file" id="csv-upload" accept=".csv" class="block w-full text-sm text-gray-500 mb-3">
-        <div class="flex gap-3">
-          <button id="load-csv-btn" class="btn-save bg-teal-600 hover:bg-teal-700">Load CSV</button>
-          <button id="save-corrections-btn" class="btn-save bg-green-600 hover:bg-green-700">Save Corrections</button>
-          <button id="download-csv-btn" class="btn-save bg-indigo-600 hover:bg-indigo-700">Download Corrected CSV</button>
-          <button id="merge-corrections-btn" class="btn-save bg-yellow-600 hover:bg-yellow-700">Merge to Extracted Data</button>
-        </div>
-        <div id="csv-table-container" class="mt-4 overflow-auto"></div>
-      </div>
-    </section>
+    function studentsToCsv(){
+      const lines = ['RegNo,Name,DOB,Course'];
+      students.forEach(s=> lines.push([escapeCsv(s.reg),escapeCsv(s.name),escapeCsv(s.dob),escapeCsv(s.course)].join(',')));
+      return lines.join('\n');
+    }
+    function escapeCsv(v){ if(v==null) return ''; return '"'+String(v).replace(/"/g,'""')+'"'; }
 
-  </main>
+    function downloadCSV(text, filename){
+      const blob = new Blob([text], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      log('Downloaded '+filename);
+    }
 
-  <!-- Scripts -->
-  <script defer src="scripts/navigation.js"></script>
-  <script defer src="scripts/storage.js"></script>
-  <script defer src="scripts/reports.js"></script>
-  <script defer src="scripts/csv_manager.js"></script>
+    // Rooms
+    el('addRoomBtn').addEventListener('click', ()=>{ addRoom(); renderRooms(); });
+    el('clearRooms').addEventListener('click', ()=>{ if(confirm('Clear rooms?')){ rooms=[]; saveRooms(); renderRooms(); log('Cleared rooms'); }});
+    el('applyDefault').addEventListener('click', ()=>{ const v = parseInt(el('defaultCapacity').value); if(!v||v<1){alert('Enter positive capacity');return;} rooms.forEach(r=>{ if(!r.capacity) r.capacity=v }); saveRooms(); renderRooms(); log('Applied default capacity'); });
 
-  <!-- PyScript -->
-  <py-config>
-    packages = ["pandas", "pdfplumber==0.9.0"]
-  </py-config>
-  <py-script src="pyscript/extraction.py"></py-script>
+    function addRoom(name='Room '+(rooms.length+1), cap=30){ rooms.push({id:Date.now()+''+Math.random().toString(36).slice(2,6), name:name, capacity:cap}); saveRooms(); }
+    function saveRooms(){ localStorage.setItem(roomsKey, JSON.stringify(rooms)); }
+
+    function renderRooms(){ const root = el('roomsList'); if(rooms.length===0){ root.innerHTML = '<div class="muted">No rooms yet — click Add Room</div>'; return; }
+      let html = '<table><thead><tr><th>Name</th><th>Capacity</th><th>Actions</th></tr></thead><tbody>';
+      rooms.forEach((r,idx)=>{
+        html += `<tr data-idx="${idx}"><td><input data-idx="${idx}" data-field="name" value="${escapeHtml(r.name)}" /></td><td><input data-idx="${idx}" data-field="capacity" type="number" min="1" value="${r.capacity||''}" style="width:110px" /></td><td><button data-action="remove" data-idx="${idx}" class="ghost small">Remove</button></td></tr>`;
+      });
+      html += '</tbody></table>';
+      root.innerHTML = html;
+      // hook inputs and buttons
+      root.querySelectorAll('input[data-field]').forEach(inp=>{
+        inp.addEventListener('change', (e)=>{
+          const i = parseInt(e.target.dataset.idx); const f = e.target.dataset.field; const v = e.target.value;
+          if(f==='capacity') rooms[i].capacity = parseInt(v)||0; else rooms[i].name = v; saveRooms(); renderRooms();
+        });
+      });
+      root.querySelectorAll('button[data-action=remove]').forEach(b=>{
+        b.addEventListener('click', (ev)=>{ const i = parseInt(ev.target.dataset.idx); if(confirm('Remove room '+rooms[i].name+' ?')){ rooms.splice(i,1); saveRooms(); renderRooms(); log('Removed room'); }});
+      });
+    }
+
+    function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    // Load previously saved
+    function loadFromStorage(){
+      try{
+        const sd = localStorage.getItem(studentsKey); if(sd) students = JSON.parse(sd);
+        const rd = localStorage.getItem(roomsKey); if(rd) rooms = JSON.parse(rd);
+        const ad = localStorage.getItem(assignmentsKey); if(ad) assignments = JSON.parse(ad);
+      }catch(e){ console.warn('load err',e); }
+      renderStudents(); renderRooms(); renderAssignments();
+    }
+    loadFromStorage();
+
+    // Assignment algorithm: sequential fill by rooms order
+    el('autoAssignBtn').addEventListener('click', ()=>{
+      if(students.length===0){alert('No students');return;} if(rooms.length===0){alert('No rooms');return;}
+      // build list of seats [roomId repeated capacity]
+      let seats=[];
+      rooms.forEach(r=>{
+        const cap = parseInt(r.capacity) || 0;
+        for(let i=0;i<cap;i++) seats.push(r.id);
+      });
+      if(seats.length < students.length){ if(!confirm('Total seats ('+seats.length+') < students ('+students.length+'). Continue (excess students will be unassigned)?')){return;} }
+      assignments = {};
+      // simple fill: students in order -> seats order
+      for(let i=0;i<students.length;i++){
+        const seatRoom = seats[i];
+        if(!seatRoom) break;
+        if(!assignments[seatRoom]) assignments[seatRoom]=[];
+        assignments[seatRoom].push(i);
+      }
+      localStorage.setItem(assignmentsKey, JSON.stringify(assignments));
+      renderAssignments(); log('Auto-assigned '+Object.values(assignments).reduce((a,b)=>a+b.length,0)+' students');
+    });
+
+    el('clearAssign').addEventListener('click', ()=>{ if(confirm('Clear assignments?')){ assignments={}; localStorage.removeItem(assignmentsKey); renderAssignments(); log('Cleared assignments'); }});
+
+    function renderAssignments(){ const at = el('assignTable'); if(Object.keys(assignments).length===0){ at.textContent='No assignments yet.'; return; }
+      let html = '<table><thead><tr><th>Room</th><th>Capacity</th><th>Assigned</th></tr></thead><tbody>';
+      rooms.forEach(r=>{
+        const arr = assignments[r.id] || [];
+        html += `<tr><td>${escapeHtml(r.name)}</td><td>${r.capacity||0}</td><td>${arr.length}</td></tr>`;
+      });
+      html += '</tbody></table><hr />';
+      // detailed list
+      for(const r of rooms){ const arr = assignments[r.id] || []; if(arr.length===0) continue;
+        html += `<div style="margin-bottom:12px"><strong>${escapeHtml(r.name)} — ${arr.length} students</strong><div style="font-size:13px;margin-top:6px">`;
+        html += '<table><thead><tr><th>RegNo</th><th>Name</th><th>Course</th></tr></thead><tbody>';
+        arr.forEach(idx=>{ const s = students[idx]; html += `<tr><td>${escapeHtml(s.reg)}</td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.course||'')}</td></tr>`; });
+        html += '</tbody></table></div></div>';
+      }
+      at.innerHTML = html;
+    }
+
+    // Export assignments
+    el('exportAssignments').addEventListener('click', ()=>{
+      if(Object.keys(assignments).length===0){alert('No assignments');return;}
+      // build rows with room,reg,name,dob,course
+      const lines=['Room,RegNo,Name,DOB,Course'];
+      rooms.forEach(r=>{
+        const arr = assignments[r.id] || [];
+        arr.forEach(idx=>{ const s = students[idx]; lines.push([escapeCsv(r.name),escapeCsv(s.reg),escapeCsv(s.name),escapeCsv(s.dob),escapeCsv(s.course)].join(',')); });
+      });
+      downloadCSV(lines.join('\n'), 'assignments.csv');
+    });
+
+    // Print report
+    el('printReport').addEventListener('click', ()=>{
+      if(Object.keys(assignments).length===0){alert('No assignments');return;}
+      const w = window.open('','_blank');
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Room Report</title><style>body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:6px;border:1px solid #ddd;text-align:left}</style></head><body><h2>Room Assignments</h2>${el('assignTable').innerHTML}</body></html>`;
+      w.document.write(html); w.document.close(); w.focus();
+    });
+
+    // Utility: convert students into CSV and download helper used earlier
+
+    // Load saved on start
+
+    // small helper to generate sample data
+    function generateSample(){
+      students = [];
+      for(let i=1;i<=120;i++){ students.push({reg:'REG'+String(1000+i), name:'Student '+i, dob:'01-01-2002', course: (i%2==0? 'BSc' : 'BA')}); }
+      rooms = [];
+      for(let r=1;r<=6;r++) rooms.push({id:'R'+r, name:'Room '+r, capacity:20});
+      renderStudents(); renderRooms(); log('Generated sample data (120 students, 6 rooms)');
+    }
+
+    // small helpers for CSV
+    function escapeCsv(v){ if(v==null) return ''; return '"'+String(v).replace(/"/g,'""')+'"'; }
+
+    // detect drag-and-drop paste of CSV content into textarea (support file paste)
+    document.addEventListener('paste', (e)=>{
+      const items = e.clipboardData && e.clipboardData.items;
+      if(!items) return;
+      for(const it of items){ if(it.kind==='file'){
+        const f = it.getAsFile(); const reader = new FileReader(); reader.onload = ev=>{ el('rawData').value = ev.target.result; log('Pasted file content'); } ; reader.readAsText(f);
+      }}
+    });
+
+    // handle sample generation (double-click title for power-user)
+    document.querySelector('h1').addEventListener('dblclick', ()=>{ if(confirm('Generate sample data?')){ generateSample(); }});
+
+  </script>
 </body>
 </html>
