@@ -1,12 +1,4 @@
-This error means your Python code (main.py) tried to call the JavaScript function clear_csv_upload_status() but couldn't find it. This happens because the function wasn't properly exposed to the global "window" object that PyScript uses to bridge the two languages.
-The fix is a one-line change in your app.js file to explicitly attach that function to the window.
-Here is the complete, updated app.js file with the fix applied.
-app.js (Updated)
-I've located the function clear_csv_upload_status (around line 1442) and changed it from:
-function clear_csv_upload_status() { ... }
-to
-window.clear_csv_upload_status = function() { ... }
-You can copy and paste the entire code block below to replace your existing app.js.
+
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
