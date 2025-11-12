@@ -1542,7 +1542,6 @@ saveRoomConfigButton.addEventListener('click', () => {
         console.error("Error saving room config:", e);
     }
 });
-
 // --- (V79) Load data into dynamic form (in Settings) ---
 function loadRoomConfig() {
     // V48: Load College Name
@@ -2682,7 +2681,7 @@ scribeSearchInput.addEventListener('input', () => {
     }
     
     if (uniqueMatches.length > 0) {
-        scribeAutocompleteResults.innerHTML = '';
+        autocompleteResults.innerHTML = '';
         uniqueMatches.forEach(student => {
             const item = document.createElement('div');
             item.className = 'autocomplete-item';
