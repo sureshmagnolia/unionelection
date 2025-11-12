@@ -18,13 +18,14 @@
     /* V87: More rounded, more padding, bolder font */
     @apply py-2.5 px-3 rounded-t-xl text-sm font-semibold transition-all duration-200 text-white shadow; 
     
-    /* *** NEW: Make tabs equal width *** */
+    /* *** NEW: Make tabs equal width and centered *** */
     flex: 1;
     text-align: center;
 }
 .nav-button-active {
     /* Active state: Taller, lighter bg, dark text */
-    @apply shadow-lg scale-105 transform -translate-y-1; 
+    /* *** NEW: Stronger shadow for "Material" lift *** */
+    @apply shadow-lg scale-105 transform -translate-y-1 shadow-indigo-400; 
 }
 .nav-button-inactive {
     /* Inactive state: Darker bg, white text, slight fade */
@@ -59,6 +60,7 @@
     color: #15803d; /* green-700 */
 }
 
+/* This is the OLD room-settings style, now used by Settings */
 #nav-room-settings {
     background-color: #9333ea; /* purple-600 */
 }
@@ -200,6 +202,14 @@
         border: 1px solid #ccc;
         text-align: left;
     }
+
+    /* *** NEW: Scribe footnote style *** */
+    .invigilator-footer .scribe-footnote {
+        display: block;
+        font-size: 9pt;
+        font-style: italic;
+        margin-top: 1rem;
+    }
     
     /* (V28) Style for new location header */
     .report-location-header {
@@ -251,6 +261,13 @@
     th {
         padding: 8px 3px;
         background-color: #eee;
+    }
+
+    /* *** NEW: Scribe row highlight for PRINT *** */
+    tr.scribe-row-highlight {
+        background-color: #f0f0f0 !important; /* Light grey */
+        -webkit-print-color-adjust: exact; /* Ensures background prints */
+        color-adjust: exact;
     }
     
     /* V90 FIX: Add break-before: avoid to tables to keep with headers */
@@ -437,6 +454,13 @@
     border: 1px solid #ccc;
     text-align: left;
 }
+/* *** NEW: Scribe footnote style *** */
+.invigilator-footer .scribe-footnote {
+    display: block;
+    font-size: 9pt;
+    font-style: italic;
+    margin-top: 1rem;
+}
         
 /* (V28) Style for new location header */
 .report-location-header {
@@ -463,6 +487,11 @@
 .print-page th {
     padding: 8px 3px;
     background-color: #eee;
+}
+
+/* *** NEW: Scribe row highlight for SCREEN *** */
+tr.scribe-row-highlight {
+    background-color: #f0f0f0; /* Light grey */
 }
         
 /* --- Room-wise Seating Report Columns (w/ Remarks) --- */
