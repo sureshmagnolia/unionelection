@@ -516,6 +516,7 @@ generateReportButton.addEventListener('click', async () => {
 
         // 4. Group data for Report Generation (use the NEW final list)
         const sessions = {};
+        loadQPCodes(); // *** NEW: Load QP Codes for the report ***
         final_student_list_for_report.forEach(student => {
             const key = `${student.Date}_${student.Time}_${student['Room No']}`;
             if (!sessions[key]) {
@@ -572,7 +573,7 @@ generateReportButton.addEventListener('click', async () => {
                     <thead>
                         <tr>
                             <th class="sl-col">Sl No</th>
-                            <th class="course-col">Course</th>
+                            <th class="course-col">Course (QP Code)</th>
                             <th class="reg-col">Register Number</th>
                             <th class="name-col">Name</th>
                             <th class="signature-col">Signature</th>
@@ -600,10 +601,18 @@ generateReportButton.addEventListener('click', async () => {
             function generateTableRows(studentList) {
                 let rowsHtml = '';
                 studentList.forEach((student) => { 
-                    const studentNumber = student.isPlaceholder ? '*' : student.originalIndex + 1; // <-- NEW
-                    const tableCourseName = student.Course; // V38: Show full course name
+                    const studentNumber = student.isPlaceholder ? '*' : student.originalIndex + 1;
                     
-                    // V97 FIX: Truncate Course Name to first 4 words for table cell
+                    // *** NEW: Get QP Code ***
+                    const sessionKey = `${student.Date} | ${student.Time}`;
+                    const sessionQPCodes = qpCodeMap[sessionKey] || {};
+                    const courseKey = cleanCourseKey(student.Course);
+                    const qpCode = sessionQPCodes[courseKey] || "";
+                    const qpCodeDisplay = qpCode ? ` (${qpCode})` : "";
+                    const tableCourseName = student.Course + qpCodeDisplay; // Course + QP Code
+                    // ************************
+                    
+                    // V97 FIX: Truncate Course Name (now with QP code)
                     const words = tableCourseName.split(/\s+/);
                     const truncatedCourseName = words.slice(0, 4).join(' ') + (words.length > 4 ? '...' : '');
                     
