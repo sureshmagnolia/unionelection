@@ -495,12 +495,12 @@ generateReportButton.addEventListener('click', async () => {
                 const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
                 const scribeRoom = sessionScribeAllotment[regNo] || 'N/A';
                 
-                // Add a placeholder to their *original* room
+                // *** FIX: Add a 'remark' property instead of changing the name ***
                 final_student_list_for_report.push({ 
                     ...student, 
-                    Name: `Moved to ${scribeRoom} (Scribe)`, 
-                    'Room No': student['Room No'], // Keep original room for grouping
-                    isPlaceholder: true 
+                    Name: student.Name, // Keep original name
+                    remark: `Scribe, Moved to ${scribeRoom}`, // Add new remark
+                    isPlaceholder: true // Keep this for styling
                 });
             } else {
                 // Not a scribe, add as normal
@@ -566,6 +566,7 @@ generateReportButton.addEventListener('click', async () => {
                     ${locationHtml} </div>
             `;
             
+            // *** FIX: Added Remarks Column Header ***
             const tableHeaderHtml = `
                 <table class="print-table">
                     <thead>
@@ -575,6 +576,7 @@ generateReportButton.addEventListener('click', async () => {
                             <th class="reg-col">Register Number</th>
                             <th class="name-col">Name</th>
                             <th class="signature-col">Signature</th>
+                            <th class="remarks-col">Remarks</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -611,6 +613,8 @@ generateReportButton.addEventListener('click', async () => {
                     // *** NEW: Style for placeholder ***
                     const rowStyle = student.isPlaceholder ? 'font-style: italic; color: #555;' : '';
                     
+                    // *** FIX: Added Remarks Column Data ***
+                    const remarkText = student.remark || ''; // Get remark or empty string
                     rowsHtml += `
                         <tr style="${rowStyle}">
                             <td class="sl-col">${studentNumber}</td>
@@ -618,6 +622,7 @@ generateReportButton.addEventListener('click', async () => {
                             <td class="reg-col">${student['Register Number']}</td>
                             <td class="name-col">${student.Name}</td>
                             <td class="signature-col"></td>
+                            <td class="remarks-col">${remarkText}</td>
                         </tr>
                     `;
                 });
@@ -2223,7 +2228,7 @@ function loadInitialData() {
 }
 
 // *** WORKFLOW FIX: Removed the event listeners that disabled/enabled buttons ***
-// The 'change' listeners for 'pdf-file' and 'corrected-csv-upload' are gone.
+// Both PDF and CSV upload are always available.
 
 
 // --- ROOM ALLOTMENT FUNCTIONALITY ---
@@ -2799,10 +2804,8 @@ async function findAvailableRooms(sessionKey) {
         // We ignore overflow rooms for this calculation
     });
     
-    // 4. Get all rooms *already* used by other scribes in this session
-    Object.values(currentScribeAllotment).forEach(roomName => {
-        masterRoomNames.delete(roomName);
-    });
+    // *** FIX: Removed the block that deleted rooms already used by other scribes ***
+    // This allows multiple scribes to be assigned to the same room.
 
     return Array.from(masterRoomNames).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
