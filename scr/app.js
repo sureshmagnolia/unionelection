@@ -1945,3 +1945,954 @@ function removeAbsentee(regNo) {
     saveAbsenteeList(sessionSelect.value);
     renderAbsenteeList();
 }
+// --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
+
+function disable_qpcode_tab(disabled) {
+    navQPCodes.disabled = disabled;
+    if (disabled) {
+        qpcodeLoader.classList.remove('hidden');
+        qpcodeContentWrapper.classList.add('hidden');
+        navQPCodes.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        qpcodeLoader.classList.add('hidden');
+        qpcodeContentWrapper.classList.remove('hidden');
+        navQPCodes.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+// V89: Loads the *entire* QP code map from localStorage into the global var
+function loadQPCodes() {
+    qpCodeMap = JSON.parse(localStorage.getItem(QP_CODE_LIST_KEY) || '{}');
+}
+
+// V61: Populates the QP Code session dropdown
+function populate_qp_code_session_dropdown() {
+    try {
+        if (allStudentData.length === 0) {
+             allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+        if (allStudentData.length === 0) {
+            disable_qpcode_tab(true);
+            return;
+        }
+        
+        // Get unique sessions
+        const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+        allStudentSessions = Array.from(sessions).sort();
+        
+        sessionSelectQP.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
+        
+        // Find today's session
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
+        let defaultSession = "";
+        
+        allStudentSessions.forEach(session => {
+            sessionSelectQP.innerHTML += `<option value="${session}">${session}</option>`;
+            if (session.startsWith(todayStr)) {
+                defaultSession = session;
+            }
+        });
+        
+        if (defaultSession) {
+            sessionSelectQP.value = defaultSession;
+            sessionSelectQP.dispatchEvent(new Event('change')); // Trigger change to load course list
+        }
+
+    } catch (e) {
+        console.error("Failed to populate QP sessions:", e);
+        disable_qpcode_tab(true);
+    }
+}
+
+// V61: Event listener for the QP Code session dropdown
+sessionSelectQP.addEventListener('change', () => {
+    const sessionKey = sessionSelectQP.value;
+    if (sessionKey) {
+        qpEntrySection.classList.remove('hidden');
+        render_qp_code_list(sessionKey);
+    } else {
+        qpEntrySection.classList.add('hidden');
+        qpCodeContainer.innerHTML = '';
+        qpCodeStatus.textContent = '';
+        saveQpCodesButton.disabled = true; // V62: Disable save button
+    }
+});
+
+// V61: Renders the course list for the selected session
+function render_qp_code_list(sessionKey) {
+    
+    // 1. Filter students for this specific session
+    const [date, time] = sessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // 2. Get unique courses for this session
+    const sessionCourses = new Set(sessionStudents.map(s => s.Course));
+    const uniqueCoursesArray = Array.from(sessionCourses).sort();
+    
+    // 3. V89: Load *all* codes, then get the ones for *this* session
+    loadQPCodes();
+    const sessionCodes = qpCodeMap[sessionKey] || {};
+    
+    // 4. Populate the UI
+    const htmlChunks = [];
+    
+    if (uniqueCoursesArray.length === 0) {
+        qpCodeContainer.innerHTML = '<p class="text-center text-gray-500">No courses found for this session.</p>';
+        saveQpCodesButton.disabled = true; 
+        return;
+    }
+
+    uniqueCoursesArray.forEach(courseName => {
+        const cleanKey = cleanCourseKey(courseName);
+
+        // V90 FIX: If the course name cleans to an empty string,
+        // don't render an input for it as it cannot be saved.
+        if (!cleanKey) {
+            console.warn(`Skipping QP code input for un-keyable course: ${courseName}`);
+            return; // Skip this iteration
+        }
+        
+        // V89: Look up the code in the session-specific map
+        const savedCode = sessionCodes[cleanKey] || "";
+        
+        htmlChunks.push(`
+            <div class="flex items-center gap-3 p-2 border-b border-gray-200">
+                <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
+                <input type="text" 
+                       class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
+                       value="${savedCode}" 
+                       data-course="${cleanKey}" 
+                       placeholder="Enter QP Code">
+            </div>
+        `);
+    });
+    
+    qpCodeContainer.innerHTML = htmlChunks.join('');
+    
+    saveQpCodesButton.disabled = false;
+    qpCodeStatus.textContent = ''; // Clear status on new load
+}
+
+// V89: NEW SAVE STRATEGY
+saveQpCodesButton.addEventListener('click', () => {
+    const sessionKey = sessionSelectQP.value;
+    if (!sessionKey) {
+        alert("No session selected.");
+        return;
+    }
+    
+    // V90 FIX: Ensure qpCodeMap is initialized before loading from storage
+    if (typeof qpCodeMap === 'undefined') {
+        qpCodeMap = {};
+    }
+
+    // 1. Load the entire master map from storage
+    // This ensures we don't overwrite other sessions
+    loadQPCodes(); 
+    
+    // 2. Create a new, empty map *just for this session's data*
+    const thisSessionCodes = {};
+    
+    // 3. Read all inputs from the DOM
+    const qpInputs = qpCodeContainer.querySelectorAll('.qp-code-input');
+    
+    for (let i = 0; i < qpInputs.length; i++) {
+        const input = qpInputs[i];
+        const courseKey = input.dataset.course; // Already cleaned
+        const qpCode = input.value.trim();
+
+        if (courseKey && qpCode) {
+            thisSessionCodes[courseKey] = qpCode;
+        }
+    }
+
+    // 4. Update the master map with the new data for this session
+    qpCodeMap[sessionKey] = thisSessionCodes;
+
+    // 5. Save the *entire* master map back to localStorage
+    localStorage.setItem(QP_CODE_LIST_KEY, JSON.stringify(qpCodeMap));
+
+    // 6. Show success message
+    qpCodeStatus.classList.remove('text-red-600');
+    qpCodeStatus.classList.add('text-green-600');
+    qpCodeStatus.textContent = `QP Codes saved successfully!`;
+    setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
+});
+
+// V89: NEW INPUT STRATEGY
+// The input listener is now *only* for user feedback.
+// It does NOT update any data.
+qpCodeContainer.addEventListener('input', (e) => {
+    if (e.target.classList.contains('qp-code-input')) {
+        // Show pending status
+        qpCodeStatus.classList.remove('text-green-600');
+        qpCodeStatus.classList.add('text-red-600');
+        qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
+    }
+});
+
+
+// --- V68: Report Filter Logic ---
+filterSessionRadio.addEventListener('change', () => {
+    if (filterSessionRadio.checked) {
+        reportsSessionDropdownContainer.classList.remove('hidden');
+        reportsSessionSelect.value = reportsSessionSelect.options[1]?.value || ""; // Default to first session
+    }
+});
+
+filterAllRadio.addEventListener('change', () => {
+    if (filterAllRadio.checked) {
+        reportsSessionDropdownContainer.classList.add('hidden');
+        reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
+    }
+});
+
+// --- NEW/MODIFIED RESET LOGIC (in Settings) ---
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // 1. Reset Student Data Only
+    if (resetStudentDataButton) {
+        resetStudentDataButton.addEventListener('click', () => {
+            const confirmReset = confirm('Are you sure you want to reset all student data? This will clear the main data, absentees, QP codes, and all room allotments. Your College Name and Room Settings will be kept.');
+            if (confirmReset) {
+                localStorage.removeItem(BASE_DATA_KEY);
+                localStorage.removeItem(ABSENTEE_LIST_KEY);
+                localStorage.removeItem(QP_CODE_LIST_KEY);
+                localStorage.removeItem(ROOM_ALLOTMENT_KEY);
+                localStorage.removeItem(SCRIBE_LIST_KEY);
+                localStorage.removeItem(SCRIBE_ALLOTMENT_KEY);
+                alert('All student data and allotments have been cleared. The app will now reload.');
+                window.location.reload();
+            }
+        });
+    }
+
+    // 2. Master Reset
+    if (masterResetButton) {
+        masterResetButton.addEventListener('click', () => {
+            const step1 = confirm('WARNING: This will clear ALL saved data (Rooms, College Name, Absentees, QP Codes, and Base Data) from your browser. Continue?');
+            if (!step1) return;
+            
+            const step2 = confirm('ARE YOU ABSOLUTELY SURE? This action cannot be undone.');
+            if (step2) {
+                localStorage.clear();
+                alert('All local data cleared. The application will now reload.');
+                window.location.reload();
+            }
+        });
+    }
+});
+
+
+// --- V65: Initial Data Load on Startup ---
+function loadInitialData() {
+    // 1. Load configuration and UI elements (Room settings, college name)
+    // *** V91 FIX: Call loadRoomConfig to ensure collegeNameInput is populated ***
+    loadRoomConfig(); 
+    
+    // 2. Check for base student data persistence
+    const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
+    if (savedDataJson) {
+        try {
+            const savedData = JSON.parse(savedDataJson);
+            if (savedData && savedData.length > 0) {
+                
+                // We create dummy data stores to allow reports to run
+                const qPaperSummary = {};
+                
+                savedData.forEach(student => {
+                    const key = `${student.Date}_${student.Time}_${student.Course}`;
+                    if (!qPaperSummary[key]) {
+                        qPaperSummary[key] = { 
+                            Date: student.Date, 
+                            Time: student.Time, 
+                            Course: student.Course, 
+                            'Student Count': 0 
+                        };
+                    }
+                    qPaperSummary[key]['Student Count']++;
+                });
+                
+                // Update JSON Data Stores
+                jsonDataStore.innerHTML = JSON.stringify(savedData);
+                qPaperDataStore.innerHTML = JSON.stringify(Object.values(qPaperSummary));
+                
+                // Enable UI tabs
+                generateReportButton.disabled = false;
+                generateQPaperReportButton.disabled = false;
+                generateDaywiseReportButton.disabled = false;
+                generateScribeReportButton.disabled = false; // <-- NEW
+                disable_absentee_tab(false);
+                disable_qpcode_tab(false);
+                disable_room_allotment_tab(false);
+                disable_scribe_tabs(false); // <-- NEW
+                
+                populate_session_dropdown();
+                populate_qp_code_session_dropdown();
+                populate_room_allotment_session_dropdown();
+                populate_scribe_session_dropdown(); // <-- NEW
+                loadGlobalScribeList(); // <-- NEW
+                
+                console.log(`Successfully loaded ${savedData.length} records from local storage.`);
+                
+                // Update log status (Optional, good for user feedback)
+                document.getElementById("status-log").innerHTML = `<p class="mb-1 text-green-700">&gt; [${new Date().toLocaleTimeString()}] Successfully loaded data from previous session.</p>`;
+                document.getElementById("status-log").scrollTop = document.getElementById("status-log").scrollHeight;
+
+
+            }
+        } catch(e) {
+            console.error("Failed to load BASE_DATA_KEY from localStorage. Clearing key.", e);
+            localStorage.removeItem(BASE_DATA_KEY);
+        }
+    }
+}
+
+// *** WORKFLOW FIX: Removed the event listeners that disabled/enabled buttons ***
+// Both PDF and CSV upload are always available.
+
+
+// --- ROOM ALLOTMENT FUNCTIONALITY ---
+
+// Disable/Enable Room Allotment Tab
+function disable_room_allotment_tab(disabled) {
+    navRoomAllotment.disabled = disabled;
+    if (disabled) {
+        roomAllotmentLoader.classList.remove('hidden');
+        roomAllotmentContentWrapper.classList.add('hidden');
+        navRoomAllotment.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        roomAllotmentLoader.classList.add('hidden');
+        roomAllotmentContentWrapper.classList.remove('hidden');
+        navRoomAllotment.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+// Populate Room Allotment Session Dropdown
+function populate_room_allotment_session_dropdown() {
+    try {
+        if (allStudentData.length === 0) {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+        if (allStudentData.length === 0) {
+            disable_room_allotment_tab(true);
+            return;
+        }
+        
+        // Get unique sessions
+        const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+        allStudentSessions = Array.from(sessions).sort();
+        
+        allotmentSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
+        
+        // Find today's session
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
+        let defaultSession = "";
+        
+        allStudentSessions.forEach(session => {
+            allotmentSessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
+            if (session.startsWith(todayStr)) {
+                defaultSession = session;
+            }
+        });
+        
+        // Set default to today if found
+        if (defaultSession) {
+            allotmentSessionSelect.value = defaultSession;
+            allotmentSessionSelect.dispatchEvent(new Event('change'));
+        }
+        
+        disable_room_allotment_tab(false);
+    } catch (e) {
+        console.error("Failed to populate room allotment sessions:", e);
+        disable_room_allotment_tab(true);
+    }
+}
+
+// Load Room Allotment for a session
+function loadRoomAllotment(sessionKey) {
+    currentSessionKey = sessionKey;
+    const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+    currentSessionAllotment = allAllotments[sessionKey] || [];
+    updateAllotmentDisplay();
+}
+
+// Save Room Allotment for a session
+function saveRoomAllotment() {
+    const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+    allAllotments[currentSessionKey] = currentSessionAllotment;
+    localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+}
+
+// Update the display with current allotment status
+function updateAllotmentDisplay() {
+    const [date, time] = currentSessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // *** NEW: Exclude scribe students from this count ***
+    loadGlobalScribeList();
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    const nonScribeSessionStudents = sessionStudents.filter(s => !scribeRegNos.has(s['Register Number']));
+    const totalStudents = nonScribeSessionStudents.length;
+    // ***************************************************
+    
+    // Calculate allotted students
+    let allottedCount = 0;
+    currentSessionAllotment.forEach(room => {
+        allottedCount += room.students.length;
+    });
+    
+    const remainingCount = totalStudents - allottedCount;
+    
+    // Update counts
+    totalStudentsCount.textContent = totalStudents;
+    allottedStudentsCount.textContent = allottedCount;
+    remainingStudentsCount.textContent = remainingCount;
+    
+    // Show/hide sections
+    allotmentStudentCountSection.classList.remove('hidden');
+    
+    if (remainingCount > 0) {
+        addRoomSection.classList.remove('hidden');
+    } else {
+        addRoomSection.classList.add('hidden');
+    }
+    
+    // Render allotted rooms
+    renderAllottedRooms();
+    
+    // Show save section if there are allotments
+    if (currentSessionAllotment.length > 0) {
+        allottedRoomsSection.classList.remove('hidden');
+        saveAllotmentSection.classList.remove('hidden');
+    } else {
+        allottedRoomsSection.classList.add('hidden');
+        saveAllotmentSection.classList.add('hidden');
+    }
+}
+
+// Render the list of allotted rooms
+function renderAllottedRooms() {
+    allottedRoomsList.innerHTML = '';
+    
+    if (currentSessionAllotment.length === 0) {
+        allottedRoomsList.innerHTML = '<p class="text-gray-500 text-sm">No rooms allotted yet.</p>';
+        return;
+    }
+    
+    currentSessionAllotment.forEach((room, index) => {
+        const roomDiv = document.createElement('div');
+        roomDiv.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4';
+        
+        const roomInfo = currentRoomConfig[room.roomName];
+        const location = (roomInfo && roomInfo.location) ? ` (${roomInfo.location})` : '';
+        
+        roomDiv.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div class="flex-grow">
+                    <h4 class="font-semibold text-gray-800">${room.roomName}${location}</h4>
+                    <p class="text-sm text-gray-600">Capacity: ${room.capacity} | Allotted: ${room.students.length}</p>
+                </div>
+                <button class="text-red-600 hover:text-red-800 font-medium text-sm" onclick="deleteRoom(${index})">
+                    Delete
+                </button>
+            </div>
+        `;
+        
+        allottedRoomsList.appendChild(roomDiv);
+    });
+}
+
+// Delete a room from allotment
+window.deleteRoom = function(index) {
+    if (confirm('Are you sure you want to remove this room allotment?')) {
+        currentSessionAllotment.splice(index, 1);
+        updateAllotmentDisplay();
+    }
+};
+
+// Show room selection modal
+function showRoomSelectionModal() {
+    // Get room config
+    getRoomCapacitiesFromStorage();
+    
+    roomSelectionList.innerHTML = '';
+    
+    // Get already allotted room names
+    const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
+    
+    // Sort rooms numerically
+    const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+    });
+    
+    sortedRoomNames.forEach(roomName => {
+        const room = currentRoomConfig[roomName];
+        const location = room.location ? ` (${room.location})` : '';
+        
+        // Check if already allotted
+        const isAllotted = allottedRoomNames.includes(roomName);
+        
+        const roomOption = document.createElement('div');
+        roomOption.className = `p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50 ${isAllotted ? 'opacity-50 cursor-not-allowed' : ''}`;
+        roomOption.innerHTML = `
+            <div class="font-medium text-gray-800">${roomName}${location}</div>
+            <div class="text-sm text-gray-600">Capacity: ${room.capacity}</div>
+            ${isAllotted ? '<div class="text-xs text-red-600 mt-1">Already allotted</div>' : ''}
+        `;
+        
+        if (!isAllotted) {
+            roomOption.onclick = () => selectRoomForAllotment(roomName, room.capacity);
+        }
+        
+        roomSelectionList.appendChild(roomOption);
+    });
+    
+    roomSelectionModal.classList.remove('hidden');
+}
+
+// Select a room and allot students
+function selectRoomForAllotment(roomName, capacity) {
+    const [date, time] = currentSessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // Get already allotted student register numbers
+    const allottedRegNos = new Set();
+    currentSessionAllotment.forEach(room => {
+        room.students.forEach(regNo => allottedRegNos.add(regNo));
+    });
+
+    // *** NEW: Exclude scribe students from this allotment ***
+    loadGlobalScribeList();
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    
+    // Get unallotted *non-scribe* students
+    const unallottedStudents = sessionStudents.filter(s => 
+        !allottedRegNos.has(s['Register Number']) && 
+        !scribeRegNos.has(s['Register Number'])
+    );
+    // ******************************************************
+    
+    // Allot up to capacity
+    const studentsToAllot = unallottedStudents.slice(0, capacity);
+    
+    // *** FIX: Renamed this variable from 'allottedRegNos' to 'newStudentRegNos' ***
+    const newStudentRegNos = studentsToAllot.map(s => s['Register Number']);
+    
+    // Add to current session allotment
+    currentSessionAllotment.push({
+        roomName: roomName,
+        capacity: capacity,
+        students: newStudentRegNos // <-- Use the new, correct variable name
+    });
+    
+    // Close modal and update display
+    roomSelectionModal.classList.add('hidden');
+    updateAllotmentDisplay();
+}
+
+// Event Listeners for Room Allotment
+allotmentSessionSelect.addEventListener('change', () => {
+    const sessionKey = allotmentSessionSelect.value;
+    if (sessionKey) {
+        loadRoomAllotment(sessionKey);
+    } else {
+        allotmentStudentCountSection.classList.add('hidden');
+        addRoomSection.classList.add('hidden');
+        allottedRoomsSection.classList.add('hidden');
+        saveAllotmentSection.classList.add('hidden');
+    }
+});
+
+addRoomAllotmentButton.addEventListener('click', () => {
+    showRoomSelectionModal();
+});
+
+closeRoomModal.addEventListener('click', () => {
+    roomSelectionModal.classList.add('hidden');
+});
+
+saveRoomAllotmentButton.addEventListener('click', () => {
+    saveRoomAllotment();
+    roomAllotmentStatus.textContent = 'Room allotment saved successfully!';
+    setTimeout(() => { roomAllotmentStatus.textContent = ''; }, 2000);
+});
+
+// --- END ROOM ALLOTMENT FUNCTIONALITY ---
+
+
+// *** NEW: SCRIBE FUNCTIONALITY ***
+
+// Disable/Enable Scribe Tabs
+function disable_scribe_tabs(disabled) {
+    navScribeSettings.disabled = disabled;
+    navScribeAllotment.disabled = disabled;
+    
+    if (disabled) {
+        scribeLoader.classList.remove('hidden');
+        scribeContentWrapper.classList.add('hidden');
+        scribeAllotmentLoader.classList.remove('hidden');
+        scribeAllotmentContentWrapper.classList.add('hidden');
+        [navScribeSettings, navScribeAllotment].forEach(nav => nav.classList.add('opacity-50', 'cursor-not-allowed'));
+    } else {
+        scribeLoader.classList.add('hidden');
+        scribeContentWrapper.classList.remove('hidden');
+        scribeAllotmentLoader.classList.add('hidden');
+        scribeAllotmentContentWrapper.classList.remove('hidden');
+        [navScribeSettings, navScribeAllotment].forEach(nav => nav.classList.remove('opacity-50', 'cursor-not-allowed'));
+    }
+}
+
+// Load the global list from localStorage
+function loadGlobalScribeList() {
+    globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+    renderGlobalScribeList();
+}
+
+// Render the global list in "Scribe Settings"
+function renderGlobalScribeList() {
+    currentScribeListDiv.innerHTML = "";
+    if (globalScribeList.length === 0) {
+        currentScribeListDiv.innerHTML = `<em class="text-gray-500">No students added to the scribe list.</em>`;
+        return;
+    }
+    
+    globalScribeList.forEach(student => {
+        const item = document.createElement('div');
+        item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
+        item.innerHTML = `
+            <div>
+                <span class="font-medium">${student.regNo}</span>
+                <span class="text-sm text-gray-600 ml-2">${student.name}</span>
+            </div>
+            <button class="text-xs text-red-600 hover:text-red-800 font-medium">&times; Remove</button>
+        `;
+        item.querySelector('button').onclick = () => removeScribeStudent(student.regNo);
+        currentScribeListDiv.appendChild(item);
+    });
+}
+
+// Remove a student from the global list
+function removeScribeStudent(regNo) {
+    globalScribeList = globalScribeList.filter(s => s.regNo !== regNo);
+    localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
+    renderGlobalScribeList();
+    // Also re-render allotment list if that view is active
+    if (scribeSessionSelect.value) {
+        renderScribeAllotmentList(scribeSessionSelect.value);
+    }
+}
+
+// Scribe Search Autocomplete
+scribeSearchInput.addEventListener('input', () => {
+    const query = scribeSearchInput.value.trim().toUpperCase();
+    if (query.length < 3) {
+        scribeAutocompleteResults.classList.add('hidden');
+        return;
+    }
+    
+    // Search ALL students
+    const matches = allStudentData.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
+    
+    // Get unique register numbers from matches
+    const uniqueMatches = [];
+    const seenRegNos = new Set();
+    for (const student of matches) {
+        if (!seenRegNos.has(student['Register Number'])) {
+            seenRegNos.add(student['Register Number']);
+            uniqueMatches.push(student);
+        }
+    }
+    
+    if (uniqueMatches.length > 0) {
+        scribeAutocompleteResults.innerHTML = '';
+        uniqueMatches.forEach(student => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
+            item.onclick = () => selectScribeStudent(student);
+            scribeAutocompleteResults.appendChild(item);
+        });
+        scribeAutocompleteResults.classList.remove('hidden');
+    } else {
+        scribeAutocompleteResults.classList.add('hidden');
+    }
+});
+
+// Select a student from autocomplete
+let selectedScribeStudent = null;
+function selectScribeStudent(student) {
+    selectedScribeStudent = student;
+    scribeSearchInput.value = student['Register Number'];
+    scribeAutocompleteResults.classList.add('hidden');
+    
+    scribeSelectedStudentName.textContent = student.Name;
+    scribeSelectedStudentRegno.textContent = student['Register Number'];
+    scribeSelectedStudentDetails.classList.remove('hidden');
+}
+
+// Add Scribe Student button click
+addScribeStudentButton.addEventListener('click', () => {
+    if (!selectedScribeStudent) return;
+    
+    const regNo = selectedScribeStudent['Register Number'];
+    
+    // Check if already on list
+    if (globalScribeList.some(s => s.regNo === regNo)) {
+        alert(`${regNo} is already on the scribe list.`);
+        clearScribeSearch();
+        return;
+    }
+    
+    // Add to list and save
+    globalScribeList.push({ regNo: regNo, name: selectedScribeStudent.Name });
+    localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
+    
+    renderGlobalScribeList();
+    clearScribeSearch();
+});
+
+function clearScribeSearch() {
+    selectedScribeStudent = null;
+    scribeSearchInput.value = "";
+    scribeAutocompleteResults.classList.add('hidden');
+    scribeSelectedStudentDetails.classList.add('hidden');
+}
+
+// --- Scribe Allotment Page Logic ---
+
+// Populate Scribe Allotment Session Dropdown
+function populate_scribe_session_dropdown() {
+    try {
+        if (allStudentData.length === 0) {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+        if (allStudentData.length === 0) {
+            disable_scribe_tabs(true);
+            return;
+        }
+        
+        scribeSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
+        let defaultSession = "";
+        const todayStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '.');
+        
+        allStudentSessions.forEach(session => {
+            scribeSessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
+            if (session.startsWith(todayStr)) {
+                defaultSession = session;
+            }
+        });
+        
+        if (defaultSession) {
+            scribeSessionSelect.value = defaultSession;
+            scribeSessionSelect.dispatchEvent(new Event('change'));
+        }
+        
+    } catch (e) {
+        console.error("Failed to populate scribe allotment sessions:", e);
+        disable_scribe_tabs(true);
+    }
+}
+
+// Scribe session dropdown change
+scribeSessionSelect.addEventListener('change', () => {
+    const sessionKey = scribeSessionSelect.value;
+    if (sessionKey && globalScribeList.length > 0) {
+        // Load the allotments for this session
+        const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        currentScribeAllotment = allAllotments[sessionKey] || {};
+        
+        scribeAllotmentListSection.classList.remove('hidden');
+        renderScribeAllotmentList(sessionKey);
+    } else {
+        scribeAllotmentListSection.classList.add('hidden');
+        scribeAllotmentList.innerHTML = "";
+    }
+});
+
+// Render the list of scribe students for the selected session
+function renderScribeAllotmentList(sessionKey) {
+    const [date, time] = sessionKey.split(' | ');
+    // Get all students for this session
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // Filter to get only scribe students *in this session*
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(s['Register Number']));
+
+    scribeAllotmentList.innerHTML = '';
+    if (sessionScribeStudents.length === 0) {
+        scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm">No students from the global scribe list are in this session.</p>';
+        return;
+    }
+
+    // Get unique students for this session (in case of multiple papers)
+    const uniqueSessionScribeStudents = [];
+    const seenRegNos = new Set();
+    for (const student of sessionScribeStudents) {
+        if (!seenRegNos.has(student['Register Number'])) {
+            seenRegNos.add(student['Register Number']);
+            uniqueSessionScribeStudents.push(student);
+        }
+    }
+    
+    uniqueSessionScribeStudents.sort((a,b) => a['Register Number'].localeCompare(b['Register Number']));
+
+    uniqueSessionScribeStudents.forEach(student => {
+        const regNo = student['Register Number'];
+        const allottedRoom = currentScribeAllotment[regNo];
+        
+        const item = document.createElement('div');
+        item.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4 flex justify-between items-center';
+        
+        let roomHtml = '';
+        if (allottedRoom) {
+            roomHtml = `
+                <div>
+                    <span class="text-sm font-medium text-gray-700">Allotted Room:</span>
+                    <span class="font-bold text-blue-600 ml-2">${allottedRoom}</span>
+                </div>
+                <button class="ml-4 inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                        onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
+                    Change
+                </button>
+            `;
+        } else {
+            roomHtml = `
+                <button class="inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+                        onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
+                    Assign Room
+                </button>
+            `;
+        }
+        
+        item.innerHTML = `
+            <div>
+                <h4 class="font-semibold text-gray-800">${regNo}</h4>
+                <p class="text-sm text-gray-600">${student.Name}</p>
+            </div>
+            <div class="flex items-center">
+                ${roomHtml}
+            </div>
+        `;
+        scribeAllotmentList.appendChild(item);
+    });
+}
+
+// Find available rooms for scribes
+async function findAvailableRooms(sessionKey) {
+    const [date, time] = sessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // 1. Get all "master" rooms
+    getRoomCapacitiesFromStorage(); // Populates currentRoomConfig
+    const masterRoomNames = new Set(Object.keys(currentRoomConfig));
+
+    // 2. Get all rooms used by "Manual Allotment"
+    const allManualAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+    const sessionManualAllotment = allManualAllotments[sessionKey] || [];
+    sessionManualAllotment.forEach(room => {
+        masterRoomNames.delete(room.roomName);
+    });
+
+    // 3. Get all rooms used by "Automatic Allotment" (for students NOT in manual allotment)
+    const manuallyAllottedRegNos = new Set();
+    sessionManualAllotment.forEach(room => {
+        room.students.forEach(regNo => manuallyAllottedRegNos.add(regNo));
+    });
+    
+    const studentsForAutoAllot = sessionStudents.filter(s => !manuallyAllottedRegNos.has(s['Register Number']));
+    
+    // Run a lightweight auto-allot simulation
+    const sessionRoomFills = {};
+    const masterRoomCaps = getRoomCapacitiesFromStorage().roomCapacities; // Re-get array
+    const masterRoomNamesArray = getRoomCapacitiesFromStorage().roomNames; // Re-get array
+
+    studentsForAutoAllot.forEach(student => {
+        for (let i = 0; i < masterRoomCaps.length; i++) {
+            const roomName = masterRoomNamesArray[i];
+            if (!sessionRoomFills[roomName]) sessionRoomFills[roomName] = 0;
+            
+            if (sessionRoomFills[roomName] < masterRoomCaps[i]) {
+                sessionRoomFills[roomName]++;
+                masterRoomNames.delete(roomName); // This room is now used
+                break;
+            }
+        }
+        // We ignore overflow rooms for this calculation
+    });
+    
+    // *** FIX: Removed the block that deleted rooms already used by other scribes ***
+    // This allows multiple scribes to be assigned to the same room.
+
+    return Array.from(masterRoomNames).sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+    });
+}
+
+// Open the Scribe Room Modal
+async function openScribeRoomModal(regNo, studentName) {
+    studentToAllotScribeRoom = regNo;
+    scribeRoomModalTitle.textContent = `Select Room for ${studentName} (${regNo})`;
+    
+    const sessionKey = scribeSessionSelect.value;
+    const availableRooms = await findAvailableRooms(sessionKey);
+    
+    scribeRoomSelectionList.innerHTML = '';
+    if (availableRooms.length === 0) {
+        scribeRoomSelectionList.innerHTML = '<p class="text-center text-red-600">No available rooms found for this session.</p>';
+    } else {
+        availableRooms.forEach(roomName => {
+            const room = currentRoomConfig[roomName];
+            const location = room.location ? ` (${room.location})` : '';
+            
+            const roomOption = document.createElement('div');
+            roomOption.className = 'p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50';
+            roomOption.innerHTML = `
+                <div class="font-medium text-gray-800">${roomName}${location}</div>
+                <div class="text-sm text-gray-600">Capacity: ${room.capacity}</div>
+            `;
+            roomOption.onclick = () => selectScribeRoom(roomName);
+            scribeRoomSelectionList.appendChild(roomOption);
+        });
+    }
+    
+    scribeRoomModal.classList.remove('hidden');
+}
+
+// Select a room from the modal
+function selectScribeRoom(roomName) {
+    if (!studentToAllotScribeRoom) return;
+    
+    const sessionKey = scribeSessionSelect.value;
+    
+    // Add to this session's allotment
+    currentScribeAllotment[studentToAllotScribeRoom] = roomName;
+    
+    // Save back to localStorage
+    const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    allAllotments[sessionKey] = currentScribeAllotment;
+    localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+    
+    // Close modal and re-render list
+    scribeRoomModal.classList.add('hidden');
+    renderScribeAllotmentList(sessionKey);
+    studentToAllotScribeRoom = null;
+}
+
+scribeCloseRoomModal.addEventListener('click', () => {
+    scribeRoomModal.classList.add('hidden');
+    studentToAllotScribeRoom = null;
+});
+
+// **********************************
+
+
+// --- Run on initial page load ---
+loadInitialData();
