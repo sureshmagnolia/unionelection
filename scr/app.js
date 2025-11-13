@@ -1,4 +1,3 @@
-
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
