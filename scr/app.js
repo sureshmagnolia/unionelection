@@ -1397,3 +1397,877 @@ function downloadRoomCsv() {
     link.click();
     document.body.removeChild(link);
 }
+// --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
+navExtractor.addEventListener('click', () => showView(viewExtractor, navExtractor));
+navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
+navRoomAllotment.addEventListener('click', () => showView(viewRoomAllotment, navRoomAllotment));
+navScribeAllotment.addEventListener('click', () => showView(viewScribeAllotment, navScribeAllotment));
+navQPCodes.addEventListener('click', () => showView(viewQPCodes, navQPCodes));
+navReports.addEventListener('click', () => showView(viewReports, navReports));
+navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
+navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
+// document.getElementById('nav-room-settings').addEventListener('click', ...); // Removed
+
+function showView(viewToShow, buttonToActivate) {
+    allViews.forEach(view => view.classList.add('hidden'));
+    allNavButtons.forEach(btn => {
+        btn.classList.add('nav-button-inactive');
+        btn.classList.remove('nav-button-active');
+    });
+    viewToShow.classList.remove('hidden');
+    buttonToActivate.classList.remove('nav-button-inactive');
+    buttonToActivate.classList.add('nav-button-active');
+    
+    clearReport(); // Always clear reports when switching views
+}
+
+// --- (V97) College Name Save Logic (in Settings) ---
+saveCollegeNameButton.addEventListener('click', () => {
+    const collegeName = collegeNameInput.value.trim() || "University of Calicut";
+    localStorage.setItem(COLLEGE_NAME_KEY, collegeName);
+    currentCollegeName = collegeName; // Update global var immediately
+    
+    collegeNameStatus.textContent = "College name saved!";
+    setTimeout(() => { collegeNameStatus.textContent = ""; }, 2000);
+});
+
+// --- (V48) Save from dynamic form (in Settings) ---
+saveRoomConfigButton.addEventListener('click', () => {
+    try {
+        // NOTE: College Name saving is now handled by saveCollegeNameButton
+        
+        // Save Room Config
+        const newConfig = {};
+        // V79: Get all rows, re-read and save
+        const roomRows = roomConfigContainer.querySelectorAll('.room-row');
+        
+        roomRows.forEach(row => {
+            // V79: Read current values (name label is the source of truth for the room key)
+            const roomName = row.querySelector('.room-name-label').textContent.replace(':', '').trim();
+            let capacity = parseInt(row.querySelector('.room-capacity-input').value, 10);
+            let location = row.querySelector('.room-location-input').value.trim();
+            
+            // Default to 30 if blank or invalid
+            if (isNaN(capacity) || capacity <= 0) {
+                capacity = 30;
+            }
+            
+            if (roomName) {
+                // V79: Re-save all rooms with new sequential names and updated data
+                newConfig[roomName] = {
+                    capacity: capacity,
+                    location: location
+                };
+            }
+        });
+        
+        localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(newConfig));
+        
+        // Show success message
+        roomConfigStatus.textContent = "Settings saved successfully!";
+        setTimeout(() => { roomConfigStatus.textContent = ""; }, 2000);
+        
+        // V79: RE-RENDER the list to fix numbering and apply UX rules (remove button on last row only)
+        loadRoomConfig();
+        
+    } catch (e) {
+        roomConfigStatus.textContent = "Error saving settings.";
+        console.error("Error saving room config:", e);
+    }
+});
+
+// --- (V79) Load data into dynamic form (in Settings) ---
+function loadRoomConfig() {
+    // V48: Load College Name
+    currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+    // *** V91 FIX: Populate the input field with the saved value ***
+    if (collegeNameInput) collegeNameInput.value = currentCollegeName; 
+    
+    // Load Room Config
+    let savedConfigJson = localStorage.getItem(ROOM_CONFIG_KEY);
+    let config;
+    
+    if (savedConfigJson) {
+        try {
+            config = JSON.parse(savedConfigJson);
+        } catch (e) {
+            console.error("Error parsing saved config, resetting.", e);
+            config = {};
+        }
+    } else {
+        config = {};
+    }
+    
+    // (V28) Store in global var for other functions to use
+    currentRoomConfig = config;
+    
+    if (!config || Object.keys(config).length === 0) {
+        // *** (V27): Default to 30 rooms ***
+        console.log("Using default room config (30 rooms of 30)");
+        config = {};
+        for (let i = 1; i <= 30; i++) {
+            config[`Room ${i}`] = { capacity: 30, location: "" };
+        }
+        localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(config));
+        currentRoomConfig = config; // Update global var
+    }
+    
+    // Populate the dynamic form
+    roomConfigContainer.innerHTML = ''; // Clear existing rows
+    const sortedKeys = Object.keys(config).sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+    });
+    
+    // V79: Add rows, determining if 'isLast' is true
+    sortedKeys.forEach((roomName, index) => {
+        const roomData = config[roomName];
+        const isLast = (index === sortedKeys.length - 1);
+        const rowHtml = createRoomRowHtml(roomName, roomData.capacity, roomData.location, isLast);
+        roomConfigContainer.insertAdjacentHTML('beforeend', rowHtml);
+    });
+}
+
+// --- (V28) Add New Room Button (in Settings) ---
+addRoomButton.addEventListener('click', () => {
+    const allRows = roomConfigContainer.querySelectorAll('.room-row');
+    let newName = "Room 1";
+    
+    if (allRows.length > 0) {
+        const lastRow = allRows[allRows.length - 1];
+        const lastName = lastRow.querySelector('.room-name-label').textContent.replace(':', '').trim();
+        let lastNum = 0;
+        try {
+            lastNum = parseInt(lastName.match(/(\d+)/)[0], 10);
+        } catch(e) {
+            lastNum = allRows.length; // Fallback
+        }
+        newName = `Room ${lastNum + 1}`;
+    }
+    
+    // V79: Before adding new row, remove remove button from the current last row
+    const currentLastRow = roomConfigContainer.lastElementChild;
+    if (currentLastRow) {
+        const removeButton = currentLastRow.querySelector('.remove-room-button');
+        if (removeButton) {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'w-[84px]'; // Match the button width for alignment
+            removeButton.parentNode.replaceChild(placeholder, removeButton);
+        }
+    }
+
+    const newRowHtml = createRoomRowHtml(newName, 30, "", true); // Add new row as the last row
+    roomConfigContainer.insertAdjacentHTML('beforeend', newRowHtml);
+});
+
+// --- (V79) Remove Room Button (Event Delegation for all rows, in Settings) ---
+roomConfigContainer.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-room-button')) {
+        e.target.closest('.room-row').remove();
+        
+        // Re-save configuration to update the room names and persist the deletion
+        saveRoomConfigButton.click(); // Triggers re-saving and re-rendering to fix numbering and buttons
+    }
+});
+
+
+// --- Q-PAPER REPORT LOGIC ---
+// Listener moved above
+
+// --- (V33) NEW CSV UPLOAD LOGIC ---
+
+// V33: Function called by Python to clear the CSV upload status
+// *** FIX: Attached to window object ***
+window.clear_csv_upload_status = function() {
+    csvLoadStatus.textContent = "";
+    if (correctedCsvUpload) {
+        correctedCsvUpload.value = ""; // Clear the file input
+    }
+}
+
+// V33: Add event listener for the new "Load CSV" button
+loadCsvButton.addEventListener('click', () => {
+    const file = correctedCsvUpload.files[0];
+    if (!file) {
+        csvLoadStatus.textContent = "Please select a CSV file first.";
+        return;
+    }
+    
+    // *** WORKFLOW FIX: Removed logic that disables PDF buttons ***
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const csvText = event.target.result;
+        parseCsvAndLoadData(csvText);
+    };
+    reader.onerror = () => {
+        csvLoadStatus.textContent = "Error reading file.";
+        // *** WORKFLOW FIX: Removed logic that disables PDF buttons ***
+    };
+    reader.readAsText(file);
+});
+
+// V33: This function parses the CSV and overwrites the data stores
+function parseCsvAndLoadData(csvText) {
+    try {
+        const lines = csvText.trim().split('\n');
+        const headersLine = lines.shift().trim();
+        const headers = headersLine.split(',');
+
+        // Find indices, this is more robust
+        const dateIndex = headers.indexOf('Date');
+        const timeIndex = headers.indexOf('Time');
+        const courseIndex = headers.indexOf('Course');
+        const regNumIndex = headers.indexOf('Register Number');
+        const nameIndex = headers.indexOf('Name');
+
+        if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
+            csvLoadStatus.textContent = "Error: CSV must contain 'Register Number', 'Name', and 'Course' headers.";
+            csvLoadStatus.classList.add('text-red-600');
+            csvLoadStatus.classList.remove('text-green-600');
+            // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
+            return;
+        }
+
+        const jsonData = [];
+        const qPaperSummary = {}; // Use an object for quick lookup
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            
+            // Regex parser that handles quoted fields (commas inside courses)
+            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+            const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, '')); // Trim and remove surrounding quotes
+
+            if (values.length !== headers.length) {
+                console.warn("Skipping malformed CSV line:", line);
+                continue;
+            }
+
+            const student = {
+                'Date': values[dateIndex],
+                'Time': values[timeIndex],
+                'Course': values[courseIndex], // V60: This name should be normalized already
+                'Register Number': values[regNumIndex],
+                'Name': values[nameIndex]
+            };
+            
+            jsonData.push(student);
+            
+            // --- Regenerate Q-Paper Summary ---
+            const key = `${student.Date}_${student.Time}_${student.Course}`;
+            if (!qPaperSummary[key]) {
+                qPaperSummary[key] = { 
+                    Date: student.Date, 
+                    Time: student.Time, 
+                    Course: student.Course, 
+                    'Student Count': 0 
+                };
+            }
+            qPaperSummary[key]['Student Count']++;
+        }
+        
+        const qPaperArray = Object.values(qPaperSummary);
+
+        // --- Update Data Stores ---
+        jsonDataStore.innerHTML = JSON.stringify(jsonData);
+        qPaperDataStore.innerHTML = JSON.stringify(qPaperArray);
+        
+        // V65: Save the base data to localStorage
+        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(jsonData));
+
+        // --- Update UI ---
+        csvLoadStatus.textContent = `Successfully loaded and parsed ${jsonData.length} student records.`;
+        csvLoadStatus.classList.remove('text-red-600');
+        csvLoadStatus.classList.add('text-green-600');
+        
+        // Enable report buttons
+        generateReportButton.disabled = false;
+        generateQPaperReportButton.disabled = false;
+        generateDaywiseReportButton.disabled = false;
+        generateScribeReportButton.disabled = false; // <-- NEW
+        
+        // V56: Enable and populate absentee tab
+        disable_absentee_tab(false);
+        populate_session_dropdown();
+        
+        // V61: Enable and populate QP Code tab
+        disable_qpcode_tab(false);
+        populate_qp_code_session_dropdown();
+        
+        // Enable and populate Room Allotment tab
+        disable_room_allotment_tab(false);
+        populate_room_allotment_session_dropdown();
+
+        // *** NEW: Enable Scribe Tabs ***
+        disable_scribe_tabs(false);
+        populate_scribe_session_dropdown();
+        loadGlobalScribeList();
+        // *****************************
+        
+        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
+
+
+    } catch (e) {
+        console.error("Error parsing CSV:", e);
+        csvLoadStatus.textContent = "Error parsing CSV file. See console for details.";
+        csvLoadStatus.classList.add('text-red-600');
+        csvLoadStatus.classList.remove('text-green-600');
+        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
+    }
+}
+
+
+// --- (V56) NEW ABSENTEE LOGIC ---
+
+// *** FIX: Attach to window object ***
+window.disable_absentee_tab = function(disabled) {
+    navAbsentees.disabled = disabled;
+    if (disabled) {
+        absenteeLoader.classList.remove('hidden');
+        absenteeContentWrapper.classList.add('hidden');
+        navAbsentees.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        absenteeLoader.classList.add('hidden');
+        absenteeContentWrapper.classList.remove('hidden');
+        navAbsentees.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+// *** FIX: Attach to window object ***
+window.populate_session_dropdown = function() {
+    try {
+        allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        if (allStudentData.length === 0) {
+            disable_absentee_tab(true);
+            return;
+        }
+        
+        // Get unique sessions
+        const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+        allStudentSessions = Array.from(sessions).sort();
+        
+        sessionSelect.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
+        reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>'; // V68: Clear and set default for reports
+        
+        // Find today's session
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
+        let defaultSession = "";
+        
+        allStudentSessions.forEach(session => {
+            sessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
+            reportsSessionSelect.innerHTML += `<option value="${session}">${session}</option>`; // V68
+            if (session.startsWith(todayStr)) {
+                defaultSession = session;
+            }
+        });
+        
+        if (defaultSession) {
+            sessionSelect.value = defaultSession;
+            sessionSelect.dispatchEvent(new Event('change')); // Trigger change to load list
+        }
+        
+        // V68: Ensure report filters are visible and default set
+        reportFilterSection.classList.remove('hidden');
+        // V81: Set Specific Session as default
+        filterSessionRadio.checked = true;
+        reportsSessionDropdownContainer.classList.remove('hidden');
+        // Ensure the report select box defaults to today's session if found
+        reportsSessionSelect.value = defaultSession || reportsSessionSelect.options[1]?.value || "all";
+
+    } catch (e) {
+        console.error("Failed to populate sessions:", e);
+        disable_absentee_tab(true);
+    }
+}
+
+sessionSelect.addEventListener('change', () => {
+    const sessionKey = sessionSelect.value;
+    if (sessionKey) {
+        absenteeSearchSection.classList.remove('hidden');
+        absenteeListSection.classList.remove('hidden');
+        generateAbsenteeReportButton.disabled = false;
+        loadAbsenteeList(sessionKey);
+    } else {
+        absenteeSearchSection.classList.add('hidden');
+        absenteeListSection.classList.add('hidden');
+        generateAbsenteeReportButton.disabled = true;
+        currentAbsenteeListDiv.innerHTML = "";
+    }
+    clearSearch();
+});
+
+absenteeSearchInput.addEventListener('input', () => {
+    const query = absenteeSearchInput.value.trim().toUpperCase();
+    if (query.length < 3) {
+        autocompleteResults.classList.add('hidden');
+        return;
+    }
+    
+    const sessionKey = sessionSelect.value;
+    if (!sessionKey) return;
+    const [date, time] = sessionKey.split(' | ');
+    
+    // Filter students for this session
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // Filter by search query
+    const matches = sessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
+    
+    if (matches.length > 0) {
+        autocompleteResults.innerHTML = '';
+        matches.forEach(student => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
+            item.onclick = () => selectStudent(student);
+            autocompleteResults.appendChild(item);
+        });
+        autocompleteResults.classList.remove('hidden');
+    } else {
+        autocompleteResults.classList.add('hidden');
+    }
+});
+
+function selectStudent(student) {
+    selectedStudent = student;
+    absenteeSearchInput.value = student['Register Number'];
+    autocompleteResults.classList.add('hidden');
+    
+    // V87 FIX: Allocate rooms for the *entire* session to find the correct room
+    const sessionKey = sessionSelect.value;
+    const [date, time] = sessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // Perform allocation on the *entire* session
+    // *** THIS NOW USES THE MAIN ALLOCATION, WHICH IS SCRIBE-AWARE ***
+    const allocatedSessionData = performOriginalAllocation(sessionStudents);
+    
+    // Find our selected student in the allocated list
+    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === student['Register Number']);
+    
+    const roomNo = allocatedStudent ? allocatedStudent['Room No'] : 'N/A';
+    const roomInfo = currentRoomConfig[roomNo];
+    const location = (roomInfo && roomInfo.location) ? `(${roomInfo.location})` : "";
+    
+    selectedStudentName.textContent = student.Name;
+    selectedStudentCourse.textContent = student.Course;
+    selectedStudentRoom.textContent = `Room: ${roomNo} ${location}`; // Use the correctly allocated room
+    if (allocatedStudent && allocatedStudent.isScribe) { // <-- NEW
+        // *** FIX: Check for Scribe room assignment ***
+        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+        const scribeRoom = sessionScribeAllotment[student['Register Number']];
+        
+        if (scribeRoom) {
+            selectedStudentRoom.textContent = `Room: ${scribeRoom} (Scribe)`;
+        } else {
+            selectedStudentRoom.textContent = `Room: ${roomNo} (Scribe - Unassigned)`;
+        }
+    }
+    selectedStudentDetails.classList.remove('hidden');
+}
+
+function clearSearch() {
+    selectedStudent = null;
+    absenteeSearchInput.value = "";
+    autocompleteResults.classList.add('hidden');
+    selectedStudentDetails.classList.add('hidden');
+}
+
+addAbsenteeButton.addEventListener('click', () => {
+    if (!selectedStudent) return;
+    
+    const sessionKey = sessionSelect.value;
+    const regNo = selectedStudent['Register Number'];
+    
+    if (currentAbsenteeList.includes(regNo)) {
+        alert(`${regNo} is already on the absentee list.`);
+        clearSearch();
+        return;
+    }
+    
+    // Add to list and save
+    currentAbsenteeList.push(regNo);
+    saveAbsenteeList(sessionKey);
+    renderAbsenteeList();
+    clearSearch();
+});
+
+function loadAbsenteeList(sessionKey) {
+    const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
+    currentAbsenteeList = allAbsentees[sessionKey] || [];
+    renderAbsenteeList();
+}
+
+function saveAbsenteeList(sessionKey) {
+    const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
+    allAbsentees[sessionKey] = currentAbsenteeList;
+    localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(allAbsentees));
+}
+
+function renderAbsenteeList() {
+    const sessionKey = sessionSelect.value;
+    currentAbsenteeListDiv.innerHTML = "";
+    
+    if (currentAbsenteeList.length === 0) {
+        currentAbsenteeListDiv.innerHTML = `<em class="text-gray-500">No absentees marked for this session.</em>`;
+        return;
+    }
+
+    // V81 FIX: Allocate rooms for the entire session first to get correct room numbers
+    const [date, time] = sessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const allocatedSessionData = performOriginalAllocation(sessionStudents);
+    
+    // *** FIX: Load scribe allotments to show correct final room ***
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+
+    const allocatedMap = allocatedSessionData.reduce((map, s) => {
+        map[s['Register Number']] = { room: s['Room No'], isScribe: s.isScribe }; // <-- NEW
+        return map;
+    }, {});
+
+    currentAbsenteeList.forEach(regNo => {
+        const roomData = allocatedMap[regNo] || { room: 'N/A', isScribe: false };
+        let room = roomData.room;
+        let roomDisplay = "";
+        
+        if (roomData.isScribe) {
+            room = sessionScribeAllotment[regNo] || 'N/A'; // Get scribe room
+            roomDisplay = `${room} (Scribe)`;
+        } else {
+            const roomInfo = currentRoomConfig[room];
+            const location = (roomInfo && roomInfo.location) ? `(${roomInfo.location})` : "";
+            roomDisplay = `${room} ${location}`;
+        }
+        
+        const item = document.createElement('div');
+        item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
+        item.innerHTML = `
+            <span class="font-medium">${regNo}</span>
+            <span class="text-sm text-gray-500">${roomDisplay}</span>
+            <button class="text-xs text-red-600 hover:text-red-800 font-medium">&times; Remove</button>
+        `;
+        item.querySelector('button').onclick = () => removeAbsentee(regNo);
+        currentAbsenteeListDiv.appendChild(item);
+    });
+}
+
+function removeAbsentee(regNo) {
+    currentAbsenteeList = currentAbsenteeList.filter(r => r !== regNo);
+    saveAbsenteeList(sessionSelect.value);
+    renderAbsenteeList();
+}
+
+// --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
+
+// *** FIX: Attach to window object ***
+window.disable_qpcode_tab = function(disabled) {
+    navQPCodes.disabled = disabled;
+    if (disabled) {
+        qpcodeLoader.classList.remove('hidden');
+        qpcodeContentWrapper.classList.add('hidden');
+        navQPCodes.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        qpcodeLoader.classList.add('hidden');
+        qpcodeContentWrapper.classList.remove('hidden');
+        navQPCodes.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+// V89: Loads the *entire* QP code map from localStorage into the global var
+function loadQPCodes() {
+    qpCodeMap = JSON.parse(localStorage.getItem(QP_CODE_LIST_KEY) || '{}');
+}
+
+// V61: Populates the QP Code session dropdown
+// *** FIX: Attach to window object ***
+window.populate_qp_code_session_dropdown = function() {
+    try {
+        if (allStudentData.length === 0) {
+             allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+        if (allStudentData.length === 0) {
+            disable_qpcode_tab(true);
+            return;
+        }
+        
+        // Get unique sessions
+        const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+        allStudentSessions = Array.from(sessions).sort();
+        
+        sessionSelectQP.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
+        
+        // Find today's session
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
+        let defaultSession = "";
+        
+        allStudentSessions.forEach(session => {
+            sessionSelectQP.innerHTML += `<option value="${session}">${session}</option>`;
+            if (session.startsWith(todayStr)) {
+                defaultSession = session;
+            }
+        });
+        
+        if (defaultSession) {
+            sessionSelectQP.value = defaultSession;
+            sessionSelectQP.dispatchEvent(new Event('change')); // Trigger change to load course list
+        }
+
+    } catch (e) {
+        console.error("Failed to populate QP sessions:", e);
+        disable_qpcode_tab(true);
+    }
+}
+
+// V61: Event listener for the QP Code session dropdown
+sessionSelectQP.addEventListener('change', () => {
+    const sessionKey = sessionSelectQP.value;
+    if (sessionKey) {
+        qpEntrySection.classList.remove('hidden');
+        render_qp_code_list(sessionKey);
+    } else {
+        qpEntrySection.classList.add('hidden');
+        qpCodeContainer.innerHTML = '';
+        qpCodeStatus.textContent = '';
+        saveQpCodesButton.disabled = true; // V62: Disable save button
+    }
+});
+
+// V61: Renders the course list for the selected session
+function render_qp_code_list(sessionKey) {
+    
+    // 1. Filter students for this specific session
+    const [date, time] = sessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // 2. Get unique courses for this session
+    const sessionCourses = new Set(sessionStudents.map(s => s.Course));
+    const uniqueCoursesArray = Array.from(sessionCourses).sort();
+    
+    // 3. V89: Load *all* codes, then get the ones for *this* session
+    loadQPCodes();
+    const sessionCodes = qpCodeMap[sessionKey] || {};
+    
+    // 4. Populate the UI
+    const htmlChunks = [];
+    
+    if (uniqueCoursesArray.length === 0) {
+        qpCodeContainer.innerHTML = '<p class="text-center text-gray-500">No courses found for this session.</p>';
+        saveQpCodesButton.disabled = true; 
+        return;
+    }
+
+    uniqueCoursesArray.forEach(courseName => {
+        const cleanKey = cleanCourseKey(courseName);
+
+        // V90 FIX: If the course name cleans to an empty string,
+        // don't render an input for it as it cannot be saved.
+        if (!cleanKey) {
+            console.warn(`Skipping QP code input for un-keyable course: ${courseName}`);
+            return; // Skip this iteration
+        }
+        
+        // V89: Look up the code in the session-specific map
+        const savedCode = sessionCodes[cleanKey] || "";
+        
+        htmlChunks.push(`
+            <div class="flex items-center gap-3 p-2 border-b border-gray-200">
+                <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
+                <input type="text" 
+                       class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
+                       value="${savedCode}" 
+                       data-course="${cleanKey}" 
+                       placeholder="Enter QP Code">
+            </div>
+        `);
+    });
+    
+    qpCodeContainer.innerHTML = htmlChunks.join('');
+    
+    saveQpCodesButton.disabled = false;
+    qpCodeStatus.textContent = ''; // Clear status on new load
+}
+
+// V89: NEW SAVE STRATEGY
+saveQpCodesButton.addEventListener('click', () => {
+    const sessionKey = sessionSelectQP.value;
+    if (!sessionKey) {
+        alert("No session selected.");
+        return;
+    }
+    
+    // V90 FIX: Ensure qpCodeMap is initialized before loading from storage
+    if (typeof qpCodeMap === 'undefined') {
+        qpCodeMap = {};
+    }
+
+    // 1. Load the entire master map from storage
+    // This ensures we don't overwrite other sessions
+    loadQPCodes(); 
+    
+    // 2. Create a new, empty map *just for this session's data*
+    const thisSessionCodes = {};
+    
+    // 3. Read all inputs from the DOM
+    const qpInputs = qpCodeContainer.querySelectorAll('.qp-code-input');
+    
+    for (let i = 0; i < qpInputs.length; i++) {
+        const input = qpInputs[i];
+        const courseKey = input.dataset.course; // Already cleaned
+        const qpCode = input.value.trim();
+
+        if (courseKey && qpCode) {
+            thisSessionCodes[courseKey] = qpCode;
+        }
+    }
+
+    // 4. Update the master map with the new data for this session
+    qpCodeMap[sessionKey] = thisSessionCodes;
+
+    // 5. Save the *entire* master map back to localStorage
+    localStorage.setItem(QP_CODE_LIST_KEY, JSON.stringify(qpCodeMap));
+
+    // 6. Show success message
+    qpCodeStatus.classList.remove('text-red-600');
+    qpCodeStatus.classList.add('text-green-600');
+    qpCodeStatus.textContent = `QP Codes saved successfully!`;
+    setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
+});
+
+// V89: NEW INPUT STRATEGY
+// The input listener is now *only* for user feedback.
+// It does NOT update any data.
+qpCodeContainer.addEventListener('input', (e) => {
+    if (e.target.classList.contains('qp-code-input')) {
+        // Show pending status
+        qpCodeStatus.classList.remove('text-green-600');
+        qpCodeStatus.classList.add('text-red-600');
+        qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
+    }
+});
+
+
+// --- V68: Report Filter Logic ---
+filterSessionRadio.addEventListener('change', () => {
+    if (filterSessionRadio.checked) {
+        reportsSessionDropdownContainer.classList.remove('hidden');
+        reportsSessionSelect.value = reportsSessionSelect.options[1]?.value || ""; // Default to first session
+    }
+});
+
+filterAllRadio.addEventListener('change', () => {
+    if (filterAllRadio.checked) {
+        reportsSessionDropdownContainer.classList.add('hidden');
+        reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
+    }
+});
+
+// --- NEW/MODIFIED RESET LOGIC (in Settings) ---
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // 1. Reset Student Data Only
+    if (resetStudentDataButton) {
+        resetStudentDataButton.addEventListener('click', () => {
+            const confirmReset = confirm('Are you sure you want to reset all student data? This will clear the main data, absentees, QP codes, and all room allotments. Your College Name and Room Settings will be kept.');
+            if (confirmReset) {
+                localStorage.removeItem(BASE_DATA_KEY);
+                localStorage.removeItem(ABSENTEE_LIST_KEY);
+                localStorage.removeItem(QP_CODE_LIST_KEY);
+                localStorage.removeItem(ROOM_ALLOTMENT_KEY);
+                localStorage.removeItem(SCRIBE_LIST_KEY);
+                localStorage.removeItem(SCRIBE_ALLOTMENT_KEY);
+                alert('All student data and allotments have been cleared. The app will now reload.');
+                window.location.reload();
+            }
+        });
+    }
+
+    // 2. Master Reset
+    if (masterResetButton) {
+        masterResetButton.addEventListener('click', () => {
+            const step1 = confirm('WARNING: This will clear ALL saved data (Rooms, College Name, Absentees, QP Codes, and Base Data) from your browser. Continue?');
+            if (!step1) return;
+            
+            const step2 = confirm('ARE YOU ABSOLUTELY SURE? This action cannot be undone.');
+            if (step2) {
+                localStorage.clear();
+                alert('All local data cleared. The application will now reload.');
+                window.location.reload();
+            }
+        });
+    }
+});
+
+
+// --- V65: Initial Data Load on Startup ---
+function loadInitialData() {
+    // 1. Load configuration and UI elements (Room settings, college name)
+    // *** V91 FIX: Call loadRoomConfig to ensure collegeNameInput is populated ***
+    loadRoomConfig(); 
+    
+    // 2. Check for base student data persistence
+    const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
+    if (savedDataJson) {
+        try {
+            const savedData = JSON.parse(savedDataJson);
+            if (savedData && savedData.length > 0) {
+                
+                // We create dummy data stores to allow reports to run
+                const qPaperSummary = {};
+                
+                savedData.forEach(student => {
+                    const key = `${student.Date}_${student.Time}_${student.Course}`;
+                    if (!qPaperSummary[key]) {
+                        qPaperSummary[key] = { 
+                            Date: student.Date, 
+                            Time: student.Time, 
+                            Course: student.Course, 
+                            'Student Count': 0 
+                        };
+                    }
+                    qPaperSummary[key]['Student Count']++;
+                });
+                
+                // Update JSON Data Stores
+                jsonDataStore.innerHTML = JSON.stringify(savedData);
+                qPaperDataStore.innerHTML = JSON.stringify(Object.values(qPaperSummary));
+                
+                // Enable UI tabs
+                generateReportButton.disabled = false;
+                generateQPaperReportButton.disabled = false;
+                generateDaywiseReportButton.disabled = false;
+                generateScribeReportButton.disabled = false; // <-- NEW
+                disable_absentee_tab(false);
+                disable_qpcode_tab(false);
+                disable_room_allotment_tab(false);
+                disable_scribe_tabs(false); // <-- NEW
+                
+                populate_session_dropdown();
+                populate_qp_code_session_dropdown();
+                populate_room_allotment_session_dropdown();
+                populate_scribe_session_dropdown(); // <-- NEW
+                loadGlobalScribeList(); // <-- NEW
+                
+                console.log(`Successfully loaded ${savedData.length} records from local storage.`);
+                
+                // Update log status (Optional, good for user feedback)
+                document.getElementById("status-log").innerHTML = `<p class="mb-1 text-green-700">&gt; [${new Date().toLocaleTimeString()}] Successfully loaded data from previous session.</p>`;
+                document.getElementById("status-log").scrollTop = document.getElementById("status-log").scrollHeight;
+
+
+            }
+        } catch(e) {
+            console.error("Failed to load BASE_DATA_KEY from localStorage. Clearing key.", e);
+            localStorage.removeItem(BASE_DATA_KEY);
+        }
+    }
+}
+
+// *** WORKFLOW FIX: Removed the event listeners that disabled/enabled buttons ***
+// Both PDF and CSV upload are always available.
