@@ -2288,11 +2288,8 @@ function updateAllotmentDisplay() {
     const [date, time] = currentSessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
     
-    // *** NEW: Exclude scribe students from this count ***
-    loadGlobalScribeList();
-    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-    const nonScribeSessionStudents = sessionStudents.filter(s => !scribeRegNos.has(s['Register Number']));
-    const totalStudents = nonScribeSessionStudents.length;
+    // *** FIX: Include scribe students in count - they occupy space in original room ***
+    const totalStudents = sessionStudents.length;
     // ***************************************************
     
     // Calculate allotted students
@@ -2423,14 +2420,10 @@ function selectRoomForAllotment(roomName, capacity) {
         room.students.forEach(regNo => allottedRegNos.add(regNo));
     });
 
-    // *** NEW: Exclude scribe students from this allotment ***
-    loadGlobalScribeList();
-    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-    
-    // Get unallotted *non-scribe* students
+    // *** FIX: Include scribe students in allotment - they occupy space in original room ***
+    // Get unallotted students (including scribes)
     const unallottedStudents = sessionStudents.filter(s => 
-        !allottedRegNos.has(s['Register Number']) && 
-        !scribeRegNos.has(s['Register Number'])
+        !allottedRegNos.has(s['Register Number'])
     );
     // ******************************************************
     
@@ -2767,11 +2760,9 @@ async function findAvailableRooms(sessionKey) {
         room.students.forEach(regNo => manuallyAllottedRegNos.add(regNo));
     });
     
-    // *** FIX: Scribes should NOT be part of this auto-allot simulation ***
-    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    // *** FIX: Include scribes in auto-allot simulation - they occupy space in original room ***
     const studentsForAutoAllot = sessionStudents.filter(s => 
-        !manuallyAllottedRegNos.has(s['Register Number']) && 
-        !scribeRegNos.has(s['Register Number'])
+        !manuallyAllottedRegNos.has(s['Register Number'])
     );
     
     // Run a lightweight auto-allot simulation
