@@ -191,9 +191,6 @@ const masterResetButton = document.getElementById('master-reset-button');
 
 // --// V90 FIX: Aggressive Key Cleaning Function (Fixes key collision) ---
 function cleanCourseKey(courseName) {
-// ... (rest of Part 1)
-// ... (rest of Part 1)
-function cleanCourseKey(courseName) {
     if (typeof courseName !== 'string') return '';
     // V90 FIX: Keep only alphanumeric characters and the course code part
     // The course code is the most unique part (e.g., BOT3CJ201)
@@ -395,9 +392,6 @@ function performOriginalAllocation(data) {
 }
 
 
-// V68: Helper function to filter data based on selected report filter
-// ... (rest of Part 2)
-// ... (rest of Part 2)
 // V68: Helper function to filter data based on selected report filter
 function getFilteredReportData(reportType) {
     const data = JSON.parse(jsonDataStore.innerHTML || '[]');
@@ -984,9 +978,6 @@ generateQPaperReportButton.addEventListener('click', async () => {
 });
         
 // *** NEW: Helper for Absentee Report ***
-// ... (rest of Part 3)
-// ... (rest of Part 3)
-// *** NEW: Helper for Absentee Report ***
 function formatRegNoList(regNos) {
     if (!regNos || regNos.length === 0) return '<em>None</em>';
     
@@ -1406,9 +1397,6 @@ saveCollegeNameButton.addEventListener('click', () => {
 
 // --- (V48) Save from dynamic form (in Settings) ---
 saveRoomConfigButton.addEventListener('click', () => {
-// ... (rest of Part 4)
-// ... (rest of Part 4)
-saveRoomConfigButton.addEventListener('click', () => {
     try {
         // NOTE: College Name saving is now handled by saveCollegeNameButton
         
@@ -1554,7 +1542,7 @@ roomConfigContainer.addEventListener('click', (e) => {
 // --- (V33) NEW CSV UPLOAD LOGIC ---
 
 // V33: Function called by Python to clear the CSV upload status
-// *** FIX: Attached to window object ***
+// *** FIX: Attach to window object ***
 window.clear_csv_upload_status = function() {
     csvLoadStatus.textContent = "";
     if (correctedCsvUpload) {
@@ -1948,9 +1936,6 @@ function removeAbsentee(regNo) {
     renderAbsenteeList();
 }
 
-// --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
-// ... (rest of Part 5)
-// ... (rest of Part 5)
 // --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
 
 // *** FIX: Attach to window object ***
@@ -2718,25 +2703,6 @@ function displayStudentDetails(student) {
 // --- *** END NEW SEARCH FUNCTIONALITY *** ---
 
 
-// --- *** NEW: SCRIBE FUNCTIONALITY *** ---
-
-// Disable/Enable Scribe Settings Tab (MODIFIED)
-// *** FIX: Attach to window object ***
-window.disable_scribe_settings_tab = function(disabled) {
-    navScribeSettings.disabled = disabled;
-    
-    if (disabled) {
-        scribeLoader.classList.remove('hidden');
-        scribeContentWrapper.classList.add('hidden');
-        navScribeSettings.classList.add('opacity-50', 'cursor-not-allowed');
-    } else {
-        scribeLoader.classList.add('hidden');
-        scribeContentWrapper.classList.remove('hidden');
-        navScribeSettings.classList.remove('opacity-50', 'cursor-not-allowed');
-    }
-}
-// ... (rest of Part 6)
-// ... (rest of Part 5)
 // --- *** NEW: SCRIBE FUNCTIONALITY *** ---
 
 // Disable/Enable Scribe Settings Tab (MODIFIED)
