@@ -2539,14 +2539,16 @@ window.disable_search_tab = function(disabled) {
     }
 }
 
-window.populate_search_session_dropdown = function() {
+wwindow.populate_search_session_dropdown = function() {
     try {
         if (allStudentSessions.length === 0) {
-            disable_search_tab(true);
-            return;
+            // FIX: Don't disable the tab. Just log a warning and stop.
+            // The tab was already enabled by the main script.
+            console.warn("populate_search_session_dropdown: allStudentSessions is empty, cannot populate dropdown.");
+            return; 
         }
         
-        sessionSelectSearch.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
+        sessionSelectSearch.innerHTML = '<option value="">-- Select a Session --</option>'; // // Clear
         
         // Find today's session
         const today = new Date();
