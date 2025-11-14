@@ -57,27 +57,36 @@ const viewSettings = document.getElementById('view-settings');
 const viewQPCodes = document.getElementById('view-qpcodes');
 const viewReports = document.getElementById('view-reports');
 const viewAbsentees = document.getElementById('view-absentees');
-// const viewRoomSettings = document.getElementById('view-room-settings'); // <-- No longer a main view
 const navExtractor = document.getElementById('nav-extractor');
 const navSettings = document.getElementById('nav-settings');
 const navQPCodes = document.getElementById('nav-qpcodes');
 const navReports = document.getElementById('nav-reports');
 const navAbsentees = document.getElementById('nav-absentees');
-// const navRoomSettings = document.getElementById('nav-room-settings'); // <-- No longer a main view
 // *** NEW SCRIBE NAV ***
 const navScribeSettings = document.getElementById('nav-scribe-settings');
-// const navScribeAllotment = document.getElementById('nav-scribe-allotment'); // REMOVED
 // **********************
 const navRoomAllotment = document.getElementById('nav-room-allotment');
 const viewRoomAllotment = document.getElementById('view-room-allotment');
 // *** NEW SCRIBE VIEWS ***
 const viewScribeSettings = document.getElementById('view-scribe-settings');
-// const viewScribeAllotment = document.getElementById('view-scribe-allotment'); // REMOVED
 // **********************
 
+// *** NEW SEARCH TAB ELEMENTS ***
+const navSearch = document.getElementById('nav-search');
+const viewSearch = document.getElementById('view-search');
+const searchLoader = document.getElementById('search-loader');
+const searchContentWrapper = document.getElementById('search-content-wrapper');
+const sessionSelectSearch = document.getElementById('session-select-search');
+const studentSearchSection = document.getElementById('student-search-section');
+const searchInputStudent = document.getElementById('search-input-student');
+const searchAutocompleteResults = document.getElementById('search-autocomplete-results');
+const searchStudentDetails = document.getElementById('search-student-details');
+// *****************************
+
+
 // *** MODIFIED allNavButtons and allViews TO MATCH NEW UI ***
-const allNavButtons = [navExtractor, navScribeSettings, navRoomAllotment, navQPCodes, navReports, navAbsentees, navSettings];
-const allViews = [viewExtractor, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewReports, viewAbsentees, viewSettings];
+const allNavButtons = [navExtractor, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings];
+const allViews = [viewExtractor, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings];
 
 // --- (V26) Get references to NEW Room Settings elements (Now in Settings Tab) ---
 const collegeNameInput = document.getElementById('college-name-input');
@@ -167,9 +176,6 @@ const currentScribeListDiv = document.getElementById('current-scribe-list');
 // ************************************
 
 // *** MODIFIED: SCRIBE ALLOTMENT ELEMENTS (Now part of Room Allotment view) ***
-// const scribeAllotmentLoader = document.getElementById('scribe-allotment-loader'); // No longer needed
-// const scribeAllotmentContentWrapper = document.getElementById('scribe-allotment-content-wrapper'); // No longer needed
-// const scribeSessionSelect = document.getElementById('scribe-session-select'); // No longer needed
 const scribeAllotmentListSection = document.getElementById('scribe-allotment-list-section');
 const scribeAllotmentList = document.getElementById('scribe-allotment-list');
 const scribeRoomModal = document.getElementById('scribe-room-modal');
@@ -184,6 +190,9 @@ const masterResetButton = document.getElementById('master-reset-button');
 
 
 // --// V90 FIX: Aggressive Key Cleaning Function (Fixes key collision) ---
+function cleanCourseKey(courseName) {
+// ... (rest of Part 1)
+// ... (rest of Part 1)
 function cleanCourseKey(courseName) {
     if (typeof courseName !== 'string') return '';
     // V90 FIX: Keep only alphanumeric characters and the course code part
@@ -386,6 +395,9 @@ function performOriginalAllocation(data) {
 }
 
 
+// V68: Helper function to filter data based on selected report filter
+// ... (rest of Part 2)
+// ... (rest of Part 2)
 // V68: Helper function to filter data based on selected report filter
 function getFilteredReportData(reportType) {
     const data = JSON.parse(jsonDataStore.innerHTML || '[]');
@@ -972,6 +984,9 @@ generateQPaperReportButton.addEventListener('click', async () => {
 });
         
 // *** NEW: Helper for Absentee Report ***
+// ... (rest of Part 3)
+// ... (rest of Part 3)
+// *** NEW: Helper for Absentee Report ***
 function formatRegNoList(regNos) {
     if (!regNos || regNos.length === 0) return '<em>None</em>';
     
@@ -1360,6 +1375,7 @@ navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, n
 navRoomAllotment.addEventListener('click', () => showView(viewRoomAllotment, navRoomAllotment));
 // navScribeAllotment.addEventListener('click', () => showView(viewScribeAllotment, navScribeAllotment)); // REMOVED
 navQPCodes.addEventListener('click', () => showView(viewQPCodes, navQPCodes));
+navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); // <-- ADDED
 navReports.addEventListener('click', () => showView(viewReports, navReports));
 navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
 navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
@@ -1389,6 +1405,9 @@ saveCollegeNameButton.addEventListener('click', () => {
 });
 
 // --- (V48) Save from dynamic form (in Settings) ---
+saveRoomConfigButton.addEventListener('click', () => {
+// ... (rest of Part 4)
+// ... (rest of Part 4)
 saveRoomConfigButton.addEventListener('click', () => {
     try {
         // NOTE: College Name saving is now handled by saveCollegeNameButton
@@ -1657,9 +1676,12 @@ function parseCsvAndLoadData(csvText) {
         disable_room_allotment_tab(false);
         populate_room_allotment_session_dropdown();
 
+        // *** NEW: Enable Search Tab ***
+        disable_search_tab(false);
+        populate_search_session_dropdown();
+        
         // *** NEW: Enable Scribe Tabs ***
         disable_scribe_settings_tab(false); // MODIFIED
-        // populate_scribe_session_dropdown(); // REMOVED
         loadGlobalScribeList();
         // *****************************
         
@@ -1926,6 +1948,9 @@ function removeAbsentee(regNo) {
     renderAbsenteeList();
 }
 
+// --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
+// ... (rest of Part 5)
+// ... (rest of Part 5)
 // --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
 
 // *** FIX: Attach to window object ***
@@ -2209,11 +2234,13 @@ function loadInitialData() {
                 disable_absentee_tab(false);
                 disable_qpcode_tab(false);
                 disable_room_allotment_tab(false);
+                disable_search_tab(false); // <-- ADDED
                 disable_scribe_settings_tab(false); // <-- MODIFIED
                 
                 populate_session_dropdown();
                 populate_qp_code_session_dropdown();
                 populate_room_allotment_session_dropdown();
+                populate_search_session_dropdown(); // <-- ADDED
                 // populate_scribe_session_dropdown(); // <-- REMOVED
                 loadGlobalScribeList(); // <-- NEW
                 
@@ -2513,7 +2540,204 @@ saveRoomAllotmentButton.addEventListener('click', () => {
 // --- END ROOM ALLOTMENT FUNCTIONALITY ---
 
 
-// *** NEW: SCRIBE FUNCTIONALITY ***
+// --- *** NEW SEARCH FUNCTIONALITY *** ---
+window.disable_search_tab = function(disabled) {
+    navSearch.disabled = disabled;
+    if (disabled) {
+        searchLoader.classList.remove('hidden');
+        searchContentWrapper.classList.add('hidden');
+        navSearch.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        searchLoader.classList.add('hidden');
+        searchContentWrapper.classList.remove('hidden');
+        navSearch.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+window.populate_search_session_dropdown = function() {
+    try {
+        if (allStudentSessions.length === 0) {
+            disable_search_tab(true);
+            return;
+        }
+        
+        sessionSelectSearch.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
+        
+        // Find today's session
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
+        let defaultSession = "";
+        
+        allStudentSessions.forEach(session => {
+            sessionSelectSearch.innerHTML += `<option value="${session}">${session}</option>`;
+            if (session.startsWith(todayStr)) {
+                defaultSession = session;
+            }
+        });
+        
+        if (defaultSession) {
+            sessionSelectSearch.value = defaultSession;
+            sessionSelectSearch.dispatchEvent(new Event('change')); // Trigger change
+        }
+
+    } catch (e) {
+        console.error("Failed to populate search sessions:", e);
+        disable_search_tab(true);
+    }
+}
+
+sessionSelectSearch.addEventListener('change', () => {
+    const sessionKey = sessionSelectSearch.value;
+    if (sessionKey) {
+        studentSearchSection.classList.remove('hidden');
+    } else {
+        studentSearchSection.classList.add('hidden');
+    }
+    // Clear previous search
+    searchInputStudent.value = '';
+    searchAutocompleteResults.innerHTML = '';
+    searchAutocompleteResults.classList.add('hidden');
+    searchStudentDetails.innerHTML = '';
+    searchStudentDetails.classList.add('hidden');
+});
+
+searchInputStudent.addEventListener('input', () => {
+    const query = searchInputStudent.value.trim().toUpperCase();
+    searchAutocompleteResults.innerHTML = '';
+    
+    if (query.length < 3) {
+        searchAutocompleteResults.classList.add('hidden');
+        return;
+    }
+    
+    const sessionKey = sessionSelectSearch.value;
+    if (!sessionKey) return;
+    const [date, time] = sessionKey.split(' | ');
+    
+    // Filter students for *this* session
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    
+    // Filter by search query (RegNo only for session search)
+    const matches = sessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
+    
+    if (matches.length > 0) {
+        matches.forEach(student => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
+            item.onclick = () => selectStudentForSearch(student);
+            searchAutocompleteResults.appendChild(item);
+        });
+        searchAutocompleteResults.classList.remove('hidden');
+    } else {
+        searchAutocompleteResults.classList.add('hidden');
+    }
+});
+
+function selectStudentForSearch(student) {
+    searchInputStudent.value = student['Register Number'];
+    searchAutocompleteResults.classList.add('hidden');
+    displayStudentDetails(student);
+}
+
+function displayStudentDetails(student) {
+    const sessionKey = sessionSelectSearch.value;
+    const [date, time] = sessionKey.split(' | ');
+    const regNo = student['Register Number'];
+
+    // 1. Find all courses for this student in this session
+    const studentCourses = allStudentData.filter(s => 
+        s.Date === date && 
+        s.Time === time && 
+        s['Register Number'] === regNo
+    );
+
+    // 2. Get allocation data (Room, Seat)
+    // We must run allocation on the *entire* session to get the correct data
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const allocatedSessionData = performOriginalAllocation(sessionStudents);
+    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+
+    let roomDisplay = '<span class="font-medium text-gray-700">Awaiting Allotment</span>';
+    let seatDisplay = 'N/A';
+    
+    if (allocatedStudent) {
+        let roomName = allocatedStudent['Room No'];
+        let seatNo = allocatedStudent.seatNumber;
+        
+        // Check for scribe status
+        if (allocatedStudent.isScribe) {
+            const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+            roomName = sessionScribeAllotment[regNo] || 'Scribe Room (Not Allotted)';
+            seatNo = 'N/A';
+        }
+
+        const roomInfo = currentRoomConfig[roomName];
+        const location = (roomInfo && roomInfo.location) ? ` (${roomInfo.location})` : '';
+        roomDisplay = `<span class="font-bold text-blue-600">${roomName}${location}</span>`;
+        seatDisplay = seatNo;
+    }
+
+    // 3. Load QP Codes
+    loadQPCodes();
+    const sessionQPCodes = qpCodeMap[sessionKey] || {};
+
+    // 4. Build HTML
+    let coursesHtml = '';
+    studentCourses.forEach(course => {
+        const courseKey = cleanCourseKey(course.Course);
+        const qpCode = sessionQPCodes[courseKey] || "N/A";
+        coursesHtml += `
+            <div class="border-t border-gray-200 pt-2 mt-2">
+                <p class="text-sm"><strong class="text-gray-600">Course:</strong> ${course.Course}</p>
+                <p class="text-sm"><strong class="text-gray-600">QP Code:</strong> ${qpCode}</p>
+            </div>
+        `;
+    });
+
+    searchStudentDetails.innerHTML = `
+        <h4 class="text-lg font-bold text-gray-900">${student.Name}</h4>
+        <p class="text-sm font-medium text-gray-500 mb-2">${regNo}</p>
+        
+        <div class="grid grid-cols-2 gap-2 mb-2">
+            <div>
+                <p class="text-sm font-medium text-gray-500">Room</p>
+                <p class="text-base">${roomDisplay}</p>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-500">Seat Number</p>
+                <p class="text-base font-bold text-blue-600">${seatDisplay}</p>
+            </div>
+        </div>
+        ${coursesHtml}
+    `;
+    searchStudentDetails.classList.remove('hidden');
+}
+
+// --- *** END NEW SEARCH FUNCTIONALITY *** ---
+
+
+// --- *** NEW: SCRIBE FUNCTIONALITY *** ---
+
+// Disable/Enable Scribe Settings Tab (MODIFIED)
+// *** FIX: Attach to window object ***
+window.disable_scribe_settings_tab = function(disabled) {
+    navScribeSettings.disabled = disabled;
+    
+    if (disabled) {
+        scribeLoader.classList.remove('hidden');
+        scribeContentWrapper.classList.add('hidden');
+        navScribeSettings.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        scribeLoader.classList.add('hidden');
+        scribeContentWrapper.classList.remove('hidden');
+        navScribeSettings.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+// ... (rest of Part 6)
+// ... (rest of Part 5)
+// --- *** NEW: SCRIBE FUNCTIONALITY *** ---
 
 // Disable/Enable Scribe Settings Tab (MODIFIED)
 // *** FIX: Attach to window object ***
@@ -2660,10 +2884,6 @@ function clearScribeSearch() {
 
 // --- Scribe Allotment Page Logic (MOVED) ---
 
-// THIS FUNCTION IS NO LONGER NEEDED
-// window.populate_scribe_session_dropdown = function() { ... }
-
-
 // NEW FUNCTION: This loads the scribe allotment data for the session
 function loadScribeAllotment(sessionKey) {
     if (sessionKey && globalScribeList.length > 0) {
@@ -2749,8 +2969,7 @@ function renderScribeAllotmentList(sessionKey) {
     });
 }
 
-// Find available rooms for scribes
-// Find available rooms for scribes
+// Find available rooms for scribes (THIS IS THE CORRECTED VERSION)
 async function findAvailableRooms(sessionKey) {
     
     // 1. Get all "master" rooms from your settings
@@ -2773,6 +2992,7 @@ async function findAvailableRooms(sessionKey) {
         return numA - numB;
     });
 }
+
 
 // Open the Scribe Room Modal
 async function openScribeRoomModal(regNo, studentName) {
