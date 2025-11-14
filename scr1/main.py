@@ -474,9 +474,20 @@ async def run_extraction_py(event=None):
         js.disable_absentee_tab(False) # V56: Enable absentee tab
         js.disable_qpcode_tab(False) # V58: Enable QP Code tab
         js.disable_room_allotment_tab(False) # Enable room allotment tab
+        
+        # --- FIX: ADDED THESE 2 LINES ---
+        js.disable_scribe_settings_tab(False) # Enable Scribe tab
+        js.disable_search_tab(False) # Enable Search tab
+        # --- END FIX ---
+        
         js.populate_session_dropdown() # V56: Populate dropdown
         js.populate_qp_code_session_dropdown() # V61: Populate QP Code dropdown
         js.populate_room_allotment_session_dropdown() # Populate room allotment dropdown
+        
+        # --- FIX: ADDED THESE 2 LINES ---
+        js.populate_search_session_dropdown() # Populate search dropdown
+        js.loadGlobalScribeList() # Load any existing scribe data
+        # --- END FIX ---
                         
         log_message("Success! Your combined files are ready.")
     
