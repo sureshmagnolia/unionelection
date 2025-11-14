@@ -2414,18 +2414,25 @@ function selectRoomForAllotment(roomName, capacity) {
     const [date, time] = currentSessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
     
+    // *** FIX: Check if this room already has students allocated ***
+    const existingRoom = currentSessionAllotment.find(r => r.roomName === roomName);
+    if (existingRoom) {
+        alert(`Room ${roomName} already has ${existingRoom.students.length} students allocated. Please delete the existing allocation first if you want to reallocate.`);
+        roomSelectionModal.classList.add('hidden');
+        return;
+    }
+    // ******************************************************
+    
     // Get already allotted student register numbers
     const allottedRegNos = new Set();
     currentSessionAllotment.forEach(room => {
         room.students.forEach(regNo => allottedRegNos.add(regNo));
     });
 
-    // *** FIX: Include scribe students in allotment - they occupy space in original room ***
     // Get unallotted students (including scribes)
     const unallottedStudents = sessionStudents.filter(s => 
         !allottedRegNos.has(s['Register Number'])
     );
-    // ******************************************************
     
     // Allot up to capacity
     const studentsToAllot = unallottedStudents.slice(0, capacity);
