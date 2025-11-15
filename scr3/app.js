@@ -3154,11 +3154,24 @@ async function findAvailableRooms(sessionKey) {
 
 
 // Open the Scribe Room Modal
+// Open the Scribe Room Modal
 async function openScribeRoomModal(regNo, studentName) {
     studentToAllotScribeRoom = regNo;
     scribeRoomModalTitle.textContent = `Select Room for ${studentName} (${regNo})`;
     
     const sessionKey = allotmentSessionSelect.value; // MODIFIED: Use main allotment selector
+
+    // --- NEW: Calculate current scribe room counts ---
+    const roomCounts = {};
+    // currentScribeAllotment is already loaded for this session
+    for (const studentRegNo in currentScribeAllotment) {
+        const roomName = currentScribeAllotment[studentRegNo];
+        if (roomName) {
+            roomCounts[roomName] = (roomCounts[roomName] || 0) + 1;
+        }
+    }
+    // --- END NEW ---
+    
     const availableRooms = await findAvailableRooms(sessionKey);
     
     scribeRoomSelectionList.innerHTML = '';
@@ -3169,12 +3182,23 @@ async function openScribeRoomModal(regNo, studentName) {
             const room = currentRoomConfig[roomName];
             const location = room.location ? ` (${room.location})` : '';
             
+            // --- NEW: Get the count for this room ---
+            const count = roomCounts[roomName] || 0;
+            // --- END NEW ---
+
             const roomOption = document.createElement('div');
             roomOption.className = 'p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50';
+            
+            // --- MODIFIED: Add count to innerHTML ---
             roomOption.innerHTML = `
-                <div class="font-medium text-gray-800">${roomName}${location}</div>
-                <div class="text-sm text-gray-600">Capacity: ${room.capacity}</div>
+                <div class="flex justify-between items-center">
+                    <div class="font-medium text-gray-800">${roomName}${location}</div>
+                    <div class="text-sm font-bold text-blue-600">Allotted: ${count}</div>
+                </div>
+                <div class_=("text-sm text-gray-600">Capacity: ${room.capacity}</div>
             `;
+            // --- END MODIFIED ---
+            
             roomOption.onclick = () => selectScribeRoom(roomName);
             scribeRoomSelectionList.appendChild(roomOption);
         });
