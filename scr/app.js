@@ -2751,59 +2751,28 @@ function renderScribeAllotmentList(sessionKey) {
 
 // Find available rooms for scribes
 async function findAvailableRooms(sessionKey) {
-    const [date, time] = sessionKey.split(' | ');
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
     
-    // 1. Get all "master" rooms
+    // 1. Get all "master" rooms from your settings
     getRoomCapacitiesFromStorage(); // Populates currentRoomConfig
     const masterRoomNames = new Set(Object.keys(currentRoomConfig));
 
-    // 2. Get all rooms used by "Manual Allotment"
+    // 2. Get all rooms used by "Manual Allotment" FOR THIS SESSION
     const allManualAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
     const sessionManualAllotment = allManualAllotments[sessionKey] || [];
+    
+    // 3. Remove only the manually allotted rooms from the list
     sessionManualAllotment.forEach(room => {
         masterRoomNames.delete(room.roomName);
     });
-
-    // 3. Get all rooms used by "Automatic Allotment" (for students NOT in manual allotment)
-    const manuallyAllottedRegNos = new Set();
-    sessionManualAllotment.forEach(room => {
-        room.students.forEach(regNo => manuallyAllottedRegNos.add(regNo));
-    });
     
-    // *** FIX: Include scribes in auto-allot simulation - they occupy space in original room ***
-    const studentsForAutoAllot = sessionStudents.filter(s => 
-        !manuallyAllottedRegNos.has(s['Register Number'])
-    );
-    
-    // Run a lightweight auto-allot simulation
-    const sessionRoomFills = {};
-    const masterRoomCaps = getRoomCapacitiesFromStorage().roomCapacities; // Re-get array
-    const masterRoomNamesArray = getRoomCapacitiesFromStorage().roomNames; // Re-get array
-
-    studentsForAutoAllot.forEach(student => {
-        for (let i = 0; i < masterRoomCaps.length; i++) {
-            const roomName = masterRoomNamesArray[i];
-            if (!sessionRoomFills[roomName]) sessionRoomFills[roomName] = 0;
-            
-            if (sessionRoomFills[roomName] < masterRoomCaps[i]) {
-                sessionRoomFills[roomName]++;
-                masterRoomNames.delete(roomName); // This room is now used
-                break;
-            }
-        }
-        // We ignore overflow rooms for this calculation
-    });
-    
-    // *** FIX: Removed the block that deleted rooms already used by other scribes ***
-    // This allows multiple scribes to be assigned to the same room.
-
+    // 4. Return the remaining list, sorted numerically
     return Array.from(masterRoomNames).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
         return numA - numB;
     });
 }
+
 
 // Open the Scribe Room Modal
 async function openScribeRoomModal(regNo, studentName) {
