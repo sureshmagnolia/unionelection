@@ -164,6 +164,32 @@
                 <button id="reset-student-data-button" class="w-full inline-flex justify-center items-center rounded-md border border-orange-700 bg-orange-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-orange-700 mt-2">
                     Reset Student Data Only
                 </button>
+
+                <hr class="my-6 border-gray-300">
+
+                <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">
+                    Backup & Restore
+                </h2>
+                <p class="text-sm text-gray-600 mb-3">
+                    Save all your data (Rooms, College Name, Students, Allotments, Absentees, Scribes) to a single JSON file. You can restore from this file later.
+                </p>
+                <button id="backup-data-button" class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 mt-2">
+                    Backup All Data to File
+                </button>
+
+                <div class="mt-4">
+                    <label for="restore-file-input" class="block text-sm font-medium text-gray-700 mb-1">Restore from Backup File (.json)</label>
+                    <input type="file" id="restore-file-input" accept=".json" class="block w-full text-sm text-gray-500
+                                  file:mr-4 file:py-2 file:px-4
+                                  file:rounded-md file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-indigo-50 file:text-indigo-700
+                                  hover:file:bg-indigo-100"/>
+                    <button id="restore-data-button" class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 mt-3">
+                        Restore Data from File
+                    </button>
+                    <span id="restore-status" class="text-sm font-medium text-red-600 mt-2 block h-5"></span>
+                </div>
                 
                 <hr class="my-6 border-gray-300">
 
