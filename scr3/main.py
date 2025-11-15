@@ -73,7 +73,7 @@ def show_loader(is_loading):
         button_text.textContent = "2. Run Batch Extraction"
 
 def get_sort_key(row):
-    """Converts DD.MM.YYYY and HH:MM PM to a sortable format."""
+    """Converts DD.MM.YYYY, HH:MM PM, and Course to a sortable format."""
     try:
         # V38: Standardized on DD.MM.YYYY
         date_obj = datetime.strptime(row['Date'], '%d.%m.%Y')
@@ -83,10 +83,15 @@ def get_sort_key(row):
             time_str = "0" + time_str
         
         time_obj = datetime.strptime(time_str, '%I:%M%p')
-        return (date_obj, time_obj)
+        
+        # NEW: Add course name to the sort key
+        course_name = row.get('Course', '') # Use .get for safety
+        
+        return (date_obj, time_obj, course_name) # Return a 3-part tuple
     except ValueError as e:
         console.log(f"Sort Error: Could not parse Date '{row['Date']}' or Time '{row['Time']}'. Error: {e}")
-        return (datetime.min, datetime.min)
+        # NEW: Still return 3 parts for consistent sorting
+        return (datetime.min, datetime.min, row.get('Course', ''))
 
 # --- V60: COURSE NAME NORMALIZER ---
 def normalize_course_name(course_name):
@@ -429,7 +434,7 @@ async def run_extraction_py(event=None):
         all_exam_rows = normalized_rows
         log_message("Course names normalized.")
         
-        log_message("Sorting all entries by Date and Time...")
+        log_message("Sorting all entries by Date, Time, and Course...")
         all_exam_rows_sorted = sorted(all_exam_rows, key=get_sort_key)
         await asyncio.sleep(0)
                         
