@@ -423,7 +423,6 @@
         margin-bottom: 1.5rem; /* Space between rooms */
         break-inside: avoid; /* Keep table from breaking */
     }
-    .qp-distribution-table th,
     .qp-distribution-table td {
         border: 1px solid #000;
         padding: 6px;
