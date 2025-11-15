@@ -1956,6 +1956,47 @@ loadCsvButton.addEventListener('click', () => {
     reader.readAsText(file);
 });
 
+// *** NEW: Helper function to sort CSV data just like Python sort ***
+function getJsSortKey(row) {
+    let dateObj, timeObj, courseName;
+    
+    // 1. Parse Date (DD.MM.YYYY)
+    try {
+        const parts = row.Date.split('.');
+        dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+    } catch (e) {
+        dateObj = new Date(0); // Epoch
+    }
+    
+    // 2. Parse Time (HH:MM AM/PM)
+    try {
+        let timeStr = row.Time.toUpperCase().replace(" ", "");
+        if (timeStr.length === 7) { // 9:30AM -> 09:30AM
+            timeStr = "0" + timeStr;
+        }
+        
+        let hour = parseInt(timeStr.substring(0, 2), 10);
+        const minute = timeStr.substring(3, 5);
+        const modifier = timeStr.substring(5);
+
+        if (modifier === 'PM' && hour !== 12) {
+            hour += 12;
+        }
+        if (modifier === 'AM' && hour === 12) {
+            hour = 0;
+        }
+        
+        timeObj = new Date(2000, 0, 1, hour, parseInt(minute, 10));
+    } catch (e) {
+        console.warn("Could not parse time for sorting:", row.Time, e);
+        timeObj = new Date(0); // Epoch
+    }
+    
+    // 3. Course Name
+    courseName = row.Course || '';
+    
+    return { dateObj, timeObj, courseName };
+}
 // V33: This function parses the CSV and overwrites the data stores
 function parseCsvAndLoadData(csvText) {
     try {
@@ -2016,10 +2057,30 @@ function parseCsvAndLoadData(csvText) {
             qPaperSummary[key]['Student Count']++;
         }
         
-        const qPaperArray = Object.values(qPaperSummary);
+      const qPaperArray = Object.values(qPaperSummary);
 
-        // --- Update Data Stores ---
-        jsonDataStore.innerHTML = JSON.stringify(jsonData);
+        // --- NEW: Sort the loaded CSV data by Date, Time, and Course ---
+        try {
+            jsonData.sort((a, b) => {
+                const keyA = getJsSortKey(a);
+                const keyB = getJsSortKey(b);
+                
+                if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) {
+                    return keyA.dateObj - keyB.dateObj;
+                }
+                if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) {
+                    return keyA.timeObj - keyB.timeObj;
+                }
+                return keyA.courseName.localeCompare(keyB.courseName);
+            });
+        } catch (e) {
+            console.error("Error during CSV sorting:", e);
+            // Don't block, just log the error
+        }
+        // --- END NEW ---
+
+        // --- Update Data Stores ---
+        jsonDataStore.innerHTML = JSON.stringify(jsonData);
         qPaperDataStore.innerHTML = JSON.stringify(qPaperArray);
         
         // V65: Save the base data to localStorage
