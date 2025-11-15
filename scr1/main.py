@@ -234,7 +234,7 @@ def extract_old_format_students(page, file_name, page_num):
         for row in table:
             try:
                 if not row or not row[0]: continue
-                if not row[0].strip().isdigit(): continue
+                if not row[hidden].strip().isdigit(): continue
                 reg_num, name = "Unknown", "Unknown"
                 for idx, cell in enumerate(row):
                     if not cell: continue
@@ -275,7 +275,8 @@ async def start_extraction(event=None):
         await asyncio.sleep(0) # Let loader show
         
         # V33: Clear the CSV upload status
-        js.clear_csv_upload_status() # This needs the global 'js'
+        # --- FIX: USE window. ---
+        window.clear_csv_upload_status()
             
         # Call the main logic function
         await run_extraction_py()
@@ -297,8 +298,11 @@ async def run_extraction_py(event=None):
         generate_report_button.disabled = True
         generate_qpaper_report_button.disabled = True
         generate_daywise_report_button.disabled = True
-        js.disable_absentee_tab(True) # V56: Disable absentee tab
-        js.disable_qpcode_tab(True) # V58: Disable QP Code tab
+        
+        # --- FIX: USE window. ---
+        window.disable_absentee_tab(True) # V56: Disable absentee tab
+        window.disable_qpcode_tab(True) # V58: Disable QP Code tab
+        
         json_data_store.innerHTML = ""
         q_paper_data_store.innerHTML = ""
         status_div.innerHTML = ""
@@ -387,10 +391,7 @@ async def run_extraction_py(event=None):
                             page_students = extract_old_format_students(page, file_name, page_num)
                         
                         if page_students:
-                            # --- THIS IS THE FIX ---
                             total_students_in_file += len(page_students)
-                            # --- END FIX ---
-                            
                             # 3. Apply the STORED header info to all students found
                             for student in page_students:
                                 all_exam_rows.append({
@@ -478,22 +479,19 @@ async def run_extraction_py(event=None):
         generate_report_button.disabled = False
         generate_qpaper_report_button.disabled = False
         generate_daywise_report_button.disabled = False
-        js.disable_absentee_tab(False) # V56: Enable absentee tab
-        js.disable_qpcode_tab(False) # V58: Enable QP Code tab
-        js.disable_room_allotment_tab(False) # Enable room allotment tab
         
-        # --- FIX: ADDED MISSING CALLS ---
-        js.disable_scribe_settings_tab(False) # Enable Scribe tab
-        js.disable_search_tab(False) # Enable Search tab
-        # --- END FIX ---
+        # --- FIX: USE window. FOR ALL JS CALLS ---
+        window.disable_absentee_tab(False) # V56: Enable absentee tab
+        window.disable_qpcode_tab(False) # V58: Enable QP Code tab
+        window.disable_room_allotment_tab(False) # Enable room allotment tab
+        window.disable_scribe_settings_tab(False) # Enable Scribe tab
+        window.disable_search_tab(False) # Enable Search tab
         
-        js.populate_session_dropdown() # V56: Populate dropdown
-        js.populate_qp_code_session_dropdown() # V61: Populate QP Code dropdown
-        js.populate_room_allotment_session_dropdown() # Populate room allotment dropdown
-        
-        # --- FIX: ADDED MISSING CALLS ---
-        js.populate_search_session_dropdown() # Populate search dropdown
-        js.loadGlobalScribeList() # Load any existing scribe data
+        window.populate_session_dropdown() # V56: Populate dropdown
+        window.populate_qp_code_session_dropdown() # V61: Populate QP Code dropdown
+        window.populate_room_allotment_session_dropdown() # Populate room allotment dropdown
+        window.populate_search_session_dropdown() # Populate search dropdown
+        window.loadGlobalScribeList() # Load any existing scribe data
         # --- END FIX ---
                         
         log_message("Success! Your combined files are ready.")
@@ -504,7 +502,7 @@ async def run_extraction_py(event=None):
         log_status(error_msg, is_error=True, file_name="Application", page="N/A")
         errors_list.append(error_msg)
     finally:
-        # (V18): Log final status message
+        # (V1Small): Log final status message
         if not errors_list:
             if file_list.length > 0: # Only show success if files were processed
                 log_status("Success: All files processed with no errors.", is_error=False)
