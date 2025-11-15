@@ -9,7 +9,18 @@ const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
 const SCRIBE_LIST_KEY = 'examScribeList';
 const SCRIBE_ALLOTMENT_KEY = 'examScribeAllotment';
 // ***********************
-
+// *** NEW: All keys for backup/restore ***
+const ALL_DATA_KEYS = [
+    ROOM_CONFIG_KEY,
+    COLLEGE_NAME_KEY,
+    ABSENTEE_LIST_KEY,
+    QP_CODE_LIST_KEY,
+    BASE_DATA_KEY,
+    ROOM_ALLOTMENT_KEY,
+    SCRIBE_LIST_KEY,
+    SCRIBE_ALLOTMENT_KEY
+];
+// **********************************
 // --- Global var to hold data from the last *report run* ---
 let lastGeneratedRoomData = [];
 let lastGeneratedReportType = "";
@@ -183,7 +194,12 @@ const scribeCloseRoomModal = document.getElementById('scribe-close-room-modal');
 const resetStudentDataButton = document.getElementById('reset-student-data-button');
 const masterResetButton = document.getElementById('master-reset-button');
 // *************************
-
+// *** NEW BACKUP/RESTORE BUTTONS ***
+const backupDataButton = document.getElementById('backup-data-button');
+const restoreFileInput = document.getElementById('restore-file-input');
+const restoreDataButton = document.getElementById('restore-data-button');
+const restoreStatus = document.getElementById('restore-status');
+// *********************************
 
 // --// V90 FIX: Aggressive Key Cleaning Function (Fixes key collision) ---
 function cleanCourseKey(courseName) {
@@ -2540,6 +2556,80 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('All local data cleared. The application will now reload.');
                 window.location.reload();
             }
+        });
+    }
+    // 3. Backup All Data
+    if (backupDataButton) {
+        backupDataButton.addEventListener('click', () => {
+            const backupData = {};
+            ALL_DATA_KEYS.forEach(key => {
+                const data = localStorage.getItem(key);
+                if (data) {
+                    backupData[key] = data;
+                }
+            });
+
+            if (Object.keys(backupData).length === 0) {
+                alert("No data found in local storage to back up.");
+                return;
+            }
+
+            const jsonString = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            const date = new Date().toISOString().split('T')[0];
+            link.download = `UOC_Exam_Backup_${date}.json`;
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    // 4. Restore All Data
+    if (restoreDataButton) {
+        restoreDataButton.addEventListener('click', () => {
+            const file = restoreFileInput.files[0];
+            restoreStatus.textContent = '';
+
+            if (!file) {
+                restoreStatus.textContent = 'Please select a backup file first.';
+                return;
+            }
+
+            if (!confirm('Are you sure you want to restore? This will OVERWRITE all current data.')) {
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const jsonString = event.target.result;
+                    const restoredData = JSON.parse(jsonString);
+
+                    // Clear existing data first
+                    localStorage.clear();
+
+                    // Restore data
+                    for (const key in restoredData) {
+                        if (Object.hasOwnProperty.call(restoredData, key)) {
+                            localStorage.setItem(key, restoredData[key]);
+                        }
+                    }
+
+                    alert('Restore successful! The application will now reload to apply the new data.');
+                    window.location.reload();
+
+                } catch (e) {
+                    console.error("Error parsing restore file:", e);
+                    restoreStatus.textContent = 'Error: The selected file is not a valid backup.';
+                }
+            };
+            reader.onerror = () => {
+                restoreStatus.textContent = 'Error reading the file.';
+            };
+            reader.readAsText(file);
         });
     }
 });
