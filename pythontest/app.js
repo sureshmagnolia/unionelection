@@ -4143,7 +4143,8 @@ function loadPyScript() {
             document.addEventListener('py:ready', () => {
                 console.log("PyScript is fully ready.");
                 isPyScriptReady = true;
-                resolve();
+                // Resolve the promise WITH the script tag itself
+                resolve(pyScriptTag);
             }, { once: true });
 
             // 5. Add the main PyScript loader script
@@ -4168,11 +4169,18 @@ function loadPyScript() {
 // This function is the new click handler for the "Run" button
 async function onRunExtractionClick() {
     try {
-
-// Step 2: PyScript is now guaranteed to be ready.
-        // Get the <py-script> tag by its ID
-        const pyScriptTag = document.getElementById('main_py_script');
+        let pyScriptTag; // Define tag variable
         
+        // Step 1: Check if PyScript is loaded. If not, load it and wait.
+        if (!isPyScriptReady) {
+            // The promise now returns the tag element
+            pyScriptTag = await loadPyScript();
+        } else {
+            // If it's already ready, just find the tag
+            pyScriptTag = document.getElementById('main_py_script');
+        }
+        
+        // Step 2: PyScript is now guaranteed to be ready.
         // Get the function from the tag's interpreter
         const start_extraction = pyScriptTag.interpreter.globals.get('start_extraction');
         
