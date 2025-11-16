@@ -3445,7 +3445,8 @@ window.disable_all_report_buttons = function(disabled) {
     generateQpDistributionReportButton.disabled = disabled; // <-- ADD THIS
     generateInvigilatorReportButton.disabled = disabled; // <-- ADD THIS
 }
-// --- NEW: STUDENT DATA EDIT FUNCTIONALITY ---
+
+// --- NEW: STUDENT DATA EDIT FUNCTIONALITY (MODAL VERSION) ---
 
 let editCurrentPage = 1;
 const STUDENTS_PER_EDIT_PAGE = 10;
@@ -3453,9 +3454,22 @@ let currentEditSession = '';
 let currentEditCourse = '';
 let currentCourseStudents = []; // This will hold the "working copy" of students
 let hasUnsavedEdits = false;
+let currentlyEditingIndex = null; // Store the index of the student being edited
 
-// Get the new button
+// Get the "Add Student" button from the HTML
 const addNewStudentBtn = document.getElementById('add-new-student-btn');
+
+// Get references to the new modal elements
+const studentEditModal = document.getElementById('student-edit-modal');
+const modalTitle = document.getElementById('student-edit-modal-title');
+const modalDate = document.getElementById('modal-edit-date');
+const modalTime = document.getElementById('modal-edit-time');
+const modalCourse = document.getElementById('modal-edit-course');
+const modalRegNo = document.getElementById('modal-edit-regno');
+const modalName = document.getElementById('modal-edit-name');
+const modalSaveBtn = document.getElementById('modal-save-student');
+const modalCancelBtn = document.getElementById('modal-cancel-student');
+
 
 // Disable/Enable Edit Data Tab
 window.disable_edit_data_tab = function(disabled) {
@@ -3471,7 +3485,7 @@ window.disable_edit_data_tab = function(disabled) {
     }
 }
 
-// 1. Session selection
+// 1. Session selection (Same as before)
 editSessionSelect.addEventListener('change', () => {
     currentEditSession = editSessionSelect.value;
     editDataContainer.innerHTML = '';
@@ -3495,7 +3509,7 @@ editSessionSelect.addEventListener('change', () => {
     }
 });
 
-// 2. Course selection
+// 2. Course selection (Same as before)
 editCourseSelect.addEventListener('change', () => {
     currentEditCourse = editCourseSelect.value;
     editCurrentPage = 1;
@@ -3506,7 +3520,7 @@ editCourseSelect.addEventListener('change', () => {
         const [date, time] = currentEditSession.split(' | ');
         currentCourseStudents = allStudentData
             .filter(s => s.Date === date && s.Time === time && s.Course === currentEditCourse)
-            .map(s => ({ ...s })); // Deep copy so we don't edit allStudentData directly
+            .map(s => ({ ...s })); // Deep copy
         
         renderStudentEditTable();
         editSaveSection.classList.remove('hidden');
@@ -3519,7 +3533,7 @@ editCourseSelect.addEventListener('change', () => {
     }
 });
 
-// 3. Render Table (NEW: All 5 columns + Actions)
+// 3. Render Table (NEW: View-only)
 function renderStudentEditTable() {
     editDataContainer.innerHTML = '';
     if (currentCourseStudents.length === 0) {
@@ -3549,34 +3563,17 @@ function renderStudentEditTable() {
 
     pageStudents.forEach((student, index) => {
         const uniqueRowIndex = start + index; // This is the student's index in currentCourseStudents
-        const regNo = student['Register Number'];
-
+        
         tableHtml += `
             <tr data-row-index="${uniqueRowIndex}">
-                <td>
-                    <span id="view-date-${uniqueRowIndex}" class="view-field edit-field">${student.Date}</span>
-                    <input type="text" id="edit-date-${uniqueRowIndex}" class="edit-field hidden" value="${student.Date}">
-                </td>
-                <td>
-                    <span id="view-time-${uniqueRowIndex}" class="view-field edit-field">${student.Time}</span>
-                    <input type="text" id="edit-time-${uniqueRowIndex}" class="edit-field hidden" value="${student.Time}">
-                </td>
-                <td>
-                    <span id="view-course-${uniqueRowIndex}" class="view-field edit-field">${student.Course}</span>
-                    <input type="text" id="edit-course-${uniqueRowIndex}" class="edit-field hidden" value="${student.Course}">
-                </td>
-                <td>
-                    <span id="view-regno-${uniqueRowIndex}" class="view-field edit-field">${regNo}</span>
-                    <input type="text" id="edit-regno-${uniqueRowIndex}" class="edit-field hidden" value="${regNo}">
-                </td>
-                <td>
-                    <span id="view-name-${uniqueRowIndex}" class="view-field edit-field">${student.Name}</span>
-                    <input type="text" id="edit-name-${uniqueRowIndex}" class="edit-field hidden" value="${student.Name}">
-                </td>
+                <td>${student.Date}</td>
+                <td>${student.Time}</td>
+                <td>${student.Course}</td>
+                <td>${student['Register Number']}</td>
+                <td>${student.Name}</td>
                 <td class="actions-cell">
-                    <button id="edit-btn-${uniqueRowIndex}" class="edit-row-btn text-sm text-blue-600 hover:text-blue-800">Edit</button>
-                    <button id="save-btn-${uniqueRowIndex}" class="save-row-btn text-sm text-green-600 hover:text-green-800 hidden">Save</button>
-                    <button id="delete-btn-${uniqueRowIndex}" class="delete-row-btn text-sm text-red-600 hover:text-red-800 ml-2">Delete</button>
+                    <button class="edit-row-btn text-sm text-blue-600 hover:text-blue-800">Edit</button>
+                    <button class="delete-row-btn text-sm text-red-600 hover:text-red-800 ml-2">Delete</button>
                 </td>
             </tr>
         `;
@@ -3587,29 +3584,24 @@ function renderStudentEditTable() {
     renderEditPagination(currentCourseStudents.length);
 }
 
-// 4. Render Pagination
+// 4. Render Pagination (Same as before)
 function renderEditPagination(totalStudents) {
     if (totalStudents <= STUDENTS_PER_EDIT_PAGE) {
         editPaginationControls.classList.add('hidden');
         return;
     }
-    
     editPaginationControls.classList.remove('hidden');
     const totalPages = Math.ceil(totalStudents / STUDENTS_PER_EDIT_PAGE);
-    
     editPageInfo.textContent = `Page ${editCurrentPage} of ${totalPages}`;
-    
     editPrevPage.disabled = (editCurrentPage === 1);
     editNextPage.disabled = (editCurrentPage === totalPages);
 }
-
 editPrevPage.addEventListener('click', () => {
     if (editCurrentPage > 1) {
         editCurrentPage--;
         renderStudentEditTable();
     }
 });
-
 editNextPage.addEventListener('click', () => {
     const totalPages = Math.ceil(currentCourseStudents.length / STUDENTS_PER_EDIT_PAGE);
     if (editCurrentPage < totalPages) {
@@ -3618,82 +3610,19 @@ editNextPage.addEventListener('click', () => {
     }
 });
 
-// 5. Handle "Add New Student" button
+// 5. "Add New Student" button listener (NEW: Opens modal)
 addNewStudentBtn.addEventListener('click', () => {
-    const [date, time] = currentEditSession.split(' | ');
-    
-    const newStudent = {
-        Date: date,
-        Time: time,
-        Course: currentEditCourse,
-        'Register Number': 'ENTER_REG_NO',
-        Name: 'New Student'
-    };
-    
-    currentCourseStudents.push(newStudent);
-    
-    // Go to the last page to show the new student
-    editCurrentPage = Math.ceil(currentCourseStudents.length / STUDENTS_PER_EDIT_PAGE);
-    
-    renderStudentEditTable();
-    setUnsavedChanges(true);
+    openStudentEditModal(null); // Pass null to indicate a new student
 });
 
-// 6. Handle Edit/Save/Delete Row Clicks (Event Delegation)
+// 6. Handle Edit/Delete Clicks (NEW: Opens modal)
 editDataContainer.addEventListener('click', (e) => {
     const target = e.target;
     const rowIndex = target.closest('tr').dataset.rowIndex;
 
     if (target.classList.contains('edit-row-btn')) {
-        // --- Enter Edit Mode ---
-        ['date', 'time', 'course', 'regno', 'name'].forEach(field => {
-            document.getElementById(`view-${field}-${rowIndex}`).classList.add('hidden');
-            document.getElementById(`edit-${field}-${rowIndex}`).classList.remove('hidden');
-        });
-        
-        document.getElementById(`edit-btn-${rowIndex}`).classList.add('hidden');
-        document.getElementById(`save-btn-${rowIndex}`).classList.remove('hidden');
-        document.getElementById(`delete-btn-${rowIndex}`).classList.add('hidden'); // Hide delete while editing
-
-    } else if (target.classList.contains('save-row-btn')) {
-        // --- Save Data (to local currentCourseStudents array) ---
-        const newDate = document.getElementById(`edit-date-${rowIndex}`).value.trim();
-        const newTime = document.getElementById(`edit-time-${rowIndex}`).value.trim();
-        const newCourse = document.getElementById(`edit-course-${rowIndex}`).value.trim();
-        const newRegNo = document.getElementById(`edit-regno-${rowIndex}`).value.trim();
-        const newName = document.getElementById(`edit-name-${rowIndex}`).value.trim();
-        
-        if (!newRegNo || !newName || !newDate || !newTime || !newCourse) {
-            alert('All fields must be filled.');
-            return;
-        }
-
-        // Update the in-memory array
-        currentCourseStudents[rowIndex] = {
-            Date: newDate,
-            Time: newTime,
-            Course: newCourse,
-            'Register Number': newRegNo,
-            Name: newName
-        };
-
-        // --- Exit Edit Mode (by updating view) ---
-        document.getElementById(`view-date-${rowIndex}`).textContent = newDate;
-        document.getElementById(`view-time-${rowIndex}`).textContent = newTime;
-        document.getElementById(`view-course-${rowIndex}`).textContent = newCourse;
-        document.getElementById(`view-regno-${rowIndex}`).textContent = newRegNo;
-        document.getElementById(`view-name-${rowIndex}`).textContent = newName;
-
-        ['date', 'time', 'course', 'regno', 'name'].forEach(field => {
-            document.getElementById(`view-${field}-${rowIndex}`).classList.remove('hidden');
-            document.getElementById(`edit-${field}-${rowIndex}`).classList.add('hidden');
-        });
-        
-        document.getElementById(`edit-btn-${rowIndex}`).classList.remove('hidden');
-        document.getElementById(`save-btn-${rowIndex}`).classList.add('hidden');
-        document.getElementById(`delete-btn-${rowIndex}`).classList.remove('hidden'); // Show delete again
-        
-        setUnsavedChanges(true);
+        // --- Open Edit Modal ---
+        openStudentEditModal(rowIndex);
 
     } else if (target.classList.contains('delete-row-btn')) {
         // --- Delete Row ---
@@ -3705,7 +3634,90 @@ editDataContainer.addEventListener('click', (e) => {
     }
 });
 
-// 7. Save All Changes to LocalStorage (The "Master Save")
+// 7. NEW Function: Open the Edit/Add Modal
+function openStudentEditModal(rowIndex) {
+    if (rowIndex === null) {
+        // --- ADDING A NEW STUDENT ---
+        modalTitle.textContent = "Add New Student";
+        currentlyEditingIndex = null; // Signal that this is a new student
+        
+        // Pre-fill with session defaults
+        const [date, time] = currentEditSession.split(' | ');
+        modalDate.value = date;
+        modalTime.value = time;
+        modalCourse.value = currentEditCourse;
+        modalRegNo.value = "ENTER_REG_NO";
+        modalName.value = "New Student";
+
+    } else {
+        // --- EDITING AN EXISTING STUDENT ---
+        modalTitle.textContent = "Edit Student Details";
+        currentlyEditingIndex = rowIndex; // Store the index
+        
+        // Get the student data and pre-fill the form
+        const student = currentCourseStudents[rowIndex];
+        modalDate.value = student.Date;
+        modalTime.value = student.Time;
+        modalCourse.value = student.Course;
+        modalRegNo.value = student['Register Number'];
+        modalName.value = student.Name;
+    }
+    // Show the modal
+    studentEditModal.classList.remove('hidden');
+}
+
+// 8. NEW Function: Close the modal
+function closeStudentEditModal() {
+    studentEditModal.classList.add('hidden');
+    currentlyEditingIndex = null;
+}
+
+// 9. NEW Event Listeners for Modal Buttons
+modalCancelBtn.addEventListener('click', closeStudentEditModal);
+
+modalSaveBtn.addEventListener('click', () => {
+    // Read all values from the modal
+    const newDate = modalDate.value.trim();
+    const newTime = modalTime.value.trim();
+    const newCourse = modalCourse.value.trim();
+    const newRegNo = modalRegNo.value.trim();
+    const newName = modalName.value.trim();
+
+    if (!newRegNo || !newName || !newDate || !newTime || !newCourse) {
+        alert('All fields must be filled.');
+        return;
+    }
+
+    // Ask for confirmation
+    if (confirm("Are you sure you want to save these changes?")) {
+        
+        if (currentlyEditingIndex !== null) {
+            // --- We are EDITING an existing student ---
+            currentCourseStudents[currentlyEditingIndex] = {
+                Date: newDate,
+                Time: newTime,
+                Course: newCourse,
+                'Register Number': newRegNo,
+                Name: newName
+            };
+        } else {
+            // --- We are ADDING a new student ---
+            currentCourseStudents.push({
+                Date: newDate,
+                Time: newTime,
+                Course: newCourse,
+                'Register Number': newRegNo,
+                Name: newName
+            });
+        }
+        
+        setUnsavedChanges(true); // Mark that we have unsaved work
+        closeStudentEditModal(); // Close the modal
+        renderStudentEditTable(); // Re-render the table to show changes
+    }
+});
+
+// 10. Save All Changes to LocalStorage (The "Master Save" - Unchanged)
 saveEditDataButton.addEventListener('click', () => {
     if (!hasUnsavedEdits) {
         editDataStatus.textContent = 'No changes to save.';
@@ -3723,7 +3735,7 @@ saveEditDataButton.addEventListener('click', () => {
             !(s.Date === date && s.Time === time && s.Course === course)
         );
 
-        // 2. Create the new master list by combining the "other" students with our edited students
+        // 2. Create the new master list
         const updatedAllStudentData = [...otherStudents, ...currentCourseStudents];
         
         // 3. Update the global variable and localStorage
@@ -3734,16 +3746,14 @@ saveEditDataButton.addEventListener('click', () => {
         setUnsavedChanges(false);
         setTimeout(() => { editDataStatus.textContent = ''; }, 3000);
         
-        // --- CRUCIAL: Reload other parts of the app ---
+        // 4. Reload other parts of the app
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
-        updateUniqueStudentList(); // Update the list for absentee/scribe search
-        
-        // Re-populate all session dropdowns
+        updateUniqueStudentList();
         populate_session_dropdown();
         populate_qp_code_session_dropdown();
         populate_room_allotment_session_dropdown();
 
-        // Reload the current course to reflect the new state (optional, good practice)
+        // 5. Reload the current view
         currentCourseStudents = allStudentData
             .filter(s => s.Date === date && s.Time === time && s.Course === course)
             .map(s => ({ ...s }));
@@ -3752,17 +3762,19 @@ saveEditDataButton.addEventListener('click', () => {
     }
 });
 
-// Helper function to manage the "unsaved" status
+// 11. Helper function to manage "unsaved" status (Unchanged)
 function setUnsavedChanges(status) {
     hasUnsavedEdits = status;
     if (status) {
         editDataStatus.textContent = 'You have unsaved changes. Click "Save All Changes" to commit.';
     } else {
-        editDataStatus.textContent = '';
+        editDataStatus.textContent = 'All changes saved.'; // Give clear feedback
     }
 }
 
 // --- END: STUDENT DATA EDIT FUNCTIONALITY ---
+
+
 // *** NEW: Event listener for Invigilator Report ***
 generateInvigilatorReportButton.addEventListener('click', async () => {
     generateInvigilatorReportButton.disabled = true;
