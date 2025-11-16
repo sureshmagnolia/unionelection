@@ -500,11 +500,23 @@ function getFilteredReportData(reportType) {
     return [];
 }
 
-
-// --- 1. Event listener for the "Generate Room-wise Report" button ---
+// ### NEW HELPER FUNCTION ###
+function checkManualAllotment(sessionKey) {
+    if (!sessionKey || sessionKey === 'all') {
+        alert('Please select a specific session to generate this report.');
+        return false;
+    }
+    const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+    const manualAllotment = allAllotments[sessionKey];
+    if (!manualAllotment || manualAllotment.length === 0) {
+        alert('Error: No manual room allotment found for this session. Please complete the allotment on the "Room Allotment" tab before generating reports.');
+        return false;
+    }
+    return true;
+}
 // --- 1. Event listener for the "Generate Room-wise Report" button ---
 generateReportButton.addEventListener('click', async () => {
-    
+    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateReportButton.disabled = true;
     generateReportButton.textContent = "Allocating Rooms & Generating Report...";
     reportOutputArea.innerHTML = "";
@@ -771,6 +783,7 @@ generateReportButton.addEventListener('click', async () => {
 
 // --- (V29) Event listener for the "Day-wise Student List" button ---
 generateDaywiseReportButton.addEventListener('click', async () => {
+    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateDaywiseReportButton.disabled = true;
     // V49: Button text updated
     generateDaywiseReportButton.textContent = "Generating...";
@@ -1106,6 +1119,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
 
 // *** NEW: Event listener for QP Distribution by QP-Code Report ***
 generateQpDistributionReportButton.addEventListener('click', async () => {
+    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateQpDistributionReportButton.disabled = true;
     generateQpDistributionReportButton.textContent = "Generating...";
     reportOutputArea.innerHTML = "";
@@ -1467,6 +1481,7 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         
 // *** NEW: Event listener for "Generate Scribe Report" ***
 generateScribeReportButton.addEventListener('click', async () => {
+    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateScribeReportButton.disabled = true;
     generateScribeReportButton.textContent = "Generating...";
     reportOutputArea.innerHTML = "";
@@ -1618,6 +1633,7 @@ generateScribeReportButton.addEventListener('click', async () => {
 
 // *** NEW: Event listener for Scribe Proforma Report ***
 generateScribeProformaButton.addEventListener('click', async () => {
+    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateScribeProformaButton.disabled = true;
     generateScribeProformaButton.textContent = "Generating...";
     reportOutputArea.innerHTML = "";
