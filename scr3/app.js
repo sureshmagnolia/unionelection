@@ -2670,8 +2670,7 @@ filterAllRadio.addEventListener('change', () => {
 });
 
 // --- NEW/MODIFIED RESET LOGIC (in Settings) ---
-document.addEventListener('DOMContentLoaded', () => {
-    
+  
     // 1. Reset Student Data Only
     if (resetStudentDataButton) {
         resetStudentDataButton.addEventListener('click', () => {
@@ -2777,7 +2776,6 @@ document.addEventListener('DOMContentLoaded', () => {
             reader.readAsText(file);
         });
     }
-});
 
 
 // --- V65: Initial Data Load on Startup ---
