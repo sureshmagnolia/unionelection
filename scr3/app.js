@@ -894,18 +894,32 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 }
                 // ******************************
 
+                // Add the main content page
+            allPagesHtml += `
+                <div class="print-page print-page-daywise">
+                    <div class="print-header-group">
+                        <h1>Seating Details for Candidates</h1>
+                        <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+                    </div>
+                    ${columnHtml}
+                </div>
+            `;
+
+            // If scribeListHtml has content, add it on a NEW page
+            if (scribeListHtml) {
                 allPagesHtml += `
-                    <div class="print-page print-page-daywise">
+                    <div class="print-page">
                         <div class="print-header-group">
-                            <h1>Seating Details for Candidates</h1>
+                            <h1>Scribe Assistance Summary</h1>
                             <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
                         </div>
-                        ${columnHtml}
                         ${scribeListHtml} 
                     </div>
                 `;
+                totalPagesGenerated++; // Increment total page count
             }
-        });
+        }
+    });
 
         // 8. Show report and controls
         reportOutputArea.innerHTML = allPagesHtml;
