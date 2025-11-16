@@ -1,3 +1,14 @@
+// --- Debounce Helper Function ---
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
@@ -4182,3 +4193,4 @@ run_button.addEventListener('click', onRunExtractionClick);
 // --- END OF ON-DEMAND LOADING LOGIC ---
 // --- Run on initial page load ---
 loadInitialData();
+}); // <-- ADD THIS CLOSING BRACKET AND PARENTHESIS
