@@ -3972,7 +3972,7 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
 // --- NEW: STUDENT SEARCH FUNCTIONALITY ---
 
 let searchSessionStudents = []; // Holds students for the selected search session
-
+let debounceTimer; // <-- ADD THIS
 // 1. Listen for session change
 searchSessionSelect.addEventListener('change', () => {
     const sessionKey = searchSessionSelect.value;
@@ -3992,35 +3992,41 @@ searchSessionSelect.addEventListener('change', () => {
     }
 });
 
-// 2. Autocomplete for search input
+// 2. Autocomplete for search input (DEBOUNCED)
 studentSearchInput.addEventListener('input', () => {
-    const query = studentSearchInput.value.trim().toUpperCase();
-    if (query.length < 2) {
-        studentSearchAutocomplete.classList.add('hidden');
-        return;
-    }
+    // Clear any existing timer
+    clearTimeout(debounceTimer);
 
-    // Filter students by register number
-    const matches = searchSessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
-    
-    if (matches.length > 0) {
-        studentSearchAutocomplete.innerHTML = '';
-        matches.forEach(student => {
-            const item = document.createElement('div');
-            item.className = 'autocomplete-item';
-            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
-            // When clicked, fetch details and show modal
-            item.onclick = () => {
-                studentSearchInput.value = student['Register Number'];
-                studentSearchAutocomplete.classList.add('hidden');
-                showStudentDetailsModal(student['Register Number'], searchSessionSelect.value);
-            };
-            studentSearchAutocomplete.appendChild(item);
-        });
-        studentSearchAutocomplete.classList.remove('hidden');
-    } else {
-        studentSearchAutocomplete.classList.add('hidden');
-    }
+    // Start a new timer
+    debounceTimer = setTimeout(() => {
+        const query = studentSearchInput.value.trim().toUpperCase();
+        if (query.length < 2) {
+            studentSearchAutocomplete.classList.add('hidden');
+            return;
+        }
+
+        // Filter students by register number
+        const matches = searchSessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
+
+        if (matches.length > 0) {
+            studentSearchAutocomplete.innerHTML = ''; // Clear previous results
+            matches.forEach(student => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+                item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
+                // When clicked, fetch details and show modal
+                item.onclick = () => {
+                    studentSearchInput.value = student['Register Number'];
+                    studentSearchAutocomplete.classList.add('hidden');
+                    showStudentDetailsModal(student['Register Number'], searchSessionSelect.value);
+                };
+                studentSearchAutocomplete.appendChild(item);
+            });
+            studentSearchAutocomplete.classList.remove('hidden');
+        } else {
+            studentSearchAutocomplete.classList.add('hidden');
+        }
+    }, 250); // Wait 250ms after user stops typing
 });
 
 // 3. Main function to fetch all student details
