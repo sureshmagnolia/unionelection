@@ -1,3 +1,13 @@
+// --- Debounce Helper Function ---
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
