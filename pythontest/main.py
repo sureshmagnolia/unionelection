@@ -5,9 +5,9 @@ import io
 import js # V55: FIX - Import the main js module
 from js import document, console, URL, Blob, window, localStorage # V55: FIX - Import specific parts
 import asyncio
-import json 
-import math 
-from datetime import datetime 
+import json
+import math
+from datetime import datetime
 
 # --- Get references to our HTML elements ---
 status_div = document.getElementById("status")
@@ -165,11 +165,11 @@ def extract_old_format_header(page_text):
     date_val, time_val, course_name = "Unknown", "Unknown", "Unknown"
     try:
         # --- Course Regex ---
-    # 1. Try to find a line starting with a course code (Fix for Sanskrit/spaced codes)
+        # 1. Try to find a line starting with a course code (Fix for Sanskrit/spaced codes)
         course_match = re.search(r'^(?:Course\s*)?([A-Z0-9\s\(\)\-]{5,}.*?(\[.*?syllabus\]|\(CORE\)))', page_text, re.IGNORECASE | re.MULTILINE)
 
         if not course_match:
-        # 2. Try original regex (for buried course names or other formats)
+            # 2. Try original regex (for buried course names or other formats)
             course_match = re.search(r'([A-Z0-9]{3,}\d{3,}.*?(\[.*?syllabus\]|\(CORE\)))', page_text, re.DOTALL | re.IGNORECASE)
 
         if not course_match:
@@ -276,13 +276,12 @@ async def start_extraction(event=None):
     This function is the entry point from the "Run" button.
     It calls the main extraction function.
     """
-    # V55: No need to import js, it's global
     try:
         show_loader(True)
         await asyncio.sleep(0) # Let loader show
         
-        # V33: Clear the CSV upload status
-        js.clear_csv_upload_status() # This needs the global 'js'
+        # *** FIX for on-demand loading: Call window. ***
+        window.clear_csv_upload_status()
             
         # Call the main logic function
         await run_extraction_py()
@@ -298,14 +297,18 @@ async def run_extraction_py(event=None):
     V40: Re-written to be STATEFUL and FILE-BASED.
     """
     errors_list = []
-    try: # <-- CORRECTED SYNTAX
+    try:
         # --- 1. Reset all UI elements ---
         csv_download_container.innerHTML = ""
         generate_report_button.disabled = True
         generate_qpaper_report_button.disabled = True
         generate_daywise_report_button.disabled = True
-        js.disable_absentee_tab(True) # V56: Disable absentee tab
-        js.disable_qpcode_tab(True) # V58: Disable QP Code tab
+        
+        # *** FIX for on-demand loading: Call window. ***
+        window.disable_absentee_tab(True)
+        window.disable_qpcode_tab(True)
+        window.disable_room_allotment_tab(True)
+        
         json_data_store.innerHTML = ""
         q_paper_data_store.innerHTML = ""
         status_div.innerHTML = ""
@@ -340,31 +343,27 @@ async def run_extraction_py(event=None):
                 pdf_file_obj = io.BytesIO(file_bytes.to_py())
                                         
                 with pdfplumber.open(pdf_file_obj) as pdf:
+                    # *** FIX: INDENTATION ERROR FIX ***
                     if not pdf.pages:
                         log_status("File has no pages.", is_error=True, file_name=file_name, page="N/A")
                         errors_list.append("File has no pages")
                         continue
+                    
                     # 1. Read Page 1 to get header and determine format
                     page1_text = pdf.pages[0].extract_text(y_tolerance=3, x_tolerance=3)
                     
                     # --- NEW DETECTION LOGIC ---
-                    # This block must be at the SAME indentation level as the page1_text line above
                     file_date, file_time, file_course = extract_new_format_header(page1_text)
                     
                     if file_date == "Unknown" and file_course == "Unknown":
-                        # This "if" must be at the SAME level as the line above
                         log_message("Trying 'Old' PDF format...")
                         file_date, file_time, file_course = extract_old_format_header(page1_text)
                         log_message("Detected 'Old' PDF format.")
                     else:
-                        # This "else" must be at the SAME level as the "if"
                         log_message("Detected 'New' PDF format.")
                     
                     # --- END NEW DETECTION LOGIC ---
-
-# --- END NEW DETECTION LOGIC ---
-
-
+                    
                     # Log warnings if header info is still unknown
                     if file_date == "Unknown":
                         log_status("Could not determine Exam Date.", is_error=True, file_name=file_name, page=1)
@@ -378,11 +377,12 @@ async def run_extraction_py(event=None):
 
                     # 2. Loop through ALL pages (including page 1) to extract students
                     total_students_in_file = 0
+                    
+                    # *** FIX: INDENTATION ERROR FIX ***
                     for i, page in enumerate(pdf.pages):
                         page_num = i + 1
 
-                    # Both "Old" and "New" formats use tables for student data.
-                    # The only difference is the header, which we already extracted.
+                        # Both "Old" and "New" formats use tables for student data.
                         page_students = extract_old_format_students(page, file_name, page_num)
                         
                         if page_students:
@@ -400,7 +400,6 @@ async def run_extraction_py(event=None):
                             log_status(f"No students found on page.", is_error=False, file_name=file_name, page=page_num)
                     
                     log_message(f"Found {total_students_in_file} students in this file.")
-                    # --- END V44 STATEFUL LOGIC ---
 
             except Exception as e:
                 error_msg = f"CRITICAL ERROR processing file. Skipping this file. Details: {e}"
@@ -440,7 +439,6 @@ async def run_extraction_py(event=None):
         
         # --- 6. Q-PAPER REPORT SUMMARY ---
         log_message("Generating question paper summary...")
-        # V38: Group by all fields to get unique course names
         q_paper_df = df.groupby(['Date', 'Time', 'Course']).size().reset_index(name='Student Count')
         q_paper_summary_json = q_paper_df.to_json(orient='records')
         q_paper_data_store.innerHTML = q_paper_summary_json
@@ -470,12 +468,14 @@ async def run_extraction_py(event=None):
         generate_report_button.disabled = False
         generate_qpaper_report_button.disabled = False
         generate_daywise_report_button.disabled = False
-        js.disable_absentee_tab(False) # V56: Enable absentee tab
-        js.disable_qpcode_tab(False) # V58: Enable QP Code tab
-        js.disable_room_allotment_tab(False) # Enable room allotment tab
-        js.populate_session_dropdown() # V56: Populate dropdown
-        js.populate_qp_code_session_dropdown() # V61: Populate QP Code dropdown
-        js.populate_room_allotment_session_dropdown() # Populate room allotment dropdown
+        
+        # *** FIX for on-demand loading: Call window. ***
+        window.disable_absentee_tab(False)
+        window.disable_qpcode_tab(False)
+        window.disable_room_allotment_tab(False)
+        window.populate_session_dropdown()
+        window.populate_qp_code_session_dropdown()
+        window.populate_room_allotment_session_dropdown()
                         
         log_message("Success! Your combined files are ready.")
     
