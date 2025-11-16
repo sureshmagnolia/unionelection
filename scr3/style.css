@@ -909,3 +909,22 @@ tr.scribe-row-highlight {
     background-color: #f0f0f0;
 }
 /* --- END OF  Invigilator Report Styles (Print) --- */
+/* --- NEW Sidebar Navigation Styles (ExamFlow) --- */
+.nav-button {
+    /* Base styles: flex, alignment, padding, rounded */
+    @apply w-full flex items-center gap-3 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200;
+}
+.nav-button-active {
+    /* Active state: Solid background, bright text */
+    @apply bg-indigo-700 text-white shadow-lg;
+}
+.nav-button-inactive {
+    /* Inactive state: Transparent, dimmer text, hover effect */
+    @apply text-gray-400 hover:bg-gray-700 hover:text-white;
+}
+
+/* Style for the SVG icons inside the buttons */
+.nav-button svg {
+    @apply w-5 h-5 shrink-0;
+}
+/* --- END NEW Sidebar Styles --- */
