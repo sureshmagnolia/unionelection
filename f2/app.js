@@ -3537,10 +3537,23 @@ editSessionSelect.addEventListener('change', () => {
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
         const courses = [...new Set(sessionStudents.map(s => s.Course))].sort();
         
-        editCourseSelect.innerHTML = '<option value="">-- Select a Course --</option>';
+        // --- SAFER REPLACEMENT CODE ---
+        editCourseSelect.innerHTML = ''; // Clear existing
+        
+        // Create default option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = "";
+        defaultOption.textContent = "-- Select a Course --";
+        editCourseSelect.appendChild(defaultOption);
+
+        // Create course options safely
         courses.forEach(course => {
-            editCourseSelect.innerHTML += `<option value="${course}">${course}</option>`;
+            const option = document.createElement('option');
+            option.value = course;      // Safely sets value even with quotes
+            option.textContent = course; // Safely sets text
+            editCourseSelect.appendChild(option);
         });
+        // -----------------------------
         editCourseSelectContainer.classList.remove('hidden');
     } else {
         editCourseSelectContainer.classList.add('hidden');
