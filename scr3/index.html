@@ -11,26 +11,37 @@
     <link rel="stylesheet" href="style.css">
 
 </head>
-<body class="bg-gray-100 font-sans">
-    
-    <nav id="main-nav" class="bg-indigo-600 text-white sticky top-0 z-50 shadow-lg">
-        <div id="top-banner" class="w-full bg-indigo-700 text-center py-2">
-            <h1 class="text-xl font-extrabold tracking-wider text-white">UOC Exam Management (V10.1)</h1>
-        </div>
+<body class="bg-gray-100 font-sans flex h-screen">
+
+    <nav id="main-nav" class="w-64 bg-gray-800 text-white p-4 space-y-2 overflow-y-auto shadow-lg shrink-0">
+        <h1 class="text-xl font-extrabold tracking-wider text-white text-center py-2 mb-4">UOC Exam (V10.2)</h1>
         
-        <div id="main-nav-tabs" class="container max-w-2xl mx-auto flex justify-center gap-2">
-            <button id="nav-extractor" class="nav-button nav-button-active">Data</button>
-            <button id="nav-edit-data" class="nav-button nav-button-inactive">Edit Data</button>
-            <button id="nav-scribe-settings" class="nav-button nav-button-inactive">Scribe Assistance</button>
-            <button id="nav-room-allotment" class="nav-button nav-button-inactive">Room Allotment</button>
-            <button id="nav-qpcodes" class="nav-button nav-button-inactive">QP Codes</button>
-            <button id="nav-reports" class="nav-button nav-button-inactive">Reports</button>
-            <button id="nav-absentees" class="nav-button nav-button-inactive">Absentees</button>
-            <button id="nav-settings" class="nav-button nav-button-inactive">Settings</button>
-        </div>
+        <button id="nav-extractor" class="nav-button nav-button-active">Data</button>
+        <button id="nav-edit-data" class="nav-button nav-button-inactive">Edit Data</button>
+        <button id="nav-scribe-settings" class="nav-button nav-button-inactive">Scribe Assistance</button>
+        <button id="nav-room-allotment" class="nav-button nav-button-inactive">Room Allotment</button>
+        <button id="nav-qpcodes" class="nav-button nav-button-inactive">QP Codes</button>
+        <button id="nav-reports" class="nav-button nav-button-inactive">Reports</button>
+        <button id="nav-absentees" class="nav-button nav-button-inactive">Absentees</button>
+        <button id="nav-settings" class="nav-button nav-button-inactive">Settings</button>
     </nav>
 
-    <div id="view-extractor" class="container max-w-2xl mx-auto p-4 min-h-screen">
+    <main class="flex-1 overflow-y-auto">
+
+        <div id="report-controls" class="container max-w-2xl mx-auto p-4 bg-gray-100 rounded-lg hidden sticky top-0 z-40 shadow-sm border-b border-gray-200">
+            <span id="report-status" class="text-sm font-medium text-gray-700"></span>
+            <div class="flex flex-wrap gap-2 mt-2">
+                <button id="final-print-button" class="flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                    Print Report (Browser)
+                </button>
+                <button id="clear-report-button" class="flex-1 inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                    Clear Report
+                </button>
+                <div id="room-csv-download-container" class="w-full mt-2"></div>
+            </div>
+        </div>
+
+        <div id="view-extractor" class="container max-w-2xl mx-auto p-4 min-h-screen">
         <div class="bg-white p-8 rounded-lg shadow-xl w-full">
             
             <h1 class="text-3xl font-bold text-gray-800 mb-6">Data</h1>
