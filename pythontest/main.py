@@ -345,29 +345,23 @@ async def run_extraction_py(event=None):
                         errors_list.append("File has no pages")
                         continue
 
-                    # --- V40: STATEFUL LOGIC ---
                     # 1. Read Page 1 to get header and determine format
                     page1_text = pdf.pages[0].extract_text(y_tolerance=3, x_tolerance=3)
-                    
-                    file_date = "Unknown"
-                    file_time = "Unknown"
-                    file_course = "Unknown"
-                    is_new_format = False
 
-                    # V57: FIX - Robust check for "New Format"
-                    # Check for the unique, quoted, CSV-style header.
-                    page1_text_flat = page1_text.replace("\n", "")
-                    # V57: Now using Reg.No, Name, D.O.B check
-                    if '"SI.No","Reg.No","Name","D.O.B"' in page1_text_flat or '"SI.No" ,"Reg.No" ,"Name" ,"D.O.B"' in page1_text_flat:
-                        # This is DEFINITELY the NEW format
-                        is_new_format = True
-                        file_date, file_time, file_course = extract_new_format_header(page1_text)
-                        log_message("Detected 'New' PDF format.")
-                    else:
-                        # Assume OLD format
-                        is_new_format = False
-                        file_date, file_time, file_course = extract_old_format_header(page1_text)
-                        log_message("Detected 'Old' PDF format.")
+                    # --- NEW DETECTION LOGIC ---
+                    # First, try to extract using the "New" format rules (looking for "Exam Date:", "Paper Details:")
+                    file_date, file_time, file_course = extract_new_format_header(page1_text)
+
+                        if file_date == "Unknown" and file_course == "Unknown":
+                            # If "New" format fails, fall back to "Old" format rules
+                            log_message("Trying 'Old' PDF format...")
+                            file_date, file_time, file_course = extract_old_format_header(page1_text)
+                            log_message("Detected 'Old' PDF format.")
+                        else:
+                            # If "New" format succeeds, we are done
+                            log_message("Detected 'New' PDF format.")
+
+# --- END NEW DETECTION LOGIC ---
 
 
                     # Log warnings if header info is still unknown
