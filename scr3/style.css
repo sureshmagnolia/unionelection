@@ -21,8 +21,9 @@
         display: block !important;
     }
     
+/* NEW: Force main container to reset from flex to a simple block */
 main {
-    display: block !important; /* <-- ADD THIS LINE */
+    display: block !important; /* <--- CRITICAL FIX */
     overflow-y: visible !important;
     height: auto !important;
 }
