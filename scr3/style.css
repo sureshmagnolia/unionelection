@@ -188,6 +188,12 @@
         border: none;
         /* V101 FIX: Add !important to guarantee margin reset */
         margin: 0 !important;
+        min-height: auto !important; /* <-- ADD THIS LINE */
+    }
+    /* NEW RULE TO FIX DAY-WISE REPORT */
+    .print-page-daywise {
+        width: 100% !important; /* Override the 297mm screen style */
+        min-height: auto !important; /* Override the 210mm screen style */
     }
 
     /* V93 FIX: Final page should not have a page break */
