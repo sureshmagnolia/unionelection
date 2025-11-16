@@ -382,11 +382,11 @@ async def run_extraction_py(event=None):
                     # 2. Loop through ALL pages (including page 1) to extract students
                     total_students_in_file = 0
                     for i, page in enumerate(pdf.pages):
-                    page_num = i + 1
+                        page_num = i + 1
 
                     # Both "Old" and "New" formats use tables for student data.
                     # The only difference is the header, which we already extracted.
-                    page_students = extract_old_format_students(page, file_name, page_num)
+                        page_students = extract_old_format_students(page, file_name, page_num)
                         
                         if page_students:
                             total_students_in_file += len(page_students)
