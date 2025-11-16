@@ -4129,7 +4129,7 @@ function loadPyScript() {
 
             // 2. Add py-config (must be in body)
             const config = document.createElement('py-config');
-            config.innerHTML = 'packages = ["pandas", "pdfplumber==0.9.0"]';
+            config.innerHTML = 'packages = ["pandas", "pdfplumber"]';
             document.body.appendChild(config);
 
             // 3. Add py-script (must be in body)
