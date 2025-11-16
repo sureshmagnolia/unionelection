@@ -498,7 +498,8 @@ generateReportButton.addEventListener('click', async () => {
     try {
         // *** V95 FIX: Refresh college name from local storage BEFORE generation ***
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
+        getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
+        loadQPCodes(); // <-- This line is already here, but make sure
         // 1. Get FILTERED RAW student data
         const data = getFilteredReportData('room-wise');
 
@@ -764,7 +765,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
     try {
         // *** V95 FIX: Refresh college name from local storage BEFORE generation ***
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
+        getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
         // 1. Get FILTERED RAW student data
         const data = getFilteredReportData('day-wise');
 
@@ -1084,7 +1085,6 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// *** NEW: Event listener for QP Distribution by Room Report ***
 // *** NEW: Event listener for QP Distribution by QP-Code Report ***
 generateQpDistributionReportButton.addEventListener('click', async () => {
     generateQpDistributionReportButton.disabled = true;
@@ -1098,7 +1098,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
     try {
         // 1. Get College Name
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
+        getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
         // 2. Get FILTERED RAW student data
         const data = getFilteredReportData('qp-distribution');
         if (data.length === 0) {
@@ -1458,7 +1458,7 @@ generateScribeReportButton.addEventListener('click', async () => {
     
     try {
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
+        getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
         // 1. Get all data
         const allData = JSON.parse(jsonDataStore.innerHTML || '[]');
         if (allData.length === 0) {
@@ -1610,7 +1610,7 @@ generateScribeProformaButton.addEventListener('click', async () => {
     try {
         // 1. Get College Name
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
+        getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
         // 2. Get FILTERED RAW student data
         const data = getFilteredReportData('scribe-proforma');
         if (data.length === 0) {
@@ -2420,6 +2420,7 @@ function saveAbsenteeList(sessionKey) {
 }
 
 function renderAbsenteeList() {
+    getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
     const sessionKey = sessionSelect.value;
     currentAbsenteeListDiv.innerHTML = "";
     
@@ -3828,6 +3829,7 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     
     try {
+        loadGlobalScribeList(); // <-- ADD THIS LINE
         // 1. Get College Name
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         
