@@ -105,6 +105,10 @@ const searchResultRoom = document.getElementById('search-result-room');
 const searchResultSeat = document.getElementById('search-result-seat');
 const searchResultScribeBlock = document.getElementById('search-result-scribe-block');
 const searchResultScribeRoom = document.getElementById('search-result-scribe-room');
+const searchResultRoomLocationBlock = document.getElementById('search-result-room-location-block');
+const searchResultRoomLocation = document.getElementById('search-result-room-location');
+const searchResultScribeLocationBlock = document.getElementById('search-result-scribe-location-block');
+const searchResultScribeRoomLocation = document.getElementById('search-result-scribe-room-location');
 const modalCloseSearchResult = document.getElementById('modal-close-search-result');
 // ***************************
 
@@ -4039,27 +4043,46 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const courseKey = cleanCourseKey(student.Course);
     const qpCode = sessionQPCodes[courseKey] || "Not Entered";
 
-    // 5. Populate Modal
+   // 5. Populate Modal
     searchResultName.textContent = student.Name;
     searchResultRegNo.textContent = student['Register Number'];
     searchResultCourse.textContent = student.Course;
     searchResultQPCode.textContent = qpCode;
 
+    // --- NEW: Handle Room and Location ---
     if (allocatedStudent) {
-        searchResultRoom.textContent = allocatedStudent['Room No'];
+        const roomName = allocatedStudent['Room No'];
+        searchResultRoom.textContent = roomName;
         searchResultSeat.textContent = allocatedStudent.seatNumber;
+        
+        // Get room location
+        const roomInfo = currentRoomConfig[roomName];
+        const location = (roomInfo && roomInfo.location) ? roomInfo.location : "N/A";
+        searchResultRoomLocation.textContent = location;
+        searchResultRoomLocationBlock.classList.remove('hidden');
     } else {
         searchResultRoom.textContent = "Not Allotted";
         searchResultSeat.textContent = "N/A";
+        searchResultRoomLocation.textContent = "N/A";
+        searchResultRoomLocationBlock.classList.add('hidden');
     }
 
+    // --- NEW: Handle Scribe Room and Location ---
     if (scribeRoom) {
         searchResultScribeRoom.textContent = scribeRoom;
+        
+        // Get scribe room location
+        const scribeRoomInfo = currentRoomConfig[scribeRoom];
+        const scribeLocation = (scribeRoomInfo && scribeRoomInfo.location) ? scribeRoomInfo.location : "N/A";
+        searchResultScribeRoomLocation.textContent = scribeLocation;
+
         searchResultScribeBlock.classList.remove('hidden');
     } else {
         searchResultScribeRoom.textContent = "N/A";
+        searchResultScribeRoomLocation.textContent = "N/A";
         searchResultScribeBlock.classList.add('hidden'); // Hide if not a scribe
     }
+
 
     // 6. Show Modal
     searchResultModal.classList.remove('hidden');
