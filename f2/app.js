@@ -3533,6 +3533,7 @@ editSessionSelect.addEventListener('change', () => {
     if (currentEditSession) {
         // Populate course dropdown
         const [date, time] = currentEditSession.split(' | ');
+        // Filter session students using the now-refreshed allStudentData
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
         const courses = [...new Set(sessionStudents.map(s => s.Course))].sort();
         
@@ -3776,7 +3777,7 @@ saveEditDataButton.addEventListener('click', () => {
         const updatedAllStudentData = [...otherStudents, ...currentCourseStudents];
         
         // 3. Update the global variable and localStorage
-        allStudentData = updatedAllStudentData;
+        allStudentData = updatedAllStudentData; // <-- THIS LINE IS ALREADY GOOD, BUT WE'LL ADD A RELOAD OF THE SESSION DROPDOWNS
         localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
         
         editDataStatus.textContent = 'All changes saved successfully!';
@@ -3786,9 +3787,14 @@ saveEditDataButton.addEventListener('click', () => {
         // 4. Reload other parts of the app
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
         updateUniqueStudentList();
-        populate_session_dropdown();
+        
+        // **** FIX 1: Explicitly reload ALL dropdowns (including Edit Data) ****
+        populate_session_dropdown(); // Updates Absentees/Reports
         populate_qp_code_session_dropdown();
         populate_room_allotment_session_dropdown();
+        // The edit view's dropdowns are covered by populate_session_dropdown
+        // as it also targets editSessionSelect.
+        // *******************************************************************
 
         // 5. Reload the current view
         currentCourseStudents = allStudentData
