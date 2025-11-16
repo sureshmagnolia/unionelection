@@ -730,13 +730,14 @@
     <div id="json-data-store" class="hidden"></div>
     <div id="q-paper-data-store" class="hidden"></div>
 </main> 
+<py-config>
+        packages = ["pandas", "pdfplumber==0.9.0"]
+</py-config>
+<py-script src="main.py"></py-script>    
 <script src="app.js"></script> 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<py-config>
-        packages = ["pandas", "pdfplumber==0.9.0"]
-    </py-config>
-    <py-script src="main.py"></py-script> 
+
 
 </body>   
 </html>
