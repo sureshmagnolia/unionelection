@@ -86,7 +86,7 @@ const viewRoomAllotment = document.getElementById('view-room-allotment');
 const viewScribeSettings = document.getElementById('view-scribe-settings');
 // const viewScribeAllotment = document.getElementById('view-scribe-allotment'); // REMOVED
 // **********************
-
+const viewEditData = document.getElementById('view-edit-data');
 // *** MODIFIED allNavButtons and allViews TO MATCH NEW UI ***
 const allNavButtons = [navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navReports, navAbsentees, navSettings]; // <-- ADD navEditData
 const allViews = [viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewReports, viewAbsentees, viewSettings]; // <-- ADD viewEditData
@@ -196,7 +196,7 @@ const resetStudentDataButton = document.getElementById('reset-student-data-butto
 const masterResetButton = document.getElementById('master-reset-button');
 // *************************
 // *** NEW EDIT DATA ELEMENTS ***
-const viewEditData = document.getElementById('view-edit-data');
+
 const editDataContentWrapper = document.getElementById('edit-data-content-wrapper');
 const editDataLoader = document.getElementById('edit-data-loader');
 const editSessionSelect = document.getElementById('edit-session-select');
