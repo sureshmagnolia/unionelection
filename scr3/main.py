@@ -165,11 +165,13 @@ def extract_old_format_header(page_text):
     date_val, time_val, course_name = "Unknown", "Unknown", "Unknown"
     try:
         # --- Course Regex ---
-        # 1. Try (CORE) or [syllabus]
-        course_match = re.search(r'([A-Z0-9]{3,}\d{3,}.*?(\[.*?syllabus\]|\(CORE\)))', page_text, re.DOTALL | re.IGNORECASE)
+    # 1. Try to find a line starting with a course code (Fix for Sanskrit/spaced codes)
+        course_match = re.search(r'^(?:Course\s*)?([A-Z0-9\s\(\)\-]{5,}.*?(\[.*?syllabus\]|\(CORE\)))', page_text, re.IGNORECASE | re.MULTILINE)
+
         if not course_match:
-            # 2. Try B.A. ... (CORE)
-            course_match = re.search(r'^(B\.?[A-Z]{1,3}\.?\s*.*?\(CORE\))', page_text, re.MULTILINE | re.IGNORECASE)
+        # 2. Try original regex (for buried course names or other formats)
+            course_match = re.search(r'([A-Z0-9]{3,}\d{3,}.*?(\[.*?syllabus\]|\(CORE\)))', page_text, re.DOTALL | re.IGNORECASE)
+
         if not course_match:
             # 3. Try line with (CCSS)
             course_match = re.search(r'^(.*?\(CCSS.*?\))$', page_text, re.MULTILINE | re.IGNORECASE)
@@ -383,13 +385,10 @@ async def run_extraction_py(event=None):
                     total_students_in_file = 0
                     for i, page in enumerate(pdf.pages):
                         page_num = i + 1
-                        
-                        page_students = []
-                        if is_new_format:
-                            page_text = page.extract_text(y_tolerance=3, x_tolerance=3)
-                            page_students = extract_new_format_students(page_text, file_name, page_num)
-                        else:
-                            page_students = extract_old_format_students(page, file_name, page_num)
+
+                    # Both "Old" and "New" formats use tables for student data.
+                    # The only difference is the header, which we already extracted.
+                        page_students = extract_old_format_students(page, file_name, page_num)
                         
                         if page_students:
                             total_students_in_file += len(page_students)
