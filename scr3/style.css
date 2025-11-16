@@ -131,6 +131,14 @@
 
 /* --- PRINT STYLES --- */
 @media print {
+
+      /* ADD THIS NEW BLOCK */
+    html, body {
+        height: auto !important;
+        overflow-y: visible !important;
+        display: block !important;
+    }
+    /* END OF NEW BLOCK */
     /* V98 FIX: Adjust page padding to maximize content area and minimize blank margins */
     @page {
         margin: 0.5cm; /* Minimal margin */
