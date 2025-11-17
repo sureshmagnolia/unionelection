@@ -4130,7 +4130,7 @@ function loadPyScript() {
             // --- 2. Add py-config (must be in body) ---
             const config = document.createElement('py-config');
             // We'll stick with 0.9.0 as you confirmed it fixed the pypdfium2 error
-            config.innerHTML = 'packages = ["pandas", "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pdfminer.six-20221105-py3-none-any.whl"]'; 
+            config.innerHTML = 'packages = ["pandas", "pdfplumber==0.9.0"]'; 
             console.log("CACHE BUST SUCCESS: Loading pdfplumber 0.9.0"); // <-- FIX: Changed log version
             document.body.appendChild(config);
 
