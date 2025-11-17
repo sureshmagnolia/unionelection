@@ -1,4 +1,3 @@
-document.addEventListener('DOMContentLoaded', () => {
 // --- Debounce Helper Function ---
 function debounce(func, delay) {
     let timeout;
@@ -4195,4 +4194,3 @@ modalCloseSearchResult.addEventListener('click', () => {
 // --- END: STUDENT SEARCH FUNCTIONALITY ---
 // --- Run on initial page load ---
 loadInitialData();
-});
