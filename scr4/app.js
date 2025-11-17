@@ -401,7 +401,32 @@ const restoreFileInput = document.getElementById('restore-file-input');
 const restoreDataButton = document.getElementById('restore-data-button');
 const restoreStatus = document.getElementById('restore-status');
 // *********************************
+// --- NEW: Sidebar Toggle Logic ---
+const toggleButton = document.getElementById('sidebar-toggle');
+const sidebar = document.getElementById('main-nav');
 
+if (toggleButton && sidebar) {
+    toggleButton.addEventListener('click', () => {
+        // Toggle sidebar width
+        sidebar.classList.toggle('w-64'); // Full width
+        sidebar.classList.toggle('w-20'); // Collapsed width
+
+        // Toggle padding
+        sidebar.classList.toggle('p-4');
+        sidebar.classList.toggle('p-2'); // Use smaller padding when collapsed
+
+        // Toggle visibility of all text spans inside the nav buttons
+        sidebar.querySelectorAll('.nav-button span').forEach(span => {
+            span.classList.toggle('hidden');
+        });
+
+        // Toggle centering for the icons
+        sidebar.querySelectorAll('.nav-button').forEach(button => {
+            button.classList.toggle('justify-center');
+        });
+    });
+}
+// --- END: Sidebar Toggle Logic ---
 // *** NEW: Universal Base64 key generator ***
 function getBase64CourseKey(courseName) {
     try {
