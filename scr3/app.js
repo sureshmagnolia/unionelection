@@ -258,37 +258,7 @@ const restoreDataButton = document.getElementById('restore-data-button');
 const restoreStatus = document.getElementById('restore-status');
 // *********************************
 
-// --// V90 FIX: Aggressive Key Cleaning Function (Fixes key collision) ---
-function cleanCourseKey(courseName) {
-    if (typeof courseName !== 'string') return '';
-    // V90 FIX: Keep only alphanumeric characters and the course code part
-    // The course code is the most unique part (e.g., BOT3CJ201)
-    let cleaned = courseName.toUpperCase();
-    
-    // 1. Extract the course code (e.g., BOT3CJ201) and the syllabus year (e.g., 2024)
-    const codeMatch = cleaned.match(/([A-Z]{3}\d[A-Z]\d{2,})/);
-    const syllabusMatch = cleaned.match(/(\d{4})\s+SYLLABUS/);
-    
-    let key = '';
-    if (codeMatch) {
-        key += codeMatch[1];
-    }
-    if (syllabusMatch) {
-        key += syllabusMatch[1];
-    }
-    
-    // Fallback: If no code is found, use the old aggressive cleaning method
-    if (!key) {
-        // Remove all non-standard chars (including BOM, non-breaking spaces, and control chars)
-        cleaned = cleaned.replace(/[\ufeff\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]/g, ' ').toUpperCase(); 
-        // Remove ALL non-alphanumeric chars (except spaces, - ( ) [ ] / & , ; .)
-        cleaned = cleaned.replace(/[^\w\s\-\(\)\[\]\/&,;.]/g, ''); 
-        // Replace multiple spaces with one, then trim
-        key = cleaned.replace(/\s+/g, ' ').trim();
-    }
-    
-    return key;
-}        
+   
 
 // --- Helper function to numerically sort room keys ---
 function getNumericSortKey(key) {
@@ -709,7 +679,7 @@ generateReportButton.addEventListener('click', async () => {
                     // *** NEW: Get QP Code ***
                     const sessionKey = `${student.Date} | ${student.Time}`;
                     const sessionQPCodes = qpCodeMap[sessionKey] || {};
-                    const courseKey = cleanCourseKey(student.Course);
+                    const qpCode = sessionQPCodes[student.Course] || ""; // Use the full course string
                     const qpCode = sessionQPCodes[courseKey] || "";
                     
                     // *** FIX: QP Code first, then course name ***
@@ -1184,7 +1154,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
             const sessionKey = `${student.Date}_${student.Time}`;
             const roomName = student['Room No'];
             const courseName = student.Course;
-            const courseKey = cleanCourseKey(courseName);
+            const courseKey = courseName; // Use the full course string
 
             // Get QP Code
             const sessionKeyPipe = `${student.Date} | ${student.Time}`;
@@ -1411,7 +1381,7 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         const courses = {};
         for (const student of sessionStudents) {
             const courseDisplay = student.Course;
-            const courseKey = cleanCourseKey(courseDisplay); // V64 FIX: Ensure course key is aggressively cleaned
+            const courseKey = courseDisplay; // Use the full course string as the key
             
             if (!courses[courseKey]) {
                 courses[courseKey] = {
@@ -1559,7 +1529,7 @@ generateScribeReportButton.addEventListener('click', async () => {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-            const courseKey = cleanCourseKey(s.Course);
+            const courseKey = s.Course; // Use the full course string
             
             reportRows.push({
                 Date: s.Date,
@@ -1715,7 +1685,7 @@ generateScribeProformaButton.addEventListener('click', async () => {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-            const courseKey = cleanCourseKey(s.Course);
+            const courseKey = s.Course; // Use the full course string
             
             const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
             
@@ -2673,26 +2643,26 @@ function render_qp_code_list(sessionKey) {
     uniqueCoursesArray.forEach(courseName => {
         const cleanKey = cleanCourseKey(courseName);
 
-        // V90 FIX: If the course name cleans to an empty string,
-        // don't render an input for it as it cannot be saved.
-        if (!cleanKey) {
-            console.warn(`Skipping QP code input for un-keyable course: ${courseName}`);
-            return; // Skip this iteration
-        }
-        
-        // V89: Look up the code in the session-specific map
-        const savedCode = sessionCodes[cleanKey] || "";
-        
-        htmlChunks.push(`
-            <div class="flex items-center gap-3 p-2 border-b border-gray-200">
-                <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
-                <input type="text" 
-                       class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
-                       value="${savedCode}" 
-                       data-course="${cleanKey}" 
-                       placeholder="Enter QP Code">
-            </div>
-        `);
+// V90 FIX: If the course name cleans to an empty string,
+// don't render an input for it as it cannot be saved.
+if (!cleanKey) {
+    console.warn(`Skipping QP code input for un-keyable course: ${courseName}`);
+    return; // Skip this iteration
+}
+
+// V89: Look up the code in the session-specific map
+const savedCode = sessionCodes[cleanKey] || "";
+
+htmlChunks.push(`
+    <div class="flex items-center gap-3 p-2 border-b border-gray-200">
+        <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
+        <input type="text" 
+               class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
+               value="${savedCode}" 
+               data-course="${cleanKey}" 
+               placeholder="Enter QP Code">
+    </div>
+`);
     });
     
     qpCodeContainer.innerHTML = htmlChunks.join('');
@@ -4169,7 +4139,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     // 4. Get QP Code (if any)
     loadQPCodes(); // Ensures qpCodeMap is populated
     const sessionQPCodes = qpCodeMap[sessionKey] || {};
-    const courseKey = cleanCourseKey(student.Course);
+    const qpCode = sessionQPCodes[student.Course] || "Not Entered"; // Use the full course string
     const qpCode = sessionQPCodes[courseKey] || "Not Entered";
 
    // 5. Populate Modal
