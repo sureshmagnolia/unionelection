@@ -2615,10 +2615,10 @@ sessionSelectQP.addEventListener('change', () => {
     }
 });
 
-// V61: Renders the course list for the selected session
+
 // V61: Renders the course list for the selected session
 function render_qp_code_list(sessionKey) {
-    
+    loadQPCodes(); // ← Add this line to refresh from localStorage
     // 1. Filter students for this specific session
     const [date, time] = sessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
