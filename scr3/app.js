@@ -2648,17 +2648,20 @@ uniqueCoursesArray.forEach(courseName => {
     // Look up the code using the full name
     const savedCode = sessionCodes[courseKey] || "";
 
-    htmlChunks.push(`
-        <div class="flex items-center gap-3 p-2 border-b border-gray-200">
-            <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
-            <input type="text" 
-                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
-                   value="${savedCode}" 
-                   data-course="${courseKey.replace(/"/g, '&quot;')}"  /* Store full string, handle quotes */
-                   placeholder="Enter QP Code">
-        </div>
-    `);
-});
+   // Create a stable, safe identifier for this course
+const stableCourseId = btoa(unescape(encodeURIComponent(courseKey))); // Base64 encode
+
+htmlChunks.push(`
+    <div class="flex items-center gap-3 p-2 border-b border-gray-200">
+        <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
+        <input type="text" 
+               class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
+               value="${savedCode}" 
+               data-course-id="${stableCourseId}"
+               data-course-name="${courseName.replace(/"/g, '&quot;')}"
+               placeholder="Enter QP Code">
+    </div>
+`);
     
     
     qpCodeContainer.innerHTML = htmlChunks.join('');
@@ -2690,15 +2693,17 @@ saveQpCodesButton.addEventListener('click', () => {
     // 3. Read all inputs from the DOM
     const qpInputs = qpCodeContainer.querySelectorAll('.qp-code-input');
     
-    for (let i = 0; i < qpInputs.length; i++) {
-        const input = qpInputs[i];
-        const courseKey = input.dataset.course; // Already cleaned
-        const qpCode = input.value.trim();
+   for (let i = 0; i < qpInputs.length; i++) {
+    const input = qpInputs[i];
+    const stableCourseId = input.dataset.courseId;
+    const qpCode = input.value.trim();
 
-        if (courseKey && qpCode) {
-            thisSessionCodes[courseKey] = qpCode;
-        }
+    if (stableCourseId && qpCode) {
+        // Decode the stable ID back to the original course name
+        const courseKey = decodeURIComponent(escape(atob(stableCourseId)));
+        thisSessionCodes[courseKey] = qpCode;
     }
+}
 
     // 4. Update the master map with the new data for this session
     qpCodeMap[sessionKey] = thisSessionCodes;
