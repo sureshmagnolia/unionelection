@@ -626,7 +626,48 @@ function performOriginalAllocation(data) {
     return processed_rows_with_rooms;
 }
 
+// --- NEW: Helper to generate Room Serial Numbers (1, 2, 3...) ---
+function getRoomSerialMap(sessionKey) {
+    const serialMap = {};
+    let counter = 1;
 
+    // 1. Regular Allotment (Respects order in the array "Top to Bottom")
+    const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+    const regularRooms = allAllotments[sessionKey] || [];
+
+    regularRooms.forEach(roomObj => {
+        // Only assign if not already assigned (handles duplicates if any)
+        if (!serialMap[roomObj.roomName]) { 
+            serialMap[roomObj.roomName] = counter++;
+        }
+    });
+
+    // 2. Scribe Allotment (Continue numbering)
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const scribeMap = allScribeAllotments[sessionKey] || {};
+    
+    // Collect unique scribe rooms
+    const uniqueScribeRooms = new Set(Object.values(scribeMap));
+    
+    // Remove rooms that were already counted in Regular Allotment
+    // (e.g., if a Scribe is placed in a Regular Room, it keeps the Regular serial number)
+    regularRooms.forEach(r => uniqueScribeRooms.delete(r.roomName));
+
+    // Sort remaining Scribe Rooms numerically/alphabetically
+    const sortedScribeRooms = Array.from(uniqueScribeRooms).sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+    });
+
+    // Assign serial numbers to Scribe Rooms
+    sortedScribeRooms.forEach(roomName => {
+        serialMap[roomName] = counter++;
+    });
+
+    return serialMap;
+}
+    
 // V68: Helper function to filter data based on selected report filter
 function getFilteredReportData(reportType) {
     const data = JSON.parse(jsonDataStore.innerHTML || '[]');
