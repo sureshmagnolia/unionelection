@@ -734,7 +734,6 @@ function checkManualAllotment(sessionKey) {
     // This check is good. All students are allotted.
     return true;
 }
-// --- 1. Event listener for the "Generate Room-wise Report" button ---
 
 // --- 1. Event listener for the "Generate Room-wise Report" button ---
 generateReportButton.addEventListener('click', async () => {
@@ -831,13 +830,20 @@ generateReportButton.addEventListener('click', async () => {
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
             const serialNo = roomSerialMap[session.Room] || '-';
-            // ------------------------------
-
-            // Prepare Course Summary
+            
+            // --- NEW: Prepare Course Summary with QP Codes ---
+            const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
             let courseSummaryHtml = '';
+            
             for (const [courseName, count] of Object.entries(session.courseCounts)) {
-                courseSummaryHtml += `<div style="font-weight: bold;">${courseName}: ${count} Student(s)</div>`; 
+                // Look up QP Code using Base64 Key
+                const courseKey = getBase64CourseKey(courseName);
+                const qpCode = sessionQPCodes[courseKey];
+                const qpDisplay = qpCode ? ` (QP: ${qpCode})` : "";
+
+                courseSummaryHtml += `<div style="font-weight: bold;">${courseName}${qpDisplay}: ${count} Student(s)</div>`; 
             }
+            // -------------------------------------------------
             
             // Header with Serial Number
             const pageHeaderHtml = `
@@ -866,7 +872,6 @@ generateReportButton.addEventListener('click', async () => {
             const hasScribe = session.students.some(s => s.isPlaceholder);
             const scribeFootnote = hasScribe ? '<div class="scribe-footnote">* = Scribe Assistance</div>' : '';
 
-            // *** FIX: Updated Footer Text ***
             const invigilatorFooterHtml = `
                 <div class="invigilator-footer">
                     <div class="course-summary-footer">
@@ -893,10 +898,7 @@ generateReportButton.addEventListener('click', async () => {
                     const seatNumber = student.seatNumber;
                     const asterisk = student.isPlaceholder ? '*' : '';
                     
-                    const sessionKey = `${student.Date} | ${student.Time}`;
-                    const sessionQPCodes = qpCodeMap[sessionKey] || {};
-                    
-                    // Use Base64 Key
+                    // Use Base64 Key for Table Rows too
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
                     
@@ -987,6 +989,8 @@ generateReportButton.addEventListener('click', async () => {
         generateReportButton.textContent = "Generate Room-wise Seating Report";
     }
 });
+
+
     
 // --- (V29) Event listener for the "Day-wise Student List" button ---
 generateDaywiseReportButton.addEventListener('click', async () => {
