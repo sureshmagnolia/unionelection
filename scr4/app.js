@@ -1842,8 +1842,8 @@ generateScribeReportButton.addEventListener('click', async () => {
 // *******************************************************
 
 // *** NEW: Event listener for Scribe Proforma Report ***
+// *** NEW: Event listener for Scribe Proforma Report (WITH LOCATION FIX) ***
 generateScribeProformaButton.addEventListener('click', async () => {
-    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateScribeProformaButton.disabled = true;
     generateScribeProformaButton.textContent = "Generating...";
     reportOutputArea.innerHTML = "";
@@ -1853,9 +1853,10 @@ generateScribeProformaButton.addEventListener('click', async () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     
     try {
-        // 1. Get College Name
+        // 1. FORCE LOAD SETTINGS (Crucial for Location Data)
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
+        getRoomCapacitiesFromStorage(); // <--- THIS POPULATES currentRoomConfig WITH LOCATIONS
+        
         // 2. Get FILTERED RAW student data
         const data = getFilteredReportData('scribe-proforma');
         if (data.length === 0) {
@@ -1867,8 +1868,6 @@ generateScribeProformaButton.addEventListener('click', async () => {
         const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
         if (globalScribeList.length === 0) {
             alert("No students have been added to the Scribe List in Scribe Assistance.");
-            generateScribeProformaButton.disabled = false;
-            generateScribeProformaButton.textContent = "Generate Scribe Proforma (One Page Per Scribe)";
             return;
         }
         const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
@@ -1877,7 +1876,7 @@ generateScribeProformaButton.addEventListener('click', async () => {
         const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
         
         // 5. Get Original Room Allotments (by running the "original" allocation logic)
-        const originalAllotments = performOriginalAllocation(data); // Use the central function
+        const originalAllotments = performOriginalAllocation(data); 
         const originalRoomMap = originalAllotments.reduce((map, s) => {
             // Store room and seat number
             map[s['Register Number']] = { room: s['Room No'], seat: s.seatNumber };
@@ -1888,19 +1887,30 @@ generateScribeProformaButton.addEventListener('click', async () => {
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         loadQPCodes(); // populates qpCodeMap
 
-        // 7. Collate all data for the report (similar to the summary report)
+        // 7. Collate all data for the report
         const reportRows = [];
         for (const s of allScribeStudents) {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-
-            // --- MODIFIED TO USE Base64 KEY ---
-            const courseKey = getBase64CourseKey(s.Course);
-            // --- END MODIFICATION ---
+            const courseKey = cleanCourseKey(s.Course);
             
             const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
             
+            // --- LOCATION FIX START ---
+            // Get the scribe room name (e.g., "Room 10")
+            const rawScribeRoom = sessionScribeRooms[s['Register Number']];
+            let scribeRoomDisplay = 'Not Allotted';
+
+            if (rawScribeRoom) {
+                // Look up the room details in currentRoomConfig
+                const rInfo = currentRoomConfig[rawScribeRoom];
+                // If info exists and location exists, append it. e.g. " (Commerce Block)"
+                const rLoc = (rInfo && rInfo.location) ? ` (${rInfo.location})` : ""; 
+                scribeRoomDisplay = `<strong>${rawScribeRoom}</strong>${rLoc}`;
+            }
+            // --- LOCATION FIX END ---
+
             reportRows.push({
                 Date: s.Date,
                 Time: s.Time,
@@ -1908,15 +1918,13 @@ generateScribeProformaButton.addEventListener('click', async () => {
                 Name: s.Name,
                 Course: s.Course,
                 OriginalRoom: `${originalRoomData.room} (Seat: ${originalRoomData.seat})`,
-                ScribeRoom: sessionScribeRooms[s['Register Number']] || 'Not Allotted',
-                QPCode: sessionQPCodes[courseKey] || 'N/A' // <-- Use Base64 key for lookup
+                ScribeRoom: scribeRoomDisplay, // Use the formatted string
+                QPCode: sessionQPCodes[courseKey] || 'N/A'
             });
         }
         
         if (reportRows.length === 0) {
             alert("No scribe students found for the selected filter/session.");
-            generateScribeProformaButton.disabled = false;
-            generateScribeProformaButton.textContent = "Generate Scribe Proforma (One Page Per Scribe)";
             return;
         }
         
@@ -1956,7 +1964,7 @@ generateScribeProformaButton.addEventListener('click', async () => {
                             </tr>
                             <tr>
                                 <td class="label">Scribe Allotted Room:</td>
-                                <td class="data">${student.ScribeRoom}</td>
+                                <td class="data" style="font-size: 1.1em;">${student.ScribeRoom}</td>
                             </tr>
                             <tr>
                                 <td class="label">Sign or Thumb Impression of Candidate:</td>
