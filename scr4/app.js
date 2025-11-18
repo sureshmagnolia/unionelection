@@ -966,32 +966,26 @@ generateReportButton.addEventListener('click', async () => {
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateDaywiseReportButton.disabled = true;
-    // V49: Button text updated
     generateDaywiseReportButton.textContent = "Generating...";
     reportOutputArea.innerHTML = "";
     reportControls.classList.add('hidden');
     roomCsvDownloadContainer.innerHTML = "";
-    lastGeneratedRoomData = []; // This report doesn't use the room CSV
-    lastGeneratedReportType = ""; // V91: Reset report type
+    lastGeneratedRoomData = []; 
+    lastGeneratedReportType = ""; 
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-        // *** V95 FIX: Refresh college name from local storage BEFORE generation ***
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        getRoomCapacitiesFromStorage(); // <-- ADD THIS LINE
-        // 1. Get FILTERED RAW student data
+        getRoomCapacitiesFromStorage(); 
+        
         const data = getFilteredReportData('day-wise');
-
         if (data.length === 0) {
             alert("No data found for the selected filter/session.");
             return;
         }
         
-        // 2. Perform Room Allocation (V29 - uses central function)
-        // *** THIS NOW CORRECTLY HANDLES SCRIBES AND SHOWS THEIR NEW ROOM ***
-        const processed_rows_with_rooms = performOriginalAllocation(data); // <-- FIX: Use original allocation
+        const processed_rows_with_rooms = performOriginalAllocation(data); 
 
-        // 3. Group by Day/Session
         const daySessions = {};
         processed_rows_with_rooms.forEach(student => {
             const key = `${student.Date}_${student.Time}`;
@@ -1005,29 +999,23 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             daySessions[key].students.push(student);
         });
 
-        // *** NEW: Get scribe allotments ***
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
-        // 7. Build the HTML
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
-        // *** FIX: Changed to 35 rows per column for A4 fit ***
-        const STUDENTS_PER_COLUMN = 35; 
-        const COLUMNS_PER_PAGE = 1; 
+        const STUDENTS_PER_COLUMN = 30; 
+        const COLUMNS_PER_PAGE = 2; 
         const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
 
-        // (V30) Helper to build a table for a column, NOW WITH COURSE GROUPING
         function buildColumnTable(studentChunk) {
             let rowsHtml = '';
-            let currentCourse = ""; // Track the current course
-            let previousRoomDisplay = ""; // V48: Track previous room
+            let currentCourse = ""; 
+            let previousRoomDisplay = ""; 
 
             studentChunk.forEach(student => {
-                // Check if the course has changed
                 if (student.Course !== currentCourse) {
                     currentCourse = student.Course;
-                    previousRoomDisplay = ""; // V48: Reset for new course
-                    // Add a course heading row
+                    previousRoomDisplay = ""; 
                     rowsHtml += `
                         <tr>
                             <td colspan="4" style="background-color: #ddd; font-weight: bold; padding: 4px 2px; border: 1px solid #999;">
@@ -1037,27 +1025,20 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     `;
                 }
 
-                // *** FIX: Get correct room and seat no for scribes ***
                 let roomName = student['Room No'];
-                let seatNo = student.seatNumber; // Use the original seat number
+                let seatNo = student.seatNumber; 
                 let rowStyle = '';
 
                 if (student.isScribe) {
                     const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                     const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
-                    roomName = sessionScribeAllotment[student['Register Number']] || 'N/A'; // Get new scribe room
-                    seatNo = 'Scribe'; // Scribes don't have a seat number in the new room
-                    rowStyle = 'font-weight: bold; color: #c2410c;'; // Style for scribe
+                    roomName = sessionScribeAllotment[student['Register Number']] || 'N/A'; 
+                    seatNo = 'Scribe'; 
+                    rowStyle = 'font-weight: bold; color: #c2410c;'; 
                 }
-                // *****************************************************
 
-                // Add the student row
                 const roomInfo = currentRoomConfig[roomName];
-                
-                // 1. SHOW ONLY LOCATION: Use location if available; otherwise fall back to room name
                 const roomDisplay = (roomInfo && roomInfo.location) ? roomInfo.location : roomName;
-
-                // 2. SHOW IN EVERY CELL: No "ditto" check. Always use the full text.
                 const displayRoom = roomDisplay;
                 
                 rowsHtml += `
@@ -1070,16 +1051,13 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 `;
             });
 
-            // (V30) Updated table header to remove Course
-            // (V32) Updated widths
-            // *** FIX: Changed Sl to Seat No ***
             return `
                 <table class="daywise-report-table">
                     <thead>
                         <tr>
                             <th style="width: 15%;">Register No</th>
                             <th style="width: 25%;">Name</th>
-                            <th style="width: 60%;">Room (Location)</th>
+                            <th style="width: 60%;">Location</th>
                             <th style="width: 10%;">Seat No</th>
                         </tr>
                     </thead>
@@ -1093,7 +1071,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         sortedSessionKeys.forEach(key => {
             const session = daySessions[key];
             
-            // *** FIX: Sort students by Course, then Reg No for this report ***
             session.students.sort((a, b) => {
                 if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
                 return a['Register Number'].localeCompare(b['Register Number']);
@@ -1108,44 +1085,80 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 
                 let columnHtml = '';
                 if (col1Students.length > 0 && col2Students.length === 0) {
-                    // Only column 1 needed
                     columnHtml = `<div class="column">${buildColumnTable(col1Students)}</div>`;
                 } else if (col1Students.length > 0 && col2Students.length > 0) {
-                    // Two columns needed
                     columnHtml = `
                         <div class="column-container">
-                            <div class="column">
-                                ${buildColumnTable(col1Students)}
-                            </div>
-                            <div class="column">
-                                ${buildColumnTable(col2Students)}
-                            </div>
+                            <div class="column">${buildColumnTable(col1Students)}</div>
+                            <div class="column">${buildColumnTable(col2Students)}</div>
                         </div>
                     `;
                 }
                 
-                // *** NEW: Scribe summary logic ***
+                // *** NEW: Scribe Summary Logic (Location Wise) ***
                 let scribeListHtml = '';
-                // Check if this is the last page for the session
                 if (i + STUDENTS_PER_PAGE >= session.students.length) {
                     const sessionScribes = session.students.filter(s => s.isScribe);
                     if (sessionScribes.length > 0) {
-                        scribeListHtml = '<div class="scribe-summary-box" style="margin-top: 2rem; padding: 1rem; border: 2px solid #f97316; background: #fffbeb; border-radius: 8px;">';
-                        scribeListHtml += '<h3 style="font-size: 14pt; font-weight: bold; margin-bottom: 0.5rem; color: #c2410c;">Scribe Assistance Summary</h3>';
                         
+                        // 1. Group Scribes by their Allocated Scribe Room
+                        const scribesByRoom = {};
                         sessionScribes.forEach(scribe => {
                             const sessionKeyPipe = `${scribe.Date} | ${scribe.Time}`;
                             const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
-                            const newRoom = sessionScribeAllotment[scribe['Register Number']] || 'N/A';
+                            const newRoom = sessionScribeAllotment[scribe['Register Number']] || 'Not Allotted';
                             
-                            scribeListHtml += `<p style="font-size: 9pt; margin-bottom: 4px;"><strong>${scribe.Name}</strong> (${scribe['Register Number']})<br>Original: ${scribe['Room No']} (Seat ${scribe.seatNumber}) &rarr; <strong>New Room: ${newRoom}</strong></p>`;
+                            if (!scribesByRoom[newRoom]) {
+                                scribesByRoom[newRoom] = [];
+                            }
+                            scribesByRoom[newRoom].push(scribe);
                         });
+
+                        // 2. Build the HTML Structure
+                        scribeListHtml = '<div class="scribe-summary-box" style="margin-top: 2rem; padding: 1.5rem; border: 3px solid #ea580c; background: #fff7ed; border-radius: 8px;">';
+                        scribeListHtml += '<h1 style="font-size: 18pt; font-weight: bold; margin-bottom: 1.5rem; color: #9a3412; text-align: center; text-transform: uppercase; border-bottom: 2px solid #ea580c; padding-bottom: 0.5rem;">Scribe Assistance Summary (Location Wise)</h1>';
+
+                        // Sort the rooms numerically
+                        const sortedRooms = Object.keys(scribesByRoom).sort((a, b) => {
+                             const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+                             const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+                             return numA - numB;
+                        });
+
+                        sortedRooms.forEach(roomName => {
+                            // Get Location Info for the Scribe Room
+                            const roomInfo = currentRoomConfig[roomName];
+                            const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
+                            const locationDisplay = location ? ` <span style="font-weight: normal; font-style: italic;">(${location})</span>` : "";
+
+                            // Room Header (Large and Conspicuous)
+                            scribeListHtml += `
+                                <div style="margin-bottom: 1.5rem; page-break-inside: avoid;">
+                                    <h2 style="font-size: 16pt; font-weight: bold; color: #000; background-color: #fed7aa; padding: 8px; border-left: 6px solid #ea580c; margin-bottom: 10px;">
+                                        ${roomName}${locationDisplay}
+                                    </h2>
+                                    <div style="padding-left: 1rem;">
+                            `;
+
+                            // List Students for this Room
+                            scribesByRoom[roomName].forEach(s => {
+                                scribeListHtml += `
+                                    <div style="font-size: 11pt; margin-bottom: 6px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;">
+                                        <strong>${s.Name}</strong> &nbsp; [${s['Register Number']}] 
+                                        &nbsp;&nbsp; 
+                                        <span style="font-weight: bold; color: #555;">(Original: ${s['Room No']}, Seat: ${s.seatNumber})</span>
+                                    </div>
+                                `;
+                            });
+
+                            scribeListHtml += `</div></div>`;
+                        });
+
                         scribeListHtml += '</div>';
                     }
                 }
                 // ******************************
 
-                // Add the main content page
             allPagesHtml += `
                 <div class="print-page print-page-daywise">
                     <div class="print-header-group">
@@ -1156,7 +1169,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 </div>
             `;
 
-            // If scribeListHtml has content, add it on a NEW page
             if (scribeListHtml) {
                 allPagesHtml += `
                     <div class="print-page">
@@ -1167,18 +1179,17 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                         ${scribeListHtml} 
                     </div>
                 `;
-                totalPagesGenerated++; // Increment total page count
+                totalPagesGenerated++; 
             }
         }
     });
 
-        // 8. Show report and controls
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
         reportStatus.textContent = `Generated ${totalPagesGenerated} compact pages for ${sortedSessionKeys.length} sessions.`;
         reportControls.classList.remove('hidden');
-        roomCsvDownloadContainer.innerHTML = ""; // This report has no CSV
-        lastGeneratedReportType = "Daywise_Seating_Details"; // V91: Set report type
+        roomCsvDownloadContainer.innerHTML = ""; 
+        lastGeneratedReportType = "Daywise_Seating_Details"; 
 
     } catch (e) {
         console.error("Error generating day-wise report:", e);
@@ -1186,7 +1197,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         reportControls.classList.remove('hidden');
     } finally {
         generateDaywiseReportButton.disabled = false;
-        // V49: Button text updated
         generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
     }
 });
