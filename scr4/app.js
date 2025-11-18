@@ -1049,8 +1049,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
-        const STUDENTS_PER_COLUMN = 45; 
-        const COLUMNS_PER_PAGE = 1; 
+        const STUDENTS_PER_COLUMN = 30; 
+        const COLUMNS_PER_PAGE = 2; 
         const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
 
         function buildColumnTable(studentChunk) {
@@ -1124,7 +1124,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             
             for (let i = 0; i < session.students.length; i += STUDENTS_PER_PAGE) {
                 const pageStudents = session.students.slice(i, i + STUDENTS_PER_PAGE);
-                totalPagesGenerated++;
+                totalPagesGenerated++; // Increment page count
                 
                 const col1Students = pageStudents.slice(0, STUDENTS_PER_COLUMN);
                 const col2Students = pageStudents.slice(STUDENTS_PER_COLUMN); 
@@ -1141,30 +1141,25 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     `;
                 }
                 
-                // *** NEW: Scribe Summary Logic (Location Wise) ***
+                // Scribe Summary Logic
                 let scribeListHtml = '';
                 if (i + STUDENTS_PER_PAGE >= session.students.length) {
                     const sessionScribes = session.students.filter(s => s.isScribe);
                     if (sessionScribes.length > 0) {
                         
-                        // 1. Group Scribes by their Allocated Scribe Room
                         const scribesByRoom = {};
                         sessionScribes.forEach(scribe => {
                             const sessionKeyPipe = `${scribe.Date} | ${scribe.Time}`;
                             const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
                             const newRoom = sessionScribeAllotment[scribe['Register Number']] || 'Not Allotted';
                             
-                            if (!scribesByRoom[newRoom]) {
-                                scribesByRoom[newRoom] = [];
-                            }
+                            if (!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
                             scribesByRoom[newRoom].push(scribe);
                         });
 
-                        // 2. Build the HTML Structure
                         scribeListHtml = '<div class="scribe-summary-box" style="margin-top: 2rem; padding: 1.5rem; border: 3px solid #ea580c; background: #fff7ed; border-radius: 8px;">';
                         scribeListHtml += '<h1 style="font-size: 18pt; font-weight: bold; margin-bottom: 1.5rem; color: #9a3412; text-align: center; text-transform: uppercase; border-bottom: 2px solid #ea580c; padding-bottom: 0.5rem;">Scribe Assistance Summary (Location Wise)</h1>';
 
-                        // Sort the rooms numerically
                         const sortedRooms = Object.keys(scribesByRoom).sort((a, b) => {
                              const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
                              const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
@@ -1172,12 +1167,10 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                         });
 
                         sortedRooms.forEach(roomName => {
-                            // Get Location Info for the Scribe Room
                             const roomInfo = currentRoomConfig[roomName];
                             const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
                             const locationDisplay = location ? ` <span style="font-weight: normal; font-style: italic;">(${location})</span>` : "";
 
-                            // Room Header (Large and Conspicuous)
                             scribeListHtml += `
                                 <div style="margin-bottom: 1.5rem; page-break-inside: avoid;">
                                     <h2 style="font-size: 16pt; font-weight: bold; color: #000; background-color: #fed7aa; padding: 8px; border-left: 6px solid #ea580c; margin-bottom: 10px;">
@@ -1185,8 +1178,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                                     </h2>
                                     <div style="padding-left: 1rem;">
                             `;
-
-                            // List Students for this Room
                             scribesByRoom[roomName].forEach(s => {
                                 scribeListHtml += `
                                     <div style="font-size: 11pt; margin-bottom: 6px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;">
@@ -1196,17 +1187,16 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                                     </div>
                                 `;
                             });
-
                             scribeListHtml += `</div></div>`;
                         });
-
                         scribeListHtml += '</div>';
                     }
                 }
-                // ******************************
 
             allPagesHtml += `
                 <div class="print-page print-page-daywise">
+                    <div style="text-align: left; font-weight: bold; font-size: 14pt; margin-bottom: 5px;">Page: ${totalPagesGenerated}</div>
+                    
                     <div class="print-header-group">
                         <h1>Seating Details for Candidates</h1>
                         <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
@@ -1216,8 +1206,11 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             `;
 
             if (scribeListHtml) {
+                totalPagesGenerated++; // Increment page count for scribe page
                 allPagesHtml += `
                     <div class="print-page">
+                        <div style="text-align: left; font-weight: bold; font-size: 14pt; margin-bottom: 5px;">Page: ${totalPagesGenerated}</div>
+                        
                         <div class="print-header-group">
                             <h1>Scribe Assistance Summary</h1>
                             <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
@@ -1225,7 +1218,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                         ${scribeListHtml} 
                     </div>
                 `;
-                totalPagesGenerated++; 
             }
         }
     });
