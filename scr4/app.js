@@ -1346,9 +1346,8 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// *** NEW: Event listener for QP Distribution by QP-Code Report ***
 
-// *** UPDATED: Event listener for QP Distribution by QP-Code Report (With Serial No) ***
+// *** UPDATED: Event listener for QP Distribution by QP-Code Report (Aggregated by QP Code) ***
 generateQpDistributionReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1391,13 +1390,19 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
             if (!sessions[sessionKey]) {
                 sessions[sessionKey] = { Date: student.Date, Time: student.Time, qps: {} };
             }
+            
+            // Initialize QP Code entry if not exists
             if (!sessions[sessionKey].qps[qpCode]) {
                 sessions[sessionKey].qps[qpCode] = {
-                    courseName: courseName,
+                    courseNames: new Set(), // *** FIX: Store unique course names in a Set ***
                     rooms: {},
                     total: 0
                 };
             }
+            
+            // Add course name to the Set
+            sessions[sessionKey].qps[qpCode].courseNames.add(courseName);
+
             if (!sessions[sessionKey].qps[qpCode].rooms[roomName]) {
                 sessions[sessionKey].qps[qpCode].rooms[roomName] = 0;
             }
@@ -1419,10 +1424,9 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
         for (const sessionKey of sortedSessionKeys) {
             const session = sessions[sessionKey];
             
-            // --- NEW: Get Room Serial Numbers for this specific session ---
+            // Get Room Serial Numbers
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
-            // ------------------------------------------------------------
 
             allPagesHtml += `
                 <div class="print-page">
@@ -1438,7 +1442,10 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
             for (const qpCode of sortedQPCodes) {
                 const qpData = session.qps[qpCode];
                 
-                allPagesHtml += `<h4 class="qp-header">QP Code: ${qpCode} &nbsp; (Course: ${qpData.courseName})</h4>`;
+                // *** FIX: Join all course names ***
+                const courseList = Array.from(qpData.courseNames).sort().join(', ');
+                
+                allPagesHtml += `<h4 class="qp-header">QP Code: ${qpCode} &nbsp; <span style="font-weight:normal; font-size: 0.9em;">(Courses: ${courseList})</span></h4>`;
                 
                 allPagesHtml += `
                     <table class="qp-distribution-table">
@@ -1462,10 +1469,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
                     
                     const roomInfo = currentRoomConfig[roomName];
                     const location = (roomInfo && roomInfo.location) ? ` <span style="font-size: 0.85em; color: #555;">(${roomInfo.location})</span>` : "";
-                    
-                    // --- NEW: Add Serial Number ---
                     const serialNo = roomSerialMap[roomName] || '-';
-                    // ------------------------------
 
                     allPagesHtml += `
                         <tr>
@@ -1581,7 +1585,7 @@ function formatRegNoList(regNos) {
     return outputHtml.join('<br>');
 }
         
-// --- (V56) Event listener for "Generate Absentee Statement" ---
+// --- (V56) Event listener for "Generate Absentee Statement" (QP Code Wise) ---
 generateAbsenteeReportButton.addEventListener('click', async () => {
     const sessionKey = sessionSelect.value;
     if (!sessionKey) {
@@ -1594,29 +1598,36 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     
     try {
-        // *** V95 FIX: Refresh college name from local storage BEFORE generation ***
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         
-        // 1. Get all students for this session
         const [date, time] = sessionKey.split(' | ');
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        
-        // 2. Get absentee register numbers for this session
         const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
         const absenteeRegNos = new Set(allAbsentees[sessionKey] || []);
+        loadQPCodes(); 
         
-        // 3. Group students by Course
-        const courses = {};
+        // 3. Group students by QP CODE -> Then by COURSE
+        const qpGroups = {};
+        
         for (const student of sessionStudents) {
             const courseDisplay = student.Course;
-
-            // --- MODIFIED TO USE Base64 KEY ---
-            const courseKey = getBase64CourseKey(courseDisplay);
-            if (!courseKey) continue; // Skip if key can't be created
-            // --- END MODIFICATION ---
             
-            if (!courses[courseKey]) {
-                courses[courseKey] = {
+            // Get QP Code
+            const courseKey = getBase64CourseKey(courseDisplay);
+            const sessionCodes = qpCodeMap[sessionKey] || {};
+            const qpCode = sessionCodes[courseKey] || "Not Entered"; // Default grouping
+            
+            if (!qpGroups[qpCode]) {
+                qpGroups[qpCode] = {
+                    code: qpCode,
+                    courses: {}, // Will hold data per course
+                    grandTotalPresent: 0,
+                    grandTotalAbsent: 0
+                };
+            }
+            
+            if (!qpGroups[qpCode].courses[courseDisplay]) {
+                qpGroups[qpCode].courses[courseDisplay] = {
                     name: courseDisplay,
                     present: [],
                     absent: []
@@ -1624,86 +1635,95 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
             }
             
             if (absenteeRegNos.has(student['Register Number'])) {
-                courses[courseKey].absent.push(student['Register Number']);
+                qpGroups[qpCode].courses[courseDisplay].absent.push(student['Register Number']);
+                qpGroups[qpCode].grandTotalAbsent++;
             } else {
-                courses[courseKey].present.push(student['Register Number']);
+                qpGroups[qpCode].courses[courseDisplay].present.push(student['Register Number']);
+                qpGroups[qpCode].grandTotalPresent++;
             }
         }
         
         // 4. Build Report Pages
         let allPagesHtml = '';
         let totalPages = 0;
-        const sortedCourseKeys = Object.keys(courses).sort();
+        const sortedQpKeys = Object.keys(qpGroups).sort();
         
-        // V58: Load QP codes
-        loadQPCodes(); // Ensure qpCodeMap is up-to-date
-        
-        for (const courseKey of sortedCourseKeys) {
+        for (const qpCode of sortedQpKeys) {
             totalPages++;
-            const courseData = courses[courseKey];
+            const qpData = qpGroups[qpCode];
             
-            // V89: Load session-specific codes
-            const sessionCodes = qpCodeMap[sessionKey] || {};
+            // Build rows for each course under this QP Code
+            const sortedCourses = Object.keys(qpData.courses).sort();
+            let tableRowsHtml = '';
             
-            // --- MODIFIED TO USE Base64 KEY ---
-            const qpCode = sessionCodes[courseKey] || "____"; // Use the Base64 key
-            // --- END MODIFICATION ---
+            for (const courseName of sortedCourses) {
+                const courseData = qpData.courses[courseName];
+                const presentListHtml = formatRegNoList(courseData.present);
+                const absentListHtml = formatRegNoList(courseData.absent);
+                
+                tableRowsHtml += `
+                    <tr style="background-color: #f9fafb;">
+                        <td colspan="2" style="font-weight: bold; border-bottom: 2px solid #ccc;">Course: ${courseData.name}</td>
+                    </tr>
+                    <tr>
+                        <td style="vertical-align: top; width: 25%;"><strong>Present (${courseData.present.length})</strong></td>
+                        <td class="regno-list" style="vertical-align: top;">${presentListHtml}</td>
+                    </tr>
+                    <tr>
+                        <td style="vertical-align: top;"><strong>Absent (${courseData.absent.length})</strong></td>
+                        <td class="regno-list" style="vertical-align: top;">${absentListHtml}</td>
+                    </tr>
+                `;
+            }
             
-            // *** NEW: Use formatting function ***
-            const presentListHtml = formatRegNoList(courseData.present);
-            const absentListHtml = formatRegNoList(courseData.absent);
+            // Add Total Row for the QP Code
+            tableRowsHtml += `
+                <tr style="background-color: #eee; border-top: 3px double #000;">
+                    <td colspan="2" style="padding: 10px;">
+                        <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1em;">
+                            <span>TOTAL FOR QP CODE: ${qpCode}</span>
+                            <span>Present: ${qpData.grandTotalPresent} &nbsp;|&nbsp; Absent: ${qpData.grandTotalAbsent}</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
             
-            // V57: Add page break logic. Each course is a new page.
             allPagesHtml += `
                 <div class="print-page">
                     <div class="print-header-group">
                         <h1>${currentCollegeName}</h1>
                         <h2>Absentee Statement</h2>
                         <h3>${date} &nbsp;|&nbsp; ${time}</h3>
+                        <h3 style="border: 1px solid black; padding: 5px; display: inline-block; margin-top: 5px;">QP Code: ${qpCode}</h3>
                     </div>
                 
-                    <table class="absentee-report-table">
+                    <table class="absentee-report-table" style="margin-top: 1rem;">
                         <thead>
-                            <tr>
-                                <th colspan="2">Course: ${courseData.name} &nbsp;&nbsp; [ QP Code: ${qpCode} ]</th>
-                            </tr>
                             <tr>
                                 <th>Status</th>
                                 <th>Register Numbers</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td><strong>Present (${courseData.present.length})</strong></td>
-                                <td class="regno-list">
-                                    ${presentListHtml}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td><strong>Absent (${courseData.absent.length})</strong></td>
-                                <td class="regno-list">
-                                    ${absentListHtml}
-                                </td>
-                            </tr>
+                            ${tableRowsHtml}
                         </tbody>
                     </table>
                     
                     <div class="absentee-footer">
                         <div class="signature">
-                            Chief Superintendent
+                            Name and Dated Signature of the Invigilator
                         </div>
                     </div>
                 </div>
             `;
         }
 
-        // 5. Show report and controls
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPages} page(s) for ${sortedCourseKeys.length} courses.`;
+        reportStatus.textContent = `Generated ${totalPages} page(s) for ${sortedQpKeys.length} QP Codes.`;
         reportControls.classList.remove('hidden');
-        roomCsvDownloadContainer.innerHTML = ""; // This report has no CSV
-        lastGeneratedReportType = `Absentee_Statement_${date.replace(/\./g, '_')}_${time.replace(/\s/g, '')}`; // V91: Set report type
+        roomCsvDownloadContainer.innerHTML = ""; 
+        lastGeneratedReportType = `Absentee_Statement_${date.replace(/\./g, '_')}_${time.replace(/\s/g, '')}`; 
 
     } catch (e) {
         console.error("Error generating absentee report:", e);
