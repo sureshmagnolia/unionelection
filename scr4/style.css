@@ -802,21 +802,24 @@ tr.scribe-row-highlight td.signature-col {
     font-weight: 600;
 }
 
-/* Column Widths */
+/* Column Widths (Updated for Sl No) */
 .edit-data-table th:nth-child(1),
-.edit-data-table td:nth-child(1) { width: 12%; } /* Date */
+.edit-data-table td:nth-child(1) { width: 6%; } /* Sl No */
 
 .edit-data-table th:nth-child(2),
-.edit-data-table td:nth-child(2) { width: 12%; } /* Time */
+.edit-data-table td:nth-child(2) { width: 10%; } /* Date */
 
 .edit-data-table th:nth-child(3),
-.edit-data-table td:nth-child(3) { width: 26%; } /* Course */
+.edit-data-table td:nth-child(3) { width: 10%; } /* Time */
 
 .edit-data-table th:nth-child(4),
-.edit-data-table td:nth-child(4) { width: 18%; } /* RegNo */
+.edit-data-table td:nth-child(4) { width: 24%; } /* Course */
 
 .edit-data-table th:nth-child(5),
-.edit-data-table td:nth-child(5) { width: 20%; } /* Name */
+.edit-data-table td:nth-child(5) { width: 18%; } /* RegNo */
+
+.edit-data-table th:nth-child(6),
+.edit-data-table td:nth-child(6) { width: 20%; } /* Name */
 
 .edit-data-table th.actions-cell,
 .edit-data-table td.actions-cell {
