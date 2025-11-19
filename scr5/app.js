@@ -298,87 +298,139 @@ async function createNewCollege(user) {
 }
 
 // DOWNLOAD
-async function syncDataFromCloud(collegeId) {
-    updateSyncStatus("Loading...", "neutral");
-    const { db, doc, getDoc } = window.firebase;
+// 5. CLOUD DOWNLOAD FUNCTION (Split Strategy)
+function syncDataFromCloud(collegeId) {
+    updateSyncStatus("Connecting...", "neutral");
+    const { db, doc, onSnapshot } = window.firebase;
     
-    try {
-        const docRef = doc(db, "colleges", collegeId);
-        const docSnap = await getDoc(docRef);
-
+    // Listener 1: Main Settings
+    const mainRef = doc(db, "colleges", collegeId);
+    
+    const unsubMain = onSnapshot(mainRef, async (docSnap) => {
         if (docSnap.exists()) {
-            currentCollegeData = docSnap.data(); // Store full object for Admin check
+            const mainData = docSnap.data();
+            currentCollegeData = mainData; // Store for permissions
+
+            // Check Permissions
+            if (currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email)) {
+                if(adminBtn) adminBtn.classList.remove('hidden');
+            } else {
+                if(adminBtn) adminBtn.classList.add('hidden');
+            }
+
+            // Prevent loop
+            const localTime = localStorage.getItem('lastUpdated');
+            if (localTime && mainData.lastUpdated && localTime === mainData.lastUpdated) {
+                return; 
+            }
+
+            console.log("☁️ Main config received.");
             
-            // 1. Update LocalStorage
-            const keysToSync = [
-                'examRoomConfig', 'examCollegeName', 'examAbsenteeList', 
-                'examQPCodes', 'examBaseData', 'examRoomAllotment', 
-                'examScribeList', 'examScribeAllotment'
-            ];
-            
-            let dataFound = false;
-            keysToSync.forEach(key => {
-                if (currentCollegeData[key]) {
-                    localStorage.setItem(key, currentCollegeData[key]);
-                    dataFound = true;
-                }
+            // Save Main Keys
+            ['examRoomConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList', 'lastUpdated'].forEach(key => {
+                if (mainData[key]) localStorage.setItem(key, mainData[key]);
             });
 
-            // 2. Check Admin Status
-            if (currentCollegeData.admins && currentCollegeData.admins.includes(currentUser.email)) {
-                adminBtn.classList.remove('hidden'); // Show Team button
-            } else {
-                adminBtn.classList.add('hidden');
+            // FETCH BULK DATA (One-time fetch to save bandwidth, or listener?)
+            // Let's use a listener for bulk too so it stays in sync
+            const bulkRef = doc(db, "colleges", collegeId, "data", "bulk");
+            
+            // We use getDoc for bulk to avoid double-refreshing UI, 
+            // OR we can nest the listener. Let's use getDoc for simplicity on 'main' change.
+            try {
+                const bulkSnap = await window.firebase.getDoc(bulkRef);
+                if (bulkSnap.exists()) {
+                    const bulkData = bulkSnap.data();
+                    console.log("☁️ Bulk data received.");
+                    ['examBaseData', 'examRoomAllotment'].forEach(key => {
+                        if (bulkData[key]) localStorage.setItem(key, bulkData[key]);
+                    });
+                }
+            } catch (err) {
+                console.error("Bulk fetch error", err);
             }
 
+            // Refresh UI
             updateSyncStatus("Synced", "success");
-            if(dataFound) {
-                 // Only reload if it was an initial load, otherwise it loops? 
-                 // Better: Just call loadInitialData() to refresh UI without page reload
-                 loadInitialData(); 
-                 console.log("UI Refreshed from Cloud");
+            console.log("Refreshing UI...");
+            loadInitialData();
+             if (!viewRoomAllotment.classList.contains('hidden') && allotmentSessionSelect.value) {
+                 allotmentSessionSelect.dispatchEvent(new Event('change'));
             }
+
+        } else {
+            updateSyncStatus("No Data", "neutral");
         }
-    } catch (e) {
-        console.error("Sync Down Error:", e);
+    }, (error) => {
+        console.error("Sync Error:", error);
         updateSyncStatus("Net Error", "error");
-    }
+    });
 }
 
-// UPLOAD
+// 4. CLOUD UPLOAD FUNCTION (Split Strategy)
 async function syncDataToCloud() {
     if (!currentUser || !currentCollegeId) return;
     if (isSyncing) return;
+    
     isSyncing = true;
     updateSyncStatus("Saving...", "neutral");
 
-    const { db, doc, updateDoc } = window.firebase; // Use updateDoc to avoid overwriting users array
+    const { db, doc, writeBatch } = window.firebase; 
     
-    const updateData = {};
-    const keysToSync = [
-        'examRoomConfig', 'examCollegeName', 'examAbsenteeList', 
-        'examQPCodes', 'examBaseData', 'examRoomAllotment', 
-        'examScribeList', 'examScribeAllotment'
-    ];
-    keysToSync.forEach(key => {
+    // 1. Prepare MAIN Data (Small Settings)
+    const mainData = { lastUpdated: new Date().toISOString() };
+    const mainKeys = ['examRoomConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList'];
+    
+    mainKeys.forEach(key => {
         const val = localStorage.getItem(key);
-        if(val) updateData[key] = val;
+        if(val) mainData[key] = val;
     });
+
+    // 2. Prepare BULK Data (Students & Allotments)
+    const bulkData = {};
+    const bulkKeys = ['examBaseData', 'examRoomAllotment'];
     
-    updateData.lastUpdated = new Date().toISOString();
+    bulkKeys.forEach(key => {
+        const val = localStorage.getItem(key);
+        if(val) bulkData[key] = val;
+    });
 
     try {
-        const docRef = doc(db, "colleges", currentCollegeId);
-        await updateDoc(docRef, updateData);
+        const batch = writeBatch(db);
+        
+        // Ref to Main Doc
+        const mainRef = doc(db, "colleges", currentCollegeId);
+        batch.update(mainRef, mainData);
+
+        // Ref to Bulk Doc (Sub-collection)
+        // We store large data in: colleges/ID/data/bulk
+        const bulkRef = doc(db, "colleges", currentCollegeId, "data", "bulk");
+        batch.set(bulkRef, bulkData); // Use set() to create if missing
+
+        await batch.commit();
+        
+        console.log("Data synced to cloud (Split Mode)!");
         updateSyncStatus("Saved", "success");
     } catch (e) {
         console.error("Sync Up Error:", e);
-        updateSyncStatus("Save Fail", "error");
+        // If update fails (e.g., doc doesn't exist yet), try set for main doc
+        if (e.code === 'not-found') {
+             // Fallback for very first save
+             try {
+                 await window.firebase.setDoc(window.firebase.doc(db, "colleges", currentCollegeId), mainData);
+                 await window.firebase.setDoc(window.firebase.doc(db, "colleges", currentCollegeId, "data", "bulk"), bulkData);
+                 updateSyncStatus("Saved", "success");
+             } catch (retryErr) {
+                 console.error("Retry failed", retryErr);
+                 updateSyncStatus("Save Fail", "error");
+             }
+        } else {
+            updateSyncStatus("Save Fail", "error");
+        }
     } finally {
         isSyncing = false;
     }
 }
-
 // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
 
 adminBtn.addEventListener('click', () => {
