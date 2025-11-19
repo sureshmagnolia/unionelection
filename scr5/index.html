@@ -3,28 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UOC Exam Management V10.7</title> 
-   <script src="tailwind.js"></script>
-        <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <title>UOC Exam Management V10.8 (Cloud Sync)</title> 
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-        <link rel="stylesheet" href="style.css">
+    
+    <link rel="stylesheet" href="style.css">
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Your provided configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
+            authDomain: "examflow-de08f.firebaseapp.com",
+            projectId: "examflow-de08f",
+            storageBucket: "examflow-de08f.firebasestorage.app",
+            messagingSenderId: "1094663914110",
+            appId: "1:1094663914110:web:50c4f206f2053a873f0e2f",
+            measurementId: "G-8S6GE8Q7NR"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        // Expose Firebase tools to the window so app.js can use them
+        window.firebase = { auth, db, provider, signInWithPopup, signOut, onAuthStateChanged, doc, getDoc, setDoc };
+        console.log("Firebase Initialized");
+    </script>
 </head>
 <body class="bg-gray-100 font-sans flex flex-col h-screen">
 
-<header class="w-full bg-gray-900 text-white p-4 shadow-lg flex items-center gap-4 shrink-0">
-    <button id="sidebar-toggle" class="text-gray-300 hover:text-white focus:outline-none">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-        </svg>
-    </button>
-    
-    <h1 class="text-2xl font-bold text-white">ExamFlow</h1>
+<header class="w-full bg-gray-900 text-white p-4 shadow-lg flex items-center justify-between shrink-0 z-50">
+    <div class="flex items-center gap-4">
+        <button id="sidebar-toggle" class="text-gray-300 hover:text-white focus:outline-none">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+        </button>
+        <h1 class="text-2xl font-bold text-white">ExamFlow <span class="text-xs font-normal text-gray-400 ml-2">v10.8 Cloud</span></h1>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <div id="user-info" class="text-sm text-right hidden">
+            <div id="user-name" class="font-bold text-white">User</div>
+            <div id="sync-status" class="text-xs text-green-400">Synced</div>
+        </div>
+        <button id="login-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-2 rounded transition">
+            Google Login
+        </button>
+        <button id="logout-btn" class="hidden bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-2 rounded transition">
+            Logout
+        </button>
+    </div>
 </header>
 
 <div class="flex flex-1 overflow-hidden">
 
-    <nav id="main-nav" class="w-64 bg-gray-900 text-gray-300 p-4 space-y-2 overflow-y-auto shadow-lg shrink-0">
-            <button id="nav-extractor" class="nav-button nav-button-active">
+    <nav id="main-nav" class="w-64 bg-gray-900 text-gray-300 p-4 space-y-2 overflow-y-auto shadow-lg shrink-0 transition-all duration-300">
+        
+        <button id="nav-extractor" class="nav-button nav-button-active">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
             <span>Data</span>
         </button>
@@ -65,7 +110,6 @@
     </nav>
 
     <main class="flex-1 overflow-y-auto">
-
         <div id="view-extractor" class="container max-w-2xl mx-auto p-4 min-h-screen">
         <div class="bg-white p-8 rounded-lg shadow-xl w-full">
             
@@ -140,8 +184,8 @@
             </div>
     </div>
 
-<div id="view-edit-data" class="w-full mx-auto p-4 min-h-screen hidden">
-    <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+    <div id="view-edit-data" class="w-full mx-auto p-4 min-h-screen hidden">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-full">
             <h1 class="text-3xl font-bold text-gray-800 mb-6">Edit Student Data</h1>
 
             <div id="edit-data-content-wrapper" class="hidden">
