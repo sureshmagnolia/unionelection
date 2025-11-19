@@ -1114,8 +1114,7 @@ function checkManualAllotment(sessionKey) {
 
 // --- 1. Event listener for the "Generate Room-wise Report" button ---
 generateReportButton.addEventListener('click', async () => {
-    const sessionKey = reportsSessionSelect.value; 
-    if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     
     generateReportButton.disabled = true;
     generateReportButton.textContent = "Allocating Rooms & Generating Report...";
@@ -1200,19 +1199,19 @@ generateReportButton.addEventListener('click', async () => {
         sortedSessionKeys.forEach(key => {
             const session = sessions[key];
             
-            // Get location
+            // Get location for this room
             const roomInfo = currentRoomConfig[session.Room];
             const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
             const locationHtml = location ? `<div class="report-location-header">Location: ${location}</div>` : "";
 
-            // Get Serial Number
+            // Get Room Serial Number
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
             const serialNo = roomSerialMap[session.Room] || '-';
 
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
 
-            // --- Prepare Course Summary (UPDATED: No Bold, Smaller Font) ---
+            // --- Prepare Course Summary & QP Split-up ---
             let courseSummaryHtml = '';
             const uniqueQPCodesInRoom = new Set();
 
@@ -1225,8 +1224,6 @@ generateReportButton.addEventListener('click', async () => {
                 else uniqueQPCodesInRoom.add(courseName.substring(0, 15)); 
 
                 const qpDisplay = qpCode ? ` (QP: ${qpCode})` : "";
-                
-                // *** FIX: Removed 'font-weight: bold' and set font-size to 9pt ***
                 courseSummaryHtml += `<div style="font-size: 9pt; margin-bottom: 2px;">${courseName}${qpDisplay}: <strong>${count}</strong></div>`; 
             }
             
@@ -1237,10 +1234,11 @@ generateReportButton.addEventListener('click', async () => {
             });
             // --------------------------------------------
             
+            // *** FIX: Removed ${session.Room} from the header below ***
             const pageHeaderHtml = `
                 <div class="print-header-group">
                     <h1>${currentCollegeName}</h1> 
-                    <h2>${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time} &nbsp;|&nbsp; ${session.Room}</h2>
+                    <h2>${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
                     ${locationHtml} 
                 </div>
             `;
@@ -1264,17 +1262,19 @@ generateReportButton.addEventListener('click', async () => {
             const scribeFootnote = hasScribe ? '<div class="scribe-footnote">* = Scribe Assistance</div>' : '';
 
             const invigilatorFooterHtml = `
-                <div class="invigilator-footer" style="margin-top: 1.5rem;"> <div class="course-summary-footer" style="padding: 6px;">
+                <div class="invigilator-footer" style="margin-top: 1.5rem;">
+                    <div class="course-summary-footer" style="padding: 6px;">
                         <strong style="font-size: 10pt;">Course Summary:</strong>
                         <div style="margin-top: 4px;">${courseSummaryHtml}</div>
                     </div>
                     
-                    <div style="font-size: 9pt; line-height: 1.4;"> <div><strong>Answer Booklets Received:</strong> _________________</div>
+                    <div style="font-size: 9pt; line-height: 1.4;">
+                        <div><strong>Answer Booklets Received:</strong> _________________</div>
                         <div><strong>Answer Booklets Used:</strong> _________________</div>
                         
                         <div style="margin-top: 4px; margin-bottom: 4px;">
                             <strong>Answer Booklets Returned (Balance):</strong><br>
-                            <div style="margin-top: 4px;">
+                            <div style="margin-top: 6px; line-height: 1.8;">
                                 ${qpBalanceHtml}
                                 <span style="font-weight: bold; white-space: nowrap;">Total: __________</span>
                             </div>
@@ -1342,7 +1342,6 @@ generateReportButton.addEventListener('click', async () => {
             }
             
             const studentsWithIndex = session.students.sort((a, b) => a.seatNumber - b.seatNumber);
-            
             const studentsPage1 = studentsWithIndex.slice(0, 20); 
             const studentsPage2 = studentsWithIndex.slice(20);
 
