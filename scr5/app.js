@@ -169,7 +169,156 @@ function debounce(func, delay) {
         timeout = setTimeout(() => func.apply(context, args), delay);
     };
 }
+// --- FIREBASE SYNC & AUTH LOGIC ---
 
+const loginBtn = document.getElementById('login-btn');
+const logoutBtn = document.getElementById('logout-btn');
+const userInfoDiv = document.getElementById('user-info');
+const userNameDisplay = document.getElementById('user-name');
+const syncStatusDisplay = document.getElementById('sync-status');
+
+let currentUser = null;
+let isSyncing = false;
+
+// Helper to update Sync UI
+function updateSyncStatus(status, type = 'neutral') {
+    if (!syncStatusDisplay) return;
+    syncStatusDisplay.textContent = status;
+    if (type === 'success') {
+        syncStatusDisplay.className = 'text-xs text-green-400';
+    } else if (type === 'error') {
+        syncStatusDisplay.className = 'text-xs text-red-400';
+    } else {
+        syncStatusDisplay.className = 'text-xs text-yellow-400';
+    }
+}
+
+// 1. Login Handler
+if (loginBtn) {
+    loginBtn.addEventListener('click', () => {
+        const { auth, provider, signInWithPopup } = window.firebase;
+        signInWithPopup(auth, provider)
+            .then((result) => {
+                console.log("Logged in:", result.user);
+                // Auth listener will handle the rest
+            }).catch((error) => {
+                console.error(error);
+                alert("Login Failed: " + error.message);
+            });
+    });
+}
+
+// 2. Logout Handler
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        const { auth, signOut } = window.firebase;
+        if (confirm("Log out?")) {
+            signOut(auth).then(() => {
+                console.log("Logged out");
+                location.reload(); // Reload to clear memory
+            });
+        }
+    });
+}
+
+// 3. Auth State Listener (Runs automatically)
+if (window.firebase && window.firebase.auth) {
+    const { auth, onAuthStateChanged } = window.firebase;
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            // Update UI
+            loginBtn.classList.add('hidden');
+            logoutBtn.classList.remove('hidden');
+            userInfoDiv.classList.remove('hidden');
+            userNameDisplay.textContent = user.displayName || "User";
+            
+            // Load Cloud Data
+            syncDataFromCloud(user);
+        } else {
+            currentUser = null;
+            loginBtn.classList.remove('hidden');
+            logoutBtn.classList.add('hidden');
+            userInfoDiv.classList.add('hidden');
+        }
+    });
+}
+
+// 4. CLOUD UPLOAD FUNCTION
+async function syncDataToCloud() {
+    if (!currentUser) return; // Only sync if logged in
+    if (isSyncing) return;
+    
+    isSyncing = true;
+    updateSyncStatus("Syncing...", "neutral");
+
+    const { db, doc, setDoc } = window.firebase;
+    
+    // Gather all data
+    const backupData = {};
+    ALL_DATA_KEYS.forEach(key => {
+        const data = localStorage.getItem(key);
+        if (data) backupData[key] = data;
+    });
+
+    backupData.lastUpdated = new Date().toISOString();
+    backupData.appVersion = "10.8";
+
+    try {
+        await setDoc(doc(db, "users", currentUser.uid), backupData);
+        console.log("Data synced to cloud!");
+        updateSyncStatus("Synced", "success");
+    } catch (e) {
+        console.error("Error syncing to cloud:", e);
+        updateSyncStatus("Sync Error", "error");
+    } finally {
+        isSyncing = false;
+    }
+}
+
+// 5. CLOUD DOWNLOAD FUNCTION
+async function syncDataFromCloud(user) {
+    updateSyncStatus("Loading...", "neutral");
+    const { db, doc, getDoc } = window.firebase;
+    
+    try {
+        const docRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            const cloudData = docSnap.data();
+            console.log("Cloud data found.");
+            
+            // Update LocalStorage
+            let dataFound = false;
+            ALL_DATA_KEYS.forEach(key => {
+                if (cloudData[key]) {
+                    localStorage.setItem(key, cloudData[key]);
+                    dataFound = true;
+                }
+            });
+            
+            if (dataFound) {
+                updateSyncStatus("Synced", "success");
+                // Reload the app state to reflect new data
+                loadInitialData();
+                alert("✅ Data synced from cloud successfully!");
+            } else {
+                updateSyncStatus("No Data", "neutral");
+            }
+        } else {
+            console.log("No cloud data found. First login?");
+            updateSyncStatus("Ready", "success");
+            // Optional: Upload current local data to initialize
+            if (localStorage.getItem(BASE_DATA_KEY)) {
+                syncDataToCloud();
+            }
+        }
+    } catch (e) {
+        console.error("Error fetching cloud data:", e);
+        updateSyncStatus("Error", "error");
+    }
+}
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
@@ -2207,6 +2356,7 @@ saveRoomConfigButton.addEventListener('click', () => {
         
         // V79: RE-RENDER the list to fix numbering and apply UX rules (remove button on last row only)
         loadRoomConfig();
+        syncDataToCloud(); // <--- ADD THIS
         
     } catch (e) {
         roomConfigStatus.textContent = "Error saving settings.";
@@ -2744,6 +2894,7 @@ addAbsenteeButton.addEventListener('click', () => {
     saveAbsenteeList(sessionKey);
     renderAbsenteeList();
     clearSearch();
+    syncDataToCloud(); // <--- ADD THIS
 });
 
 function loadAbsenteeList(sessionKey) {
@@ -2801,6 +2952,7 @@ function removeAbsentee(regNo) {
     currentAbsenteeList = currentAbsenteeList.filter(r => r !== regNo);
     saveAbsenteeList(sessionSelect.value);
     renderAbsenteeList();
+    syncDataToCloud(); // <--- ADD THIS
 }
 // --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
 
@@ -2966,6 +3118,7 @@ saveQpCodesButton.addEventListener('click', () => {
     qpCodeStatus.classList.add('text-green-600');
     qpCodeStatus.textContent = `QP Codes saved successfully!`;
     setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
+    syncDataToCloud(); // <--- ADD THIS
 });
 
 // V89: NEW INPUT STRATEGY
@@ -3439,6 +3592,7 @@ saveRoomAllotmentButton.addEventListener('click', () => {
     saveRoomAllotment();
     roomAllotmentStatus.textContent = 'Room allotment saved successfully!';
     setTimeout(() => { roomAllotmentStatus.textContent = ''; }, 2000);
+    syncDataToCloud(); // <--- ADD THIS
 });
 
 // --- END ROOM ALLOTMENT FUNCTIONALITY ---
@@ -3484,6 +3638,7 @@ function removeScribeStudent(regNo) {
     // Also re-render allotment list if that view is active
     if (allotmentSessionSelect.value) { // MODIFIED: Check the main allotment dropdown
         renderScribeAllotmentList(allotmentSessionSelect.value);
+    syncDataToCloud(); // <--- ADD THIS
     }
 }
 
@@ -3564,6 +3719,7 @@ addScribeStudentButton.addEventListener('click', () => {
     
     renderGlobalScribeList();
     clearScribeSearch();
+    syncDataToCloud(); // <--- ADD THIS
 });
 
 function clearScribeSearch() {
@@ -3771,6 +3927,7 @@ function selectScribeRoom(roomName) {
     scribeRoomModal.classList.add('hidden');
     renderScribeAllotmentList(sessionKey);
     studentToAllotScribeRoom = null;
+    syncDataToCloud(); // <--- ADD THIS
 }
 
 scribeCloseRoomModal.addEventListener('click', () => {
@@ -4100,6 +4257,7 @@ saveEditDataButton.addEventListener('click', () => {
         editDataStatus.textContent = 'All changes saved successfully!';
         setUnsavedChanges(false);
         setTimeout(() => { editDataStatus.textContent = ''; }, 3000);
+        syncDataToCloud(); // <--- ADD THIS
         
         // 4. Reload other parts of the app
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
