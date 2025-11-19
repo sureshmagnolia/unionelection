@@ -169,7 +169,7 @@ function debounce(func, delay) {
         timeout = setTimeout(() => func.apply(context, args), delay);
     };
 }
-// --- FIREBASE SYNC & AUTH LOGIC ---
+// --- FIREBASE MULTI-USER SYNC LOGIC ---
 
 const loginBtn = document.getElementById('login-btn');
 const logoutBtn = document.getElementById('logout-btn');
@@ -177,147 +177,288 @@ const userInfoDiv = document.getElementById('user-info');
 const userNameDisplay = document.getElementById('user-name');
 const syncStatusDisplay = document.getElementById('sync-status');
 
+// Admin UI Elements
+const adminBtn = document.getElementById('admin-btn');
+const adminModal = document.getElementById('admin-modal');
+const closeAdminModal = document.getElementById('close-admin-modal');
+const newUserEmailInput = document.getElementById('new-user-email');
+const addUserBtn = document.getElementById('add-user-btn');
+const userListContainer = document.getElementById('user-list');
+
 let currentUser = null;
+let currentCollegeId = null; // The shared document ID
+let currentCollegeData = null; // Holds the full data including permissions
 let isSyncing = false;
 
-// Helper to update Sync UI
-function updateSyncStatus(status, type = 'neutral') {
-    if (!syncStatusDisplay) return;
-    syncStatusDisplay.textContent = status;
-    if (type === 'success') {
-        syncStatusDisplay.className = 'text-xs text-green-400';
-    } else if (type === 'error') {
-        syncStatusDisplay.className = 'text-xs text-red-400';
-    } else {
-        syncStatusDisplay.className = 'text-xs text-yellow-400';
-    }
-}
+// --- 1. AUTHENTICATION ---
 
-// 1. Login Handler
 if (loginBtn) {
     loginBtn.addEventListener('click', () => {
         const { auth, provider, signInWithPopup } = window.firebase;
-        signInWithPopup(auth, provider)
-            .then((result) => {
-                console.log("Logged in:", result.user);
-                // Auth listener will handle the rest
-            }).catch((error) => {
-                console.error(error);
-                alert("Login Failed: " + error.message);
-            });
+        signInWithPopup(auth, provider).catch((error) => alert("Login Failed: " + error.message));
     });
 }
 
-// 2. Logout Handler
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
         const { auth, signOut } = window.firebase;
         if (confirm("Log out?")) {
-            signOut(auth).then(() => {
-                console.log("Logged out");
-                location.reload(); // Reload to clear memory
-            });
+            signOut(auth).then(() => location.reload());
         }
     });
 }
 
-// 3. Auth State Listener (Runs automatically)
-if (window.firebase && window.firebase.auth) {
-    const { auth, onAuthStateChanged } = window.firebase;
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            currentUser = user;
-            // Update UI
-            loginBtn.classList.add('hidden');
-            logoutBtn.classList.remove('hidden');
-            userInfoDiv.classList.remove('hidden');
-            userNameDisplay.textContent = user.displayName || "User";
-            
-            // Load Cloud Data
-            syncDataFromCloud(user);
-        } else {
-            currentUser = null;
-            loginBtn.classList.remove('hidden');
-            logoutBtn.classList.add('hidden');
-            userInfoDiv.classList.add('hidden');
-        }
-    });
-}
+// Auth Listener
+setTimeout(() => {
+    if (window.firebase && window.firebase.auth) {
+        const { auth, onAuthStateChanged } = window.firebase;
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                loginBtn.classList.add('hidden');
+                logoutBtn.classList.remove('hidden');
+                userInfoDiv.classList.remove('hidden');
+                userNameDisplay.textContent = user.displayName || "User";
+                
+                // START: Find or Create College
+                findMyCollege(user);
+            } else {
+                currentUser = null;
+                loginBtn.classList.remove('hidden');
+                logoutBtn.classList.add('hidden');
+                userInfoDiv.classList.add('hidden');
+                adminBtn.classList.add('hidden'); // Hide admin button
+            }
+        });
+    }
+}, 1000);
 
-// 4. CLOUD UPLOAD FUNCTION
-async function syncDataToCloud() {
-    if (!currentUser) return; // Only sync if logged in
-    if (isSyncing) return;
-    
-    isSyncing = true;
-    updateSyncStatus("Syncing...", "neutral");
+// --- 2. CORE SYNC FUNCTIONS ---
 
-    const { db, doc, setDoc } = window.firebase;
-    
-    // Gather all data
-    const backupData = {};
-    ALL_DATA_KEYS.forEach(key => {
-        const data = localStorage.getItem(key);
-        if (data) backupData[key] = data;
-    });
-
-    backupData.lastUpdated = new Date().toISOString();
-    backupData.appVersion = "10.8";
+async function findMyCollege(user) {
+    updateSyncStatus("Searching...", "neutral");
+    const { db, collection, query, where, getDocs, setDoc, doc } = window.firebase;
+    const email = user.email;
 
     try {
-        await setDoc(doc(db, "users", currentUser.uid), backupData);
-        console.log("Data synced to cloud!");
-        updateSyncStatus("Synced", "success");
+        // Query: Find any college where 'allowedUsers' array contains my email
+        // Note: This requires an index, but usually works for small arrays automatically
+        const collegesRef = window.firebase.collection(db, "colleges");
+        const q = window.firebase.query(collegesRef, window.firebase.where("allowedUsers", "array-contains", email));
+        const querySnapshot = await window.firebase.getDocs(q);
+
+        if (!querySnapshot.empty) {
+            // FOUND EXISTING COLLEGE
+            const collegeDoc = querySnapshot.docs[0]; // Use the first one found
+            currentCollegeId = collegeDoc.id;
+            console.log("Joined College:", currentCollegeId);
+            syncDataFromCloud(currentCollegeId);
+        } else {
+            // NO COLLEGE FOUND -> CREATE NEW ONE
+            console.log("No college found. Creating new...");
+            if(confirm("No existing college found for your account. Create a new Database for your team?")) {
+                await createNewCollege(user);
+            }
+        }
     } catch (e) {
-        console.error("Error syncing to cloud:", e);
-        updateSyncStatus("Sync Error", "error");
+        console.error("Error finding college:", e);
+        updateSyncStatus("Auth Error", "error");
+    }
+}
+
+async function createNewCollege(user) {
+    const { db, collection, addDoc } = window.firebase;
+    
+    // Prepare initial data from local storage
+    const initialData = {};
+    const keysToSync = [
+        'examRoomConfig', 'examCollegeName', 'examAbsenteeList', 
+        'examQPCodes', 'examBaseData', 'examRoomAllotment', 
+        'examScribeList', 'examScribeAllotment'
+    ];
+    keysToSync.forEach(key => {
+        const val = localStorage.getItem(key);
+        if(val) initialData[key] = val;
+    });
+
+    // Metadata
+    initialData.admins = [user.email];
+    initialData.allowedUsers = [user.email]; // CRITICAL for security rules
+    initialData.lastUpdated = new Date().toISOString();
+
+    try {
+        const docRef = await window.firebase.addDoc(window.firebase.collection(db, "colleges"), initialData);
+        currentCollegeId = docRef.id;
+        alert("✅ New College Database Created! You are the Admin.");
+        syncDataFromCloud(currentCollegeId); // Reload to confirm
+    } catch (e) {
+        console.error("Creation failed:", e);
+        alert("Failed to create database. " + e.message);
+    }
+}
+
+// DOWNLOAD
+async function syncDataFromCloud(collegeId) {
+    updateSyncStatus("Loading...", "neutral");
+    const { db, doc, getDoc } = window.firebase;
+    
+    try {
+        const docRef = doc(db, "colleges", collegeId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            currentCollegeData = docSnap.data(); // Store full object for Admin check
+            
+            // 1. Update LocalStorage
+            const keysToSync = [
+                'examRoomConfig', 'examCollegeName', 'examAbsenteeList', 
+                'examQPCodes', 'examBaseData', 'examRoomAllotment', 
+                'examScribeList', 'examScribeAllotment'
+            ];
+            
+            let dataFound = false;
+            keysToSync.forEach(key => {
+                if (currentCollegeData[key]) {
+                    localStorage.setItem(key, currentCollegeData[key]);
+                    dataFound = true;
+                }
+            });
+
+            // 2. Check Admin Status
+            if (currentCollegeData.admins && currentCollegeData.admins.includes(currentUser.email)) {
+                adminBtn.classList.remove('hidden'); // Show Team button
+            } else {
+                adminBtn.classList.add('hidden');
+            }
+
+            updateSyncStatus("Synced", "success");
+            if(dataFound) {
+                 // Only reload if it was an initial load, otherwise it loops? 
+                 // Better: Just call loadInitialData() to refresh UI without page reload
+                 loadInitialData(); 
+                 console.log("UI Refreshed from Cloud");
+            }
+        }
+    } catch (e) {
+        console.error("Sync Down Error:", e);
+        updateSyncStatus("Net Error", "error");
+    }
+}
+
+// UPLOAD
+async function syncDataToCloud() {
+    if (!currentUser || !currentCollegeId) return;
+    if (isSyncing) return;
+    isSyncing = true;
+    updateSyncStatus("Saving...", "neutral");
+
+    const { db, doc, updateDoc } = window.firebase; // Use updateDoc to avoid overwriting users array
+    
+    const updateData = {};
+    const keysToSync = [
+        'examRoomConfig', 'examCollegeName', 'examAbsenteeList', 
+        'examQPCodes', 'examBaseData', 'examRoomAllotment', 
+        'examScribeList', 'examScribeAllotment'
+    ];
+    keysToSync.forEach(key => {
+        const val = localStorage.getItem(key);
+        if(val) updateData[key] = val;
+    });
+    
+    updateData.lastUpdated = new Date().toISOString();
+
+    try {
+        const docRef = doc(db, "colleges", currentCollegeId);
+        await updateDoc(docRef, updateData);
+        updateSyncStatus("Saved", "success");
+    } catch (e) {
+        console.error("Sync Up Error:", e);
+        updateSyncStatus("Save Fail", "error");
     } finally {
         isSyncing = false;
     }
 }
 
-// 5. CLOUD DOWNLOAD FUNCTION
-async function syncDataFromCloud(user) {
-    updateSyncStatus("Loading...", "neutral");
-    const { db, doc, getDoc } = window.firebase;
+// --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
+
+adminBtn.addEventListener('click', () => {
+    renderUserList();
+    adminModal.classList.remove('hidden');
+});
+
+closeAdminModal.addEventListener('click', () => {
+    adminModal.classList.add('hidden');
+});
+
+function renderUserList() {
+    if (!currentCollegeData || !currentCollegeData.allowedUsers) return;
+    userListContainer.innerHTML = '';
+    
+    currentCollegeData.allowedUsers.forEach(email => {
+        const isAdmin = currentCollegeData.admins.includes(email);
+        const li = document.createElement('li');
+        li.className = "flex justify-between items-center bg-gray-50 p-2 rounded";
+        li.innerHTML = `
+            <span>${email} ${isAdmin ? '<span class="text-xs bg-blue-100 text-blue-800 px-1 rounded">Admin</span>' : ''}</span>
+            ${!isAdmin ? `<button class="text-red-500 hover:text-red-700" onclick="removeUser('${email}')">&times;</button>` : ''}
+        `;
+        userListContainer.appendChild(li);
+    });
+}
+
+// Add New User (Clerk)
+addUserBtn.addEventListener('click', async () => {
+    const newEmail = newUserEmailInput.value.trim();
+    if (!newEmail) return;
+    if (!newEmail.includes('@')) { alert("Invalid email"); return; }
+
+    const { db, doc, updateDoc, arrayUnion } = window.firebase;
     
     try {
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-            const cloudData = docSnap.data();
-            console.log("Cloud data found.");
-            
-            // Update LocalStorage
-            let dataFound = false;
-            ALL_DATA_KEYS.forEach(key => {
-                if (cloudData[key]) {
-                    localStorage.setItem(key, cloudData[key]);
-                    dataFound = true;
-                }
-            });
-            
-            if (dataFound) {
-                updateSyncStatus("Synced", "success");
-                // Reload the app state to reflect new data
-                loadInitialData();
-                alert("✅ Data synced from cloud successfully!");
-            } else {
-                updateSyncStatus("No Data", "neutral");
-            }
-        } else {
-            console.log("No cloud data found. First login?");
-            updateSyncStatus("Ready", "success");
-            // Optional: Upload current local data to initialize
-            if (localStorage.getItem(BASE_DATA_KEY)) {
-                syncDataToCloud();
-            }
+        const docRef = doc(db, "colleges", currentCollegeId);
+        await updateDoc(docRef, {
+            allowedUsers: arrayUnion(newEmail) // Atomically add email
+        });
+        
+        // Update local cache
+        if(!currentCollegeData.allowedUsers.includes(newEmail)) {
+             currentCollegeData.allowedUsers.push(newEmail);
         }
+        
+        newUserEmailInput.value = '';
+        renderUserList();
+        alert(`User ${newEmail} added! They can now log in with their Google Account to see this data.`);
     } catch (e) {
-        console.error("Error fetching cloud data:", e);
-        updateSyncStatus("Error", "error");
+        console.error("Add User Error:", e);
+        alert("Failed to add user: " + e.message);
     }
+});
+
+// Remove User
+window.removeUser = async function(email) {
+    if (!confirm(`Remove access for ${email}?`)) return;
+    
+    const { db, doc, updateDoc, arrayRemove } = window.firebase;
+    
+    try {
+        const docRef = doc(db, "colleges", currentCollegeId);
+        await updateDoc(docRef, {
+            allowedUsers: arrayRemove(email) // Atomically remove email
+        });
+        
+        // Update local cache
+        currentCollegeData.allowedUsers = currentCollegeData.allowedUsers.filter(e => e !== email);
+        renderUserList();
+    } catch (e) {
+        alert("Failed to remove: " + e.message);
+    }
+}
+
+// Helper for status UI
+function updateSyncStatus(status, type) {
+    if (!syncStatusDisplay) return;
+    syncStatusDisplay.textContent = status;
+    syncStatusDisplay.className = type === 'success' ? 'text-xs text-green-400' : (type === 'error' ? 'text-xs text-red-400' : 'text-xs text-yellow-400');
 }
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
