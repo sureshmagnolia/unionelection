@@ -1962,6 +1962,7 @@ function formatRegNoList(regNos) {
 }
         
 // --- (V56) Event listener for "Generate Absentee Statement" (Renamed) ---
+// --- (V56) Event listener for "Generate Absentee Statement" (Dynamic Font Scaling) ---
 generateAbsenteeReportButton.addEventListener('click', async () => {
     const sessionKey = sessionSelect.value;
     if (!sessionKey) {
@@ -1988,7 +1989,6 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         for (const student of sessionStudents) {
             const courseDisplay = student.Course;
             
-            // Use Base64 Key
             const courseKey = getBase64CourseKey(courseDisplay);
             if (!courseKey) continue; 
             
@@ -2030,7 +2030,27 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
             totalPages++;
             const qpData = qpGroups[qpCode];
             
-            // Build rows for each course under this QP Code
+            // --- DYNAMIC FONT CALCULATION ---
+            let totalStudentsInQP = 0;
+            Object.values(qpData.courses).forEach(c => {
+                totalStudentsInQP += c.present.length + c.absent.length;
+            });
+
+            let dynamicFontSize = '13pt';
+            let dynamicLineHeight = '1.6';
+
+            if (totalStudentsInQP > 150) {
+                dynamicFontSize = '9pt';
+                dynamicLineHeight = '1.3';
+            } else if (totalStudentsInQP > 100) {
+                dynamicFontSize = '10pt';
+                dynamicLineHeight = '1.4';
+            } else if (totalStudentsInQP > 60) {
+                dynamicFontSize = '11pt';
+                dynamicLineHeight = '1.5';
+            }
+            // ----------------------------------------
+
             const sortedCourses = Object.keys(qpData.courses).sort();
             let tableRowsHtml = '';
             
@@ -2039,18 +2059,17 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
                 const presentListHtml = formatRegNoList(courseData.present);
                 const absentListHtml = formatRegNoList(courseData.absent);
                 
-                // *** FIX: Added font-size: 13pt and line-height to register number cells ***
                 tableRowsHtml += `
                     <tr style="background-color: #f9fafb;">
                         <td colspan="2" style="font-weight: bold; border-bottom: 2px solid #ccc;">Course: ${courseData.name}</td>
                     </tr>
                     <tr>
                         <td style="vertical-align: top; width: 25%;"><strong>Present (${courseData.present.length})</strong></td>
-                        <td class="regno-list" style="vertical-align: top; font-size: 13pt; line-height: 1.6;">${presentListHtml}</td>
+                        <td class="regno-list" style="vertical-align: top; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight};">${presentListHtml}</td>
                     </tr>
                     <tr>
                         <td style="vertical-align: top;"><strong>Absent (${courseData.absent.length})</strong></td>
-                        <td class="regno-list" style="vertical-align: top; font-size: 13pt; line-height: 1.6;">${absentListHtml}</td>
+                        <td class="regno-list" style="vertical-align: top; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight};">${absentListHtml}</td>
                     </tr>
                 `;
             }
@@ -2067,7 +2086,6 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
                 </tr>
             `;
             
-            // *** FIX: Changed Title to "Statement of Answer Scripts" ***
             allPagesHtml += `
                 <div class="print-page">
                     <div class="print-header-group">
@@ -2103,11 +2121,10 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         reportStatus.textContent = `Generated ${totalPages} page(s) for ${sortedQpKeys.length} QP Codes.`;
         reportControls.classList.remove('hidden');
         roomCsvDownloadContainer.innerHTML = ""; 
-        // Updated report type name for clarity
         lastGeneratedReportType = `Statement_Answer_Scripts_${date.replace(/\./g, '_')}_${time.replace(/\s/g, '')}`; 
 
     } catch (e) {
-        console.error("Error generating report:", e);
+        console.error("Error generating absentee report:", e);
         reportStatus.textContent = "An error occurred while generating the report.";
         reportControls.classList.remove('hidden');
     } finally {
@@ -2116,7 +2133,6 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
     }
 });
 
-// *** UPDATED: Event listener for "Generate Scribe Report" ***
 
 // *** CORRECTED: Event listener for "Generate Scribe Report" ***
 generateScribeReportButton.addEventListener('click', async () => {
