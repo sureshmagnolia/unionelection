@@ -1500,8 +1500,7 @@ generateReportButton.addEventListener('click', async () => {
     }
 });
     
-// --- (V31) Event listener for "Seating Details" (Dense A4 Optimized) ---
-// --- (V32) Event listener for "Seating Details" (1 or 2 Col Support) ---
+// --- (V33) Event listener for "Seating Details" (2-Column Optimized) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateDaywiseReportButton.disabled = true;
@@ -1521,10 +1520,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         const colSelect = document.getElementById('reports-column-select');
         const NUM_COLS = colSelect ? parseInt(colSelect.value) : 1;
 
-        // Density Constants
-        const ROWS_PER_COLUMN = 44; 
-        const MAX_ROWS_PER_PAGE = ROWS_PER_COLUMN * NUM_COLS; 
-
         // 2. Split Data by Stream
         const dataByStream = {};
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
@@ -1543,7 +1538,13 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
-        
+
+        // --- HEIGHT CONSTANTS (Calibrated for A4) ---
+        const PAGE_MAX_HEIGHT = 920; // Points (approx safe area)
+        const ROW_HEIGHT = 20;       // Student Row
+        const HEADER_HEIGHT = 30;    // Course Header
+        const SPACER_HEIGHT = 10;    // Space between courses
+
         // MAIN LOOP
         for (const streamName of sortedStreamNames) {
             const streamData = dataByStream[streamName];
@@ -1563,8 +1564,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             sortedSessionKeys.forEach(key => {
                 const session = daySessions[key];
                 
-                // Prepare Flat List
-                const flatRows = [];
+                // Prepare Flat Items List (Headers + Students)
+                const flatItems = [];
                 const studentsByCourse = {};
                 session.students.forEach(s => {
                     if (!studentsByCourse[s.Course]) studentsByCourse[s.Course] = [];
@@ -1576,7 +1577,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     const courseStudents = studentsByCourse[courseName];
                     courseStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-                    flatRows.push({ type: 'header', text: courseName });
+                    flatItems.push({ type: 'header', text: courseName, height: HEADER_HEIGHT });
 
                     courseStudents.forEach(s => {
                         let roomName = s['Room No'];
@@ -1588,60 +1589,109 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                         
                         const roomInfo = currentRoomConfig[roomName] || {};
                         const location = roomInfo.location ? `(${roomInfo.location})` : "";
-                        
                         const locDisplay = location 
                             ? `<span class="font-bold text-black">${roomInfo.location}</span><br><span class="text-xs text-gray-600">(${roomName})</span>`
                             : `<span class="font-bold text-black">${roomName}</span>`;
 
-                        flatRows.push({
+                        flatItems.push({
                             type: 'student',
                             reg: s['Register Number'],
                             name: s.Name,
                             seat: s.isScribe ? 'Scribe' : s.seatNumber,
                             locationRaw: roomName,
                             locationDisplay: locDisplay,
-                            isScribe: s.isScribe
+                            isScribe: s.isScribe,
+                            height: ROW_HEIGHT
                         });
                     });
+                    // Add spacer after course
+                    flatItems.push({ type: 'spacer', height: SPACER_HEIGHT });
                 });
 
-                // Scribe Summary Rows
+                // Add Scribe Summary (if needed)
                 const sessionScribes = session.students.filter(s => s.isScribe);
                 if (sessionScribes.length > 0) {
-                    flatRows.push({ type: 'divider', text: "SCRIBE ASSISTANCE SUMMARY" });
+                    flatItems.push({ type: 'divider', text: "SCRIBE ASSISTANCE SUMMARY", height: 40 });
                     const scribeRows = prepareScribeSummaryRows(sessionScribes, session, allScribeAllotments);
-                    // Scribe rows are taller, count as 2 units? For simplicity, 1 unit
-                    scribeRows.forEach(r => flatRows.push(r));
+                    scribeRows.forEach(r => {
+                        r.height = Math.max(ROW_HEIGHT, 15 * r.studentCount); // Dynamic height estimate
+                        flatItems.push(r);
+                    });
                 }
 
-                // Page Builder
-                let currentPage = [];
-                let currentRowCount = 0;
+                // --- COLUMN FILLER ENGINE ---
+                let col1Items = [];
+                let col2Items = [];
+                let currentHeight1 = 0;
+                let currentHeight2 = 0;
+                let isFillingCol2 = false;
 
-                flatRows.forEach((row, index) => {
-                    let cost = 1;
-                    if (row.type === 'scribe-room') cost = Math.max(1, Math.ceil(row.studentCount / 3)); 
-
-                    if (currentRowCount + cost > MAX_ROWS_PER_PAGE && currentRowCount > 0) {
-                        allPagesHtml += renderDensePage(currentPage, streamName, session, NUM_COLS);
+                // Helper to render accumulated columns to a page
+                const flushPage = () => {
+                    if (col1Items.length > 0 || col2Items.length > 0) {
+                        allPagesHtml += render2ColPage(col1Items, col2Items, streamName, session, NUM_COLS);
                         totalPagesGenerated++;
-                        currentPage = [];
-                        currentRowCount = 0;
+                        col1Items = [];
+                        col2Items = [];
+                        currentHeight1 = 0;
+                        currentHeight2 = 0;
+                        isFillingCol2 = false; // Reset to Col 1
                     }
-                    currentPage.push(row);
-                    currentRowCount += cost;
+                };
+
+                flatItems.forEach(item => {
+                    if (NUM_COLS === 1) {
+                        // Single Column Mode: Just check Col 1 limit
+                        if (currentHeight1 + item.height > PAGE_MAX_HEIGHT) {
+                            flushPage();
+                        }
+                        col1Items.push(item);
+                        currentHeight1 += item.height;
+                    } else {
+                        // Two Column Mode
+                        if (!isFillingCol2) {
+                            // Try filling Column 1
+                            if (currentHeight1 + item.height <= PAGE_MAX_HEIGHT) {
+                                col1Items.push(item);
+                                currentHeight1 += item.height;
+                            } else {
+                                // Col 1 Full -> Switch to Col 2
+                                isFillingCol2 = true;
+                                // Add to Col 2 (Check if it fits there immediately)
+                                if (currentHeight2 + item.height <= PAGE_MAX_HEIGHT) {
+                                    col2Items.push(item);
+                                    currentHeight2 += item.height;
+                                } else {
+                                    // Item too big for empty Col 2? (Rare header case)
+                                    // Or just weird edge case. Start new page.
+                                    flushPage();
+                                    col1Items.push(item);
+                                    currentHeight1 += item.height;
+                                }
+                            }
+                        } else {
+                            // Filling Column 2
+                            if (currentHeight2 + item.height <= PAGE_MAX_HEIGHT) {
+                                col2Items.push(item);
+                                currentHeight2 += item.height;
+                            } else {
+                                // Col 2 Full -> Page Full -> Flush
+                                flushPage();
+                                // Put current item in Col 1 of NEW page
+                                col1Items.push(item);
+                                currentHeight1 += item.height;
+                            }
+                        }
+                    }
                 });
 
-                if (currentPage.length > 0) {
-                    allPagesHtml += renderDensePage(currentPage, streamName, session, NUM_COLS);
-                    totalPagesGenerated++;
-                }
+                flushPage(); // End of session
             });
         }
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} pages (${NUM_COLS} Column Mode).`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} pages (${NUM_COLS} Col Mode).`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Daywise_Seating_Details"; 
     } catch (e) {
@@ -1652,6 +1702,123 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
     }
 });
+
+// --- Helper: Render 2-Column Page ---
+function render2ColPage(col1, col2, streamName, session, numCols) {
+    const renderTable = (items) => {
+        if (!items || items.length === 0) return "";
+
+        // Calculate Rowspans
+        const locSpans = new Array(items.length).fill(0);
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type !== 'student') { locSpans[i] = 1; continue; }
+            if (locSpans[i] === -1) continue;
+            let span = 1;
+            for (let j = i + 1; j < items.length; j++) {
+                if (items[j].type === 'student' && items[j].locationRaw === items[i].locationRaw) {
+                    span++; locSpans[j] = -1;
+                } else { break; }
+            }
+            locSpans[i] = span;
+        }
+
+        let html = "";
+        items.forEach((row, idx) => {
+            if (row.type === 'header') {
+                html += `
+                    <tr class="bg-gray-200 print:bg-gray-200">
+                        <td colspan="4" style="font-weight: bold; font-size: 0.9em; padding: 2px 4px; border: 1px solid #000; text-align: left; border-top: 2px solid #000;">
+                            ${row.text}
+                        </td>
+                    </tr>`;
+            } else if (row.type === 'student') {
+                const sClass = row.isScribe ? 'font-bold text-orange-700' : '';
+                let locCell = '';
+                if (locSpans[idx] > 0) {
+                    const rs = locSpans[idx] > 1 ? `rowspan="${locSpans[idx]}"` : '';
+                    locCell = `<td ${rs} style="border: 1px solid #000; padding: 2px; width: 25%; vertical-align: middle; text-align: center; background-color: #fff; font-size:0.85em;">${row.locationDisplay}</td>`;
+                }
+                html += `
+                    <tr class="${sClass}">
+                        ${locCell}
+                        <td style="border: 1px solid #000; padding: 2px; width: 20%; text-align:left; font-size: 0.9em;">${row.reg}</td>
+                        <td style="border: 1px solid #000; padding: 2px 4px; width: 45%; font-size: 0.85em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">${row.name}</td>
+                        <td style="border: 1px solid #000; padding: 2px; width: 10%; text-align: center; font-weight: bold; font-size: 0.9em;">${row.seat}</td>
+                    </tr>`;
+            } else if (row.type === 'divider') {
+                html += `<tr><td colspan="4" style="border-bottom: 3px double #000; font-weight: bold; text-align: center; padding: 10px 0 2px;">${row.text}</td></tr>`;
+            } else if (row.type === 'scribe-room') {
+                html += `<tr><td colspan="4" style="border: 1px solid #000; padding: 4px; font-size: 0.85em;"><strong>${row.roomDisplay}:</strong> ${row.content} (${row.studentCount})</td></tr>`;
+            } else if (row.type === 'spacer') {
+                // Empty row for spacing
+                html += `<tr><td colspan="4" style="height:8px; border:0;"></td></tr>`;
+            }
+        });
+        return html;
+    };
+
+    let bodyContent = "";
+    const tableHeader = `
+        <thead>
+            <tr style="background-color: #f3f4f6; border-bottom: 2px solid #000;">
+                <th style="border: 1px solid #000; padding: 2px;">Loc</th>
+                <th style="border: 1px solid #000; padding: 2px;">Reg No</th>
+                <th style="border: 1px solid #000; padding: 2px;">Name</th>
+                <th style="border: 1px solid #000; padding: 2px;">St</th>
+            </tr>
+        </thead>`;
+
+    if (numCols === 1) {
+        bodyContent = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
+                ${tableHeader}
+                <tbody>${renderTable(col1)}</tbody>
+            </table>`;
+    } else {
+        bodyContent = `
+            <div style="display: flex; gap: 15px; width: 100%;">
+                <div style="flex: 1;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                        ${tableHeader}
+                        <tbody>${renderTable(col1)}</tbody>
+                    </table>
+                </div>
+                <div style="flex: 1;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                        ${tableHeader}
+                        <tbody>${renderTable(col2)}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+
+    return `
+        <div class="print-page print-page-daywise" style="height: 100%; display: flex; flex-direction: column;">
+            <div class="print-header-group" style="margin-bottom: 6px; border-bottom: 2px solid #000; padding-bottom: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h1 style="font-size: 14pt; font-weight: bold; margin: 0;">${currentCollegeName}</h1>
+                        <h2 style="font-size: 11pt; margin: 0;">Seating Details: ${session.Date} (${session.Time})</h2>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 1px 6px; display: inline-block;">
+                            ${streamName}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="flex-grow: 1;">
+                ${bodyContent}
+            </div>
+            
+            <div style="margin-top: auto; padding-top: 5px; font-size: 8pt; text-align: center; color: #666;">
+                Page Generated by ExamFlow
+            </div>
+        </div>
+    `;
+}
+
 
 // --- Helper: Render Dense Page (1 or 2 Cols) ---
 function renderDensePage(rows, streamName, session, numCols) {
