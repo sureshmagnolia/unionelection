@@ -3915,21 +3915,25 @@ window.deleteRoom = function(index) {
     }
 };
 
-// Show room selection modal
 // Show room selection modal (Updated with Stream Selector)
+// Show room selection modal (Smart Stream Selector)
 function showRoomSelectionModal() {
     getRoomCapacitiesFromStorage();
     roomSelectionList.innerHTML = '';
 
-    // 1. Create Stream Selector UI inside the modal
-    const streamSelectHtml = `
-        <div class="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Fill Room with Stream:</label>
-            <select id="allotment-stream-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
-                ${currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('')}
-            </select>
-        </div>
-    `;
+    // 1. Create Stream Selector UI (Only if multiple streams exist)
+    let streamSelectHtml = '';
+    if (currentStreamConfig.length > 1) {
+        streamSelectHtml = `
+            <div class="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Fill Room with Stream:</label>
+                <select id="allotment-stream-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                    ${currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('')}
+                </select>
+            </div>
+        `;
+    }
+    // If 1 stream, we don't show HTML, but we default to index 0 later
     roomSelectionList.insertAdjacentHTML('beforeend', streamSelectHtml);
 
     // 2. List Rooms
@@ -3956,8 +3960,10 @@ function showRoomSelectionModal() {
         
         if (!isAllotted) {
             roomOption.onclick = () => {
-                // Capture the selected stream when room is clicked
-                const selectedStream = document.getElementById('allotment-stream-select').value;
+                // Smart Capture: If dropdown exists, use value. Else use default stream.
+                const streamEl = document.getElementById('allotment-stream-select');
+                const selectedStream = streamEl ? streamEl.value : currentStreamConfig[0];
+                
                 selectRoomForAllotment(roomName, room.capacity, selectedStream);
             };
         }
@@ -5708,22 +5714,46 @@ async function findMyCollege(user) {
         });
     }
 
-// Populate Dropdowns (Safe Version)
+// Populate Dropdowns (Smart Visibility)
     function populateStreamDropdowns() {
-        // Safety Net: If list is empty for any reason, pretend "Regular" exists
         const streamsToRender = (currentStreamConfig && currentStreamConfig.length > 0) 
                                 ? currentStreamConfig 
                                 : ["Regular"];
 
         const optionsHtml = streamsToRender.map(s => `<option value="${s}">${s}</option>`).join('');
         
-        if (csvStreamSelect) csvStreamSelect.innerHTML = optionsHtml;
-        if (pdfStreamSelect) pdfStreamSelect.innerHTML = optionsHtml;
+        // Logic: Only show if more than 1 stream exists
+        const shouldShow = streamsToRender.length > 1;
+
+        // 1. CSV Dropdown
+        if (csvStreamSelect) {
+            csvStreamSelect.innerHTML = optionsHtml;
+            const wrapper = document.getElementById('csv-stream-wrapper');
+            if (wrapper) {
+                if (shouldShow) wrapper.classList.remove('hidden');
+                else wrapper.classList.add('hidden');
+            }
+        }
+
+        // 2. PDF Dropdown
+        if (pdfStreamSelect) {
+            pdfStreamSelect.innerHTML = optionsHtml;
+            const wrapper = document.getElementById('pdf-stream-wrapper');
+            if (wrapper) {
+                if (shouldShow) wrapper.classList.remove('hidden');
+                else wrapper.classList.add('hidden');
+            }
+        }
         
-        // Report Filter
+        // 3. Report Filter
         const reportStreamSelect = document.getElementById('reports-stream-select');
+        const reportWrapper = document.getElementById('reports-stream-dropdown-container');
         if (reportStreamSelect) {
              reportStreamSelect.innerHTML = `<option value="all">All Streams (Combined)</option>` + optionsHtml;
+             if (reportWrapper) {
+                 if (shouldShow) reportWrapper.classList.remove('hidden');
+                 else reportWrapper.classList.add('hidden');
+             }
         }
     }
 
