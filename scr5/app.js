@@ -1501,10 +1501,21 @@ generateReportButton.addEventListener('click', async () => {
 });
     
 // --- (V40) Event listener for "Seating Details" (Final Fixed Page Numbers) ---
-generateDaywiseReportButton.addEventListener('click', async () => {
-    const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
-    generateDaywiseReportButton.disabled = true;
-    generateDaywiseReportButton.textContent = "Generating Final Layout...";
+// ==========================================
+// 📋 NOTICE BOARD REPORT LOGIC (1 & 2 Column)
+// ==========================================
+
+// 1. Define the Shared Generator Function
+async function generateNoticeBoardReport(numCols) {
+    const sessionKey = reportsSessionSelect.value; 
+    if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+    
+    // UI Feedback
+    const btn = numCols === 1 ? 
+        document.getElementById('generate-daywise-1col-btn') : 
+        document.getElementById('generate-daywise-2col-btn');
+    
+    if(btn) btn.disabled = true;
     reportOutputArea.innerHTML = "";
     reportControls.classList.add('hidden');
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -1516,12 +1527,10 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         const baseData = getFilteredReportData('day-wise');
         if (baseData.length === 0) { alert("No data found."); return; }
 
-        const colSelect = document.getElementById('reports-column-select');
-        const NUM_COLS = colSelect ? parseInt(colSelect.value) : 2;
-
-        // --- STRICT ROW LIMITS ---
-        const MAX_ITEMS_PER_COL = 32; 
-
+        // --- SETTINGS ---
+        const MAX_ROWS_PER_COL = 40; // Perfect fit for A4
+        
+        // Split by Stream
         const dataByStream = {};
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
@@ -1558,7 +1567,9 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
             sortedSessionKeys.forEach(key => {
                 const session = daySessions[key];
-                const flatItems = [];
+                
+                // 1. Flatten Data into a "Print Queue"
+                const printQueue = [];
                 
                 const studentsByCourse = {};
                 session.students.forEach(s => {
@@ -1571,7 +1582,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     const courseStudents = studentsByCourse[courseName];
                     courseStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-                    flatItems.push({ type: 'header', text: courseName });
+                    // Header Row
+                    printQueue.push({ type: 'header', text: courseName });
 
                     courseStudents.forEach(s => {
                         let roomName = s['Room No'];
@@ -1583,112 +1595,107 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                         const roomInfo = currentRoomConfig[roomName] || {};
                         const location = roomInfo.location ? `(${roomInfo.location})` : "";
                         const serial = roomSerialMap[roomName] || "";
+                        
+                        // Location Display
                         const locDisplay = location 
                             ? `<b>${serial} | ${roomInfo.location}</b><br><span style="font-size:0.75em">(${roomName})</span>`
                             : `<b>${serial} | ${roomName}</b>`;
 
-                        flatItems.push({
+                        printQueue.push({
                             type: 'student',
                             reg: s['Register Number'],
                             name: s.Name,
                             seat: s.isScribe ? 'Scribe' : s.seatNumber,
-                            locationRaw: roomName,
+                            locationRaw: roomName, // Used for merging logic
                             locationDisplay: locDisplay,
                             isScribe: s.isScribe
                         });
                     });
-                    flatItems.push({ type: 'spacer' });
+                    // Spacer Row
+                    printQueue.push({ type: 'spacer' });
                 });
 
+                // Scribe Summary (Added to end of queue)
                 const sessionScribes = session.students.filter(s => s.isScribe);
                 if (sessionScribes.length > 0) {
-                    flatItems.push({ type: 'divider', text: "SCRIBE ASSISTANCE SUMMARY" });
+                    printQueue.push({ type: 'divider', text: "SCRIBE SUMMARY" });
                     const scribeRows = prepareScribeSummaryRows(sessionScribes, session, allScribeAllotments);
-                    scribeRows.forEach(r => flatItems.push(r));
+                    scribeRows.forEach(r => printQueue.push(r));
                 }
 
-                let col1Items = [];
-                let col2Items = [];
+                // 2. Page Filler Engine
+                let col1 = [];
+                let col2 = [];
                 
                 const flushPage = () => {
-                    if (col1Items.length > 0 || col2Items.length > 0) {
+                    if (col1.length > 0 || col2.length > 0) {
                         totalPagesGenerated++;
-                        let pageHtml = render2ColPage(col1Items, col2Items, streamName, session, NUM_COLS);
-                        
-                        // *** FIX: Use Regex to replace ALL occurrences of {{PAGE_NO}} ***
+                        let pageHtml = renderNoticePage(col1, col2, streamName, session, numCols);
                         pageHtml = pageHtml.replace(/{{PAGE_NO}}/g, totalPagesGenerated);
-                        
                         allPagesHtml += pageHtml;
-                        col1Items = []; col2Items = [];
+                        col1 = []; col2 = [];
                     }
                 };
 
-                flatItems.forEach(item => {
-                    if (NUM_COLS === 1) {
-                        if (col1Items.length >= MAX_ITEMS_PER_COL) flushPage();
-                        col1Items.push(item);
+                printQueue.forEach(item => {
+                    // Scribe rows consume 2 slots to ensure they fit nicely? 
+                    // For now, 1 slot = 1 row is simplest.
+                    
+                    if (numCols === 1) {
+                        if (col1.length >= MAX_ROWS_PER_COL) flushPage();
+                        col1.push(item);
                     } else {
-                        if (col1Items.length < MAX_ITEMS_PER_COL) {
-                            col1Items.push(item);
-                        } else if (col2Items.length < MAX_ITEMS_PER_COL) {
-                            col2Items.push(item);
-                        } else {
+                        // Fill Col 1 first
+                        if (col1.length < MAX_ROWS_PER_COL) {
+                            col1.push(item);
+                        } 
+                        // Then Fill Col 2
+                        else if (col2.length < MAX_ROWS_PER_COL) {
+                            col2.push(item);
+                        } 
+                        // Page Full -> Flush -> Start new page in Col 1
+                        else {
                             flushPage();
-                            col1Items.push(item);
+                            col1.push(item);
                         }
                     }
                 });
-                flushPage();
+                flushPage(); // Flush remaining items
             });
         }
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} Pages (Strict 32 Rows).`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} Pages (${numCols} Col).`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Daywise_Seating_Details"; 
     } catch (e) {
         console.error(e);
         alert("Error: " + e.message);
     } finally {
-        generateDaywiseReportButton.disabled = false;
-        generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
+        if(btn) btn.disabled = false;
     }
-});
-
-// --- Helper: Scribe Rows ---
-function prepareScribeSummaryRows(scribes, session, allotments) {
-    const scribesByRoom = {};
-    scribes.forEach(s => {
-        const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-        const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
-        if(!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
-        scribesByRoom[newRoom].push(s);
-    });
-    const rows = [];
-    Object.keys(scribesByRoom).sort().forEach(roomName => {
-        const students = scribesByRoom[roomName];
-        const studentList = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
-        const roomInfo = currentRoomConfig[roomName] || {};
-        const location = roomInfo.location ? `(${roomInfo.location})` : "";
-        rows.push({
-            type: 'scribe-room',
-            roomDisplay: `${roomName} ${location}`,
-            content: studentList,
-            studentCount: students.length
-        });
-    });
-    return rows;
 }
 
-// --- Helper: Render 2-Column Page ---
-function render2ColPage(col1, col2, streamName, session, numCols) {
-    const renderTable = (items) => {
-        if (!items || items.length === 0) return "";
+// 2. Attach Listeners to New Buttons
+const btn1Col = document.getElementById('generate-daywise-1col-btn');
+const btn2Col = document.getElementById('generate-daywise-2col-btn');
+
+if(btn1Col) btn1Col.addEventListener('click', () => generateNoticeBoardReport(1));
+if(btn2Col) btn2Col.addEventListener('click', () => generateNoticeBoardReport(2));
+
+
+// --- Helper: Render Page ---
+function renderNoticePage(col1, col2, streamName, session, numCols) {
+    
+    // Sub-helper to render a single column table
+    const renderColumn = (rows) => {
+        if (!rows || rows.length === 0) return "";
+        
         let html = "";
         let lastLocation = ""; 
 
-        items.forEach((row, idx) => {
+        rows.forEach((row, idx) => {
             if (row.type === 'header') {
                 html += `
                     <tr class="bg-gray-200 print:bg-gray-200">
@@ -1696,12 +1703,14 @@ function render2ColPage(col1, col2, streamName, session, numCols) {
                             ${row.text}
                         </td>
                     </tr>`;
-                lastLocation = ""; 
+                lastLocation = ""; // Reset merge on header
             } else if (row.type === 'student') {
                 const sClass = row.isScribe ? 'font-bold text-orange-700' : '';
+                
                 let locContent = "";
                 let rowBorder = "border-top: 1px solid #ddd;"; 
                 
+                // Visual Merge Logic
                 if (row.locationRaw !== lastLocation) {
                     locContent = row.locationDisplay;
                     rowBorder = "border-top: 2px solid #000;"; 
@@ -1743,40 +1752,38 @@ function render2ColPage(col1, col2, streamName, session, numCols) {
         bodyContent = `
             <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
                 ${tableHeader}
-                <tbody>${renderTable(col1)}</tbody>
+                <tbody>${renderColumn(col1)}</tbody>
             </table>`;
     } else {
+        // CSS Grid for perfect 2-column layout
         bodyContent = `
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; align-items: start;">
                 <div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
                         ${tableHeader}
-                        <tbody>${renderTable(col1)}</tbody>
+                        <tbody>${renderColumn(col1)}</tbody>
                     </table>
                 </div>
                 <div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
                         ${tableHeader}
-                        <tbody>${renderTable(col2)}</tbody>
+                        <tbody>${renderColumn(col2)}</tbody>
                     </table>
                 </div>
             </div>`;
     }
 
     return `
-        <div class="print-page print-page-daywise" style="height: 100%; position: relative;">
+        <div class="print-page print-page-daywise" style="height: 100%; display: flex; flex-direction: column;">
             
             <div class="print-header-group" style="width: 100%; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 5px; position: relative;">
-                
                 <div style="position: absolute; top: 0; left: 0; border: 2px solid #000; padding: 4px 10px; background: #fff;">
                     <span style="font-size: 10pt; font-weight: bold;">Page</span><br>
                     <span style="font-size: 16pt; font-weight: bold;">{{PAGE_NO}}</span>
                 </div>
-
                 <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px; background: #eee;">
                     ${streamName}
                 </div>
-
                 <div style="text-align: center; width: 100%;"> 
                     <h1 style="font-size: 16pt; font-weight: bold; margin: 0; text-transform: uppercase;">${currentCollegeName}</h1>
                     <h2 style="font-size: 12pt; margin: 4px 0 0 0; font-weight: bold;">Seating Details for Candidates</h2>
@@ -1784,16 +1791,64 @@ function render2ColPage(col1, col2, streamName, session, numCols) {
                 </div>
             </div>
             
-            <div style="width: 100%;">
+            <div style="flex-grow: 1;">
                 ${bodyContent}
-            </div>
-            
-            <div style="position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #eee; padding-top: 2px;">
-                Page {{PAGE_NO}} - Generated by ExamFlow System
             </div>
         </div>
     `;
 }
+
+// --- Helper: Scribe Rows (Needed by logic above) ---
+function prepareScribeSummaryRows(scribes, session, allotments) {
+    const scribesByRoom = {};
+    scribes.forEach(s => {
+        const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+        const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+        if(!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
+        scribesByRoom[newRoom].push(s);
+    });
+    const rows = [];
+    Object.keys(scribesByRoom).sort().forEach(roomName => {
+        const students = scribesByRoom[roomName];
+        const studentList = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
+        const roomInfo = currentRoomConfig[roomName] || {};
+        const location = roomInfo.location ? `(${roomInfo.location})` : "";
+        rows.push({
+            type: 'scribe-room',
+            roomDisplay: `${roomName} ${location}`,
+            content: studentList,
+            studentCount: students.length
+        });
+    });
+    return rows;
+}
+
+// --- Helper: Scribe Rows ---
+function prepareScribeSummaryRows(scribes, session, allotments) {
+    const scribesByRoom = {};
+    scribes.forEach(s => {
+        const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+        const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+        if(!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
+        scribesByRoom[newRoom].push(s);
+    });
+    const rows = [];
+    Object.keys(scribesByRoom).sort().forEach(roomName => {
+        const students = scribesByRoom[roomName];
+        const studentList = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
+        const roomInfo = currentRoomConfig[roomName] || {};
+        const location = roomInfo.location ? `(${roomInfo.location})` : "";
+        rows.push({
+            type: 'scribe-room',
+            roomDisplay: `${roomName} ${location}`,
+            content: studentList,
+            studentCount: students.length
+        });
+    });
+    return rows;
+}
+
+
 
 
 // --- Helper: Scribe Rows ---
@@ -7132,10 +7187,16 @@ async function findMyCollege(user) {
         disable_edit_data_tab(false);
 
         const reportBtns = [
-            'generate-report-button', 'generate-daywise-report-button',
-            'generate-qpaper-report-button', 'generate-qp-distribution-report-button',
-            'generate-scribe-report-button', 'generate-scribe-proforma-button',
-            'generate-invigilator-report-button', 'generate-absentee-report-button'
+            'generate-report-button',
+            'generate-daywise-1col-btn', // <--- Added
+            'generate-daywise-2col-btn', // <--- Added
+            'generate-daywise-report-button',
+            'generate-qpaper-report-button', 
+            'generate-qp-distribution-report-button',
+            'generate-scribe-report-button', 
+            'generate-scribe-proforma-button',
+            'generate-invigilator-report-button', 
+            'generate-absentee-report-button'
         ];
         reportBtns.forEach(id => {
             const btn = document.getElementById(id);
