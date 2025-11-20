@@ -7160,7 +7160,7 @@ async function findMyCollege(user) {
         }
         return str;
     }
-// --- Helper: Load Data into App & Cloud ---
+
    
 // --- Helper: Load Data into App & Cloud ---
     function loadStudentData(dataArray) {
@@ -7186,11 +7186,11 @@ async function findMyCollege(user) {
         disable_scribe_settings_tab(false);
         disable_edit_data_tab(false);
 
+        // *** FIX: Enable the NEW 1-Col and 2-Col Buttons ***
         const reportBtns = [
             'generate-report-button',
-            'generate-daywise-1col-btn', // <--- Added
-            'generate-daywise-2col-btn', // <--- Added
-            'generate-daywise-report-button',
+            'generate-daywise-1col-btn', // New Button 1
+            'generate-daywise-2col-btn', // New Button 2
             'generate-qpaper-report-button', 
             'generate-qp-distribution-report-button',
             'generate-scribe-report-button', 
@@ -7198,6 +7198,7 @@ async function findMyCollege(user) {
             'generate-invigilator-report-button', 
             'generate-absentee-report-button'
         ];
+        
         reportBtns.forEach(id => {
             const btn = document.getElementById(id);
             if(btn) btn.disabled = false;
@@ -7206,13 +7207,13 @@ async function findMyCollege(user) {
         // 5. Sync
         if (typeof syncDataToCloud === 'function') syncDataToCloud();
 
-        // 6. Feedback & CSV GENERATION (Restored Feature)
+        // 6. Feedback
         if (mainCsvStatus) {
             mainCsvStatus.textContent = `Success! Loaded ${dataArray.length} records.`;
             mainCsvStatus.className = "text-sm font-medium text-green-600";
         }
 
-        // *** NEW: Generate Download Button in the PDF Section ***
+        // 7. CSV Download Button
         const downloadContainer = document.getElementById('csv-download-container');
         if (downloadContainer) {
             const csvContent = convertToCSV(dataArray);
