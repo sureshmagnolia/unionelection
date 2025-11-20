@@ -1048,7 +1048,7 @@ function chunkString(str, size) {
 
 // --- Update Dashboard Function ---
 
-// --- Update Dashboard Function (Global + Today's Stats) ---
+// --- Update Dashboard Function (Global + Today + Smart Date Picker) ---
 function updateDashboard() {
     const dashContainer = document.getElementById('data-snapshot');
     const dashStudent = document.getElementById('dash-student-count');
@@ -1060,6 +1060,10 @@ function updateDashboard() {
     const todayDateDisplay = document.getElementById('today-date-display');
     const todayGrid = document.getElementById('today-sessions-grid');
 
+    // Smart Date Picker Elements
+    const dateSelect = document.getElementById('dashboard-date-select');
+    const specificDateGrid = document.getElementById('specific-date-grid');
+
     if (!allStudentData || allStudentData.length === 0) {
         if(dashContainer) dashContainer.classList.add('hidden');
         if(todayContainer) todayContainer.classList.add('hidden');
@@ -1069,54 +1073,117 @@ function updateDashboard() {
     // 1. UPDATE GLOBAL STATS
     const totalStudents = allStudentData.length;
     const uniqueCourses = new Set(allStudentData.map(s => s.Course)).size;
-    const uniqueDays = new Set(allStudentData.map(s => s.Date)).size;
+    
+    // Get all unique dates and sort them
+    const uniqueDaysSet = new Set(allStudentData.map(s => s.Date));
+    const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
+        // Parse DD.MM.YYYY
+        const d1 = a.split('.').reverse().join('');
+        const d2 = b.split('.').reverse().join('');
+        return d1.localeCompare(d2);
+    });
 
     if(dashStudent) dashStudent.textContent = totalStudents.toLocaleString();
     if(dashCourse) dashCourse.textContent = uniqueCourses.toLocaleString();
-    if(dashDay) dashDay.textContent = uniqueDays.toLocaleString();
+    if(dashDay) dashDay.textContent = uniqueDays.length.toLocaleString();
     if(dashContainer) dashContainer.classList.remove('hidden');
+
+    if (globalScribeList.length === 0) {
+        globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+    }
 
     // 2. UPDATE "TODAY'S EXAM" STATS
     const today = new Date();
-    // Format: DD.MM.YYYY (Matches CSV format)
-    const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); 
+    const todayStr = formatDateToCSV(today); 
     
-    // Optional: Manually set date for testing if today has no exams
-    // const todayStr = "24.11.2025"; 
-
     if(todayDateDisplay) todayDateDisplay.textContent = today.toDateString();
-
-    // Filter students for today
-    const todayStudents = allStudentData.filter(s => s.Date === todayStr);
-
-    if (todayStudents.length === 0) {
-        if(todayContainer) todayContainer.classList.add('hidden'); // Hide if no exams today
-        return;
+    
+    const todayHtml = generateSessionCardsHtml(todayStr);
+    if (todayHtml) {
+        if(todayGrid) todayGrid.innerHTML = todayHtml;
+        if(todayContainer) todayContainer.classList.remove('hidden');
+    } else {
+        if(todayContainer) todayContainer.classList.add('hidden'); 
     }
 
-    // Group by Session (Time)
+    // 3. POPULATE SMART DATE DROPDOWN
+    if (dateSelect && specificDateGrid) {
+        // Only repopulate if empty or data changed (simple check: length match)
+        // For simplicity, we repopulate to ensure accuracy after new upload
+        dateSelect.innerHTML = '<option value="">-- Select a Date --</option>';
+        
+        uniqueDays.forEach(dateStr => {
+            const option = document.createElement('option');
+            option.value = dateStr;
+            option.textContent = dateStr;
+            dateSelect.appendChild(option);
+        });
+
+        // Auto-select Tomorrow (or next available date)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = formatDateToCSV(tomorrow);
+
+        if (uniqueDaysSet.has(tomorrowStr)) {
+            dateSelect.value = tomorrowStr;
+            updateSpecificDateGrid(tomorrowStr, specificDateGrid);
+        } else if (uniqueDays.length > 0 && !dateSelect.value) {
+             // Optional: Select the very first date if tomorrow has no exams?
+             // dateSelect.value = uniqueDays[0];
+             // updateSpecificDateGrid(uniqueDays[0], specificDateGrid);
+        }
+
+        // Listener
+        dateSelect.onchange = (e) => {
+            updateSpecificDateGrid(e.target.value, specificDateGrid);
+        };
+    }
+}
+
+// --- Helper: Update the Specific Date Grid ---
+function updateSpecificDateGrid(dateStr, gridElement) {
+    if (!dateStr) {
+        gridElement.innerHTML = `<p class="text-gray-400 italic ml-2">Select a date above to see details.</p>`;
+        return;
+    }
+    
+    const html = generateSessionCardsHtml(dateStr);
+    
+    if (html) {
+        gridElement.innerHTML = html;
+    } else {
+        gridElement.innerHTML = `<p class="text-gray-500 italic ml-2">No exams found for ${dateStr}.</p>`;
+    }
+}
+
+// --- Helper: Convert JS Date to CSV Format (DD.MM.YYYY) ---
+function formatDateToCSV(dateObj) {
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0'); 
+    const yyyy = dateObj.getFullYear();
+    return `${dd}.${mm}.${yyyy}`;
+}
+
+// --- Helper: Generate HTML Cards for a Date ---
+function generateSessionCardsHtml(dateStr) {
+    const studentsForDate = allStudentData.filter(s => s.Date === dateStr);
+    if (studentsForDate.length === 0) return null;
+
     const sessions = {};
-    todayStudents.forEach(s => {
+    studentsForDate.forEach(s => {
         if (!sessions[s.Time]) sessions[s.Time] = [];
         sessions[s.Time].push(s);
     });
 
-    // Ensure Scribe List is loaded for calculations
-    if (globalScribeList.length === 0) {
-        globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-    }
     const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-
-    // Build HTML for each session
     let sessionsHtml = '';
-    const sortedTimes = Object.keys(sessions).sort(); // e.g., 9:30 AM before 1:30 PM
+    const sortedTimes = Object.keys(sessions).sort(); 
 
     sortedTimes.forEach(time => {
         const students = sessions[time];
         const studentCount = students.length;
         const courseCount = new Set(students.map(s => s.Course)).size;
         
-        // Hall Calculation
         let scribeCount = 0;
         let regularCount = 0;
         
@@ -1125,7 +1192,6 @@ function updateDashboard() {
             else regularCount++;
         });
 
-        // Rule: 30 per Regular Hall, 5 per Scribe Hall
         const regularHalls = Math.ceil(regularCount / 30);
         const scribeHalls = Math.ceil(scribeCount / 5);
         const totalHalls = regularHalls + scribeHalls;
@@ -1158,10 +1224,11 @@ function updateDashboard() {
             </div>
         `;
     });
-
-    if(todayGrid) todayGrid.innerHTML = sessionsHtml;
-    if(todayContainer) todayContainer.classList.remove('hidden');
+    
+    return sessionsHtml;
 }
+
+
     
 // V68: Helper function to filter data based on selected report filter
 function getFilteredReportData(reportType) {
