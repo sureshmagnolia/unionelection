@@ -466,21 +466,15 @@ async def run_extraction_py(event=None):
             </a>
         """
         
+        # --- UPDATED LOGIC: Pass data to JS for Conflict Resolution ---
         json_data = json.dumps(all_exam_rows_sorted)
-        json_data_store.innerHTML = json_data
         
-        # V65: Save the base data to localStorage
-        localStorage.setItem(BASE_DATA_KEY, json_data)
+        # Instead of saving immediately, we send the data to our new JS function.
+        # This function will check for duplicates and show the "Merge/Replace" modal.
+        js.window.handlePythonExtraction(json_data)
         
-        generate_report_button.disabled = False
-        generate_qpaper_report_button.disabled = False
-        generate_daywise_report_button.disabled = False
-        js.disable_absentee_tab(False) # V56: Enable absentee tab
-        js.disable_qpcode_tab(False) # V58: Enable QP Code tab
-        js.disable_room_allotment_tab(False) # Enable room allotment tab
-        js.populate_session_dropdown() # V56: Populate dropdown
-        js.populate_qp_code_session_dropdown() # V61: Populate QP Code dropdown
-        js.populate_room_allotment_session_dropdown() # Populate room allotment dropdown
+        log_message("Extraction complete. Please check the options window to save data.")
+        # ---------------------------------------------------------------
                         
         log_message("Success! Your combined files are ready.")
     
