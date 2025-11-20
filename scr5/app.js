@@ -4668,147 +4668,262 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
 });
 // --- NEW: STUDENT SEARCH FUNCTIONALITY ---
 
-let searchSessionStudents = []; // Holds students for the selected search session
-let debounceTimer; // <-- ADD THIS
-// 1. Listen for session change
-searchSessionSelect.addEventListener('change', () => {
-    const sessionKey = searchSessionSelect.value;
-    studentSearchInput.value = '';
-    studentSearchAutocomplete.classList.add('hidden');
+    let searchSessionStudents = []; 
+    let debounceTimer; 
     
-    if (sessionKey) {
-        const [date, time] = sessionKey.split(' | ');
-        // Get all students for this session
-        searchSessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        studentSearchSection.classList.remove('hidden');
-        studentSearchStatus.textContent = `Loaded ${searchSessionStudents.length} students for this session.`;
-    } else {
-        studentSearchSection.classList.add('hidden');
+    const searchModeSessionRadio = document.getElementById('search-mode-session');
+    const searchModeGlobalRadio = document.getElementById('search-mode-global');
+    const searchSessionContainer = document.getElementById('search-session-container');
+    
+    // 0. Toggle Search Modes
+    function toggleSearchMode() {
+        studentSearchInput.value = '';
+        studentSearchAutocomplete.classList.add('hidden');
         studentSearchStatus.textContent = '';
-        searchSessionStudents = [];
-    }
-});
 
-// 2. Autocomplete for search input (DEBOUNCED)
-studentSearchInput.addEventListener('input', () => {
-    // Clear any existing timer
-    clearTimeout(debounceTimer);
-
-    // Start a new timer
-    debounceTimer = setTimeout(() => {
-        const query = studentSearchInput.value.trim().toUpperCase();
-        if (query.length < 2) {
-            studentSearchAutocomplete.classList.add('hidden');
-            return;
-        }
-
-        // Filter students by register number
-        const matches = searchSessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
-
-        if (matches.length > 0) {
-            studentSearchAutocomplete.innerHTML = ''; // Clear previous results
-            matches.forEach(student => {
-                const item = document.createElement('div');
-                item.className = 'autocomplete-item';
-                item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
-                // When clicked, fetch details and show modal
-                item.onclick = () => {
-                    studentSearchInput.value = student['Register Number'];
-                    studentSearchAutocomplete.classList.add('hidden');
-                    showStudentDetailsModal(student['Register Number'], searchSessionSelect.value);
-                };
-                studentSearchAutocomplete.appendChild(item);
-            });
-            studentSearchAutocomplete.classList.remove('hidden');
+        if (searchModeGlobalRadio.checked) {
+            // Global Mode
+            searchSessionContainer.classList.add('hidden');
+            studentSearchInput.disabled = false;
+            studentSearchInput.placeholder = "Search entire database (RegNo or Name)...";
+            studentSearchStatus.textContent = "Searching across ALL sessions.";
         } else {
-            studentSearchAutocomplete.classList.add('hidden');
+            // Session Mode
+            searchSessionContainer.classList.remove('hidden');
+            if (searchSessionSelect.value) {
+                studentSearchInput.disabled = false;
+                studentSearchInput.placeholder = "Search in selected session...";
+            } else {
+                studentSearchInput.disabled = true;
+                studentSearchInput.placeholder = "Select a session first...";
+            }
         }
-    }, 250); // Wait 250ms after user stops typing
-});
-
-// 3. Main function to fetch all student details
-function showStudentDetailsModal(regNo, sessionKey) {
-    const [date, time] = sessionKey.split(' | ');
-    
-    // 1. Find the base student record
-    const student = allStudentData.find(s => 
-        s.Date === date && s.Time === time && s['Register Number'] === regNo
-    );
-    
-    if (!student) {
-        alert("Could not find student details.");
-        return;
     }
 
-    // 2. Get Room & Seat: Run allocation for the *entire* session
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    const allocatedSessionData = performOriginalAllocation(sessionStudents);
-    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+    searchModeSessionRadio.addEventListener('change', toggleSearchMode);
+    searchModeGlobalRadio.addEventListener('change', toggleSearchMode);
 
-    // 3. Get Scribe Room (if any)
-    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-    const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
-    const scribeRoom = sessionScribeAllotment[regNo];
-
-    // 4. Get QP Code (if any)
-    loadQPCodes(); // Ensures qpCodeMap is populated
-    const sessionQPCodes = qpCodeMap[sessionKey] || {};
-    
-    // --- MODIFIED TO USE Base64 KEY ---
-    const courseKey = getBase64CourseKey(student.Course);
-    const qpCode = sessionQPCodes[courseKey] || "Not Entered";
-    // --- END MODIFICATION ---
-
-   // 5. Populate Modal
-    searchResultName.textContent = student.Name;
-    searchResultRegNo.textContent = student['Register Number'];
-    searchResultCourse.textContent = student.Course;
-    searchResultQPCode.textContent = qpCode;
-
-    // --- NEW: Handle Room and Location ---
-    if (allocatedStudent) {
-        const roomName = allocatedStudent['Room No'];
-        searchResultRoom.textContent = roomName;
-        searchResultSeat.textContent = allocatedStudent.seatNumber;
+    // 1. Listen for session change (Session Mode Only)
+    searchSessionSelect.addEventListener('change', () => {
+        const sessionKey = searchSessionSelect.value;
+        studentSearchInput.value = '';
+        studentSearchAutocomplete.classList.add('hidden');
         
-        // Get room location
-        const roomInfo = currentRoomConfig[roomName];
-        const location = (roomInfo && roomInfo.location) ? roomInfo.location : "N/A";
-        searchResultRoomLocation.textContent = location;
-        searchResultRoomLocationBlock.classList.remove('hidden');
-    } else {
-        searchResultRoom.textContent = "Not Allotted";
-        searchResultSeat.textContent = "N/A";
-        searchResultRoomLocation.textContent = "N/A";
-        searchResultRoomLocationBlock.classList.add('hidden');
-    }
+        if (sessionKey) {
+            const [date, time] = sessionKey.split(' | ');
+            searchSessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+            studentSearchSection.classList.remove('hidden');
+            studentSearchInput.disabled = false;
+            studentSearchStatus.textContent = `Loaded ${searchSessionStudents.length} students for this session.`;
+        } else {
+            if(searchModeSessionRadio.checked) {
+                 studentSearchInput.disabled = true;
+                 studentSearchStatus.textContent = '';
+                 searchSessionStudents = [];
+            }
+        }
+    });
 
-    // --- NEW: Handle Scribe Room and Location ---
-    if (scribeRoom) {
-        searchResultScribeRoom.textContent = scribeRoom;
+    // 2. Autocomplete for search input (DEBOUNCED)
+    studentSearchInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+
+        debounceTimer = setTimeout(() => {
+            const query = studentSearchInput.value.trim().toUpperCase();
+            if (query.length < 2) {
+                studentSearchAutocomplete.classList.add('hidden');
+                return;
+            }
+
+            let sourceArray = [];
+            if (searchModeGlobalRadio.checked) {
+                // In Global Mode, search the Unique Student List (prepared earlier)
+                if (allUniqueStudentsForScribeSearch.length === 0) updateUniqueStudentList();
+                sourceArray = allUniqueStudentsForScribeSearch;
+            } else {
+                // In Session Mode, search only current session
+                sourceArray = searchSessionStudents;
+            }
+
+            // Filter
+            const matches = sourceArray.filter(s => {
+                 const r = s['Register Number'] || s.regNo; // Handle both formats
+                 const n = s.Name || s.name;
+                 return r.toUpperCase().includes(query) || n.toUpperCase().includes(query);
+            }).slice(0, 15); // Limit results
+
+            if (matches.length > 0) {
+                studentSearchAutocomplete.innerHTML = ''; 
+                matches.forEach(student => {
+                    const regNo = student['Register Number'] || student.regNo;
+                    const name = student.Name || student.name;
+
+                    const item = document.createElement('div');
+                    item.className = 'autocomplete-item';
+                    item.innerHTML = `${regNo} (${name})`;
+                    
+                    item.onclick = () => {
+                        studentSearchInput.value = regNo;
+                        studentSearchAutocomplete.classList.add('hidden');
+                        // Determine which modal view to show
+                        if (searchModeGlobalRadio.checked) {
+                            showGlobalStudentDetails(regNo);
+                        } else {
+                            showStudentDetailsModal(regNo, searchSessionSelect.value);
+                        }
+                    };
+                    studentSearchAutocomplete.appendChild(item);
+                });
+                studentSearchAutocomplete.classList.remove('hidden');
+            } else {
+                studentSearchAutocomplete.classList.add('hidden');
+            }
+        }, 250);
+    });
+
+    // 3A. Show Single Session Details (Original Function)
+    function showStudentDetailsModal(regNo, sessionKey) {
+        // UI Toggle
+        document.getElementById('search-result-single-view').classList.remove('hidden');
+        document.getElementById('search-result-global-view').classList.add('hidden');
+
+        const [date, time] = sessionKey.split(' | ');
+        const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
         
-        // Get scribe room location
-        const scribeRoomInfo = currentRoomConfig[scribeRoom];
-        const scribeLocation = (scribeRoomInfo && scribeRoomInfo.location) ? scribeRoomInfo.location : "N/A";
-        searchResultScribeRoomLocation.textContent = scribeLocation;
+        if (!student) { alert("Student not found in this session."); return; }
 
-        searchResultScribeBlock.classList.remove('hidden');
-    } else {
-        searchResultScribeRoom.textContent = "N/A";
-        searchResultScribeRoomLocation.textContent = "N/A";
-        searchResultScribeBlock.classList.add('hidden'); // Hide if not a scribe
+        // Run Allocation for this specific session to get room info
+        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const allocatedSessionData = performOriginalAllocation(sessionStudents);
+        const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+
+        // Scribe check
+        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+        const scribeRoom = sessionScribeAllotment[regNo];
+
+        // QP Code
+        loadQPCodes(); 
+        const sessionQPCodes = qpCodeMap[sessionKey] || {};
+        const courseKey = getBase64CourseKey(student.Course);
+        const qpCode = sessionQPCodes[courseKey] || "N/A";
+
+        // Populate Modal
+        searchResultName.textContent = student.Name;
+        searchResultRegNo.textContent = student['Register Number'];
+        
+        // Single View Details
+        document.getElementById('search-result-course').textContent = student.Course;
+        document.getElementById('search-result-qpcode').textContent = qpCode;
+
+        if (allocatedStudent) {
+            const roomName = allocatedStudent['Room No'];
+            const roomInfo = currentRoomConfig[roomName] || {};
+            document.getElementById('search-result-room').textContent = roomName;
+            document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
+            document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
+        }
+
+        if (scribeRoom) {
+            const scribeInfo = currentRoomConfig[scribeRoom] || {};
+            document.getElementById('search-result-scribe-room').textContent = scribeRoom;
+            document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
+            document.getElementById('search-result-scribe-block').classList.remove('hidden');
+        } else {
+            document.getElementById('search-result-scribe-block').classList.add('hidden');
+        }
+
+        searchResultModal.classList.remove('hidden');
     }
 
+    // 3B. Show Global Details (New Function)
+    function showGlobalStudentDetails(regNo) {
+        // UI Toggle
+        document.getElementById('search-result-single-view').classList.add('hidden');
+        document.getElementById('search-result-global-view').classList.remove('hidden');
 
-    // 6. Show Modal
-    searchResultModal.classList.remove('hidden');
-}
+        // Find all exams for this student
+        const exams = allStudentData.filter(s => s['Register Number'] === regNo);
+        
+        if (exams.length === 0) return;
 
-// 4. Close modal button
-modalCloseSearchResult.addEventListener('click', () => {
-    searchResultModal.classList.add('hidden');
-});
+        // Sort by Date/Time
+        exams.sort((a, b) => {
+             // Simple date parse (DD.MM.YYYY)
+             const d1 = a.Date.split('.').reverse().join('');
+             const d2 = b.Date.split('.').reverse().join('');
+             return d1.localeCompare(d2) || a.Time.localeCompare(b.Time);
+        });
 
+        searchResultName.textContent = exams[0].Name;
+        searchResultRegNo.textContent = regNo;
+
+        const tbody = document.getElementById('global-search-table-body');
+        tbody.innerHTML = '';
+
+        loadQPCodes(); // Ensure QP codes are loaded
+        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+
+        // For Global Search, we want to show Room info if possible.
+        // NOTE: Calculating allocation for ALL sessions is heavy, but for one student it's acceptable.
+        
+        exams.forEach(exam => {
+            const sessionKey = `${exam.Date} | ${exam.Time}`;
+            
+            // 1. QP Code
+            const sessionQPCodes = qpCodeMap[sessionKey] || {};
+            const courseKey = getBase64CourseKey(exam.Course);
+            const qpCode = sessionQPCodes[courseKey] || "";
+            const qpDisplay = qpCode ? `[QP: ${qpCode}]` : "";
+
+            // 2. Room Info (Run allocation logic for this single session)
+            const sessionStudents = allStudentData.filter(s => s.Date === exam.Date && s.Time === exam.Time);
+            const allocatedSession = performOriginalAllocation(sessionStudents);
+            const studentAlloc = allocatedSession.find(s => s['Register Number'] === regNo);
+
+            let roomDisplay = "Not Allotted";
+            let rowClass = "";
+
+            if (studentAlloc) {
+                const roomName = studentAlloc['Room No'];
+                const roomInfo = currentRoomConfig[roomName] || {};
+                const location = roomInfo.location ? ` (${roomInfo.location})` : "";
+                roomDisplay = `<strong>${roomName}</strong> (Seat: ${studentAlloc.seatNumber})${location}`;
+                
+                // Check Scribe
+                const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+                const scribeRoom = sessionScribeMap[regNo];
+                if (scribeRoom) {
+                    const sInfo = currentRoomConfig[scribeRoom] || {};
+                    const sLoc = sInfo.location ? ` (${sInfo.location})` : "";
+                    roomDisplay += `<br><span class="text-orange-600 text-xs font-bold">Scribe: ${scribeRoom}${sLoc}</span>`;
+                    rowClass = "bg-orange-50";
+                }
+            }
+
+            const tr = document.createElement('tr');
+            if(rowClass) tr.className = rowClass;
+            tr.innerHTML = `
+                <td class="px-3 py-2 border-b">${exam.Date}</td>
+                <td class="px-3 py-2 border-b">${exam.Time}</td>
+                <td class="px-3 py-2 border-b text-xs">
+                    ${exam.Course}<br>
+                    <span class="font-bold text-gray-600">${qpDisplay}</span>
+                </td>
+                <td class="px-3 py-2 border-b text-sm">${roomDisplay}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        searchResultModal.classList.remove('hidden');
+    }
+
+    // 4. Close modal button
+    modalCloseSearchResult.addEventListener('click', () => {
+        searchResultModal.classList.add('hidden');
+    });
+
+    // --- END: STUDENT SEARCH FUNCTIONALITY ---
 // --- College Name Edit/Save Logic ---
 const editCollegeNameBtn = document.getElementById('edit-college-name-btn');
 
