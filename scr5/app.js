@@ -1758,7 +1758,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
 });
 
 
-// *** UPDATED: Event listener for QP Distribution by QP-Code Report (Aggregated by QP Code) ***
+// *** UPDATED: Event listener for QP Distribution (Stream-Wise Grouping) ***
 generateQpDistributionReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1786,40 +1786,47 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
         const processed_rows_with_rooms = performOriginalAllocation(data);
         loadQPCodes(); 
 
+        // 1. Group by Session -> Then by STREAM -> Then by QP Code
         const sessions = {};
         for (const student of processed_rows_with_rooms) {
             const sessionKey = `${student.Date}_${student.Time}`;
             const roomName = student['Room No'];
             const courseName = student.Course;
+            const streamName = student.Stream || "Regular"; // Stream Layer
 
-            // Use Base64 Key
             const courseKey = getBase64CourseKey(courseName);
             const sessionKeyPipe = `${student.Date} | ${student.Time}`;
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
             const qpCode = sessionQPCodes[courseKey] || 'N/A'; 
 
+            // Init Session
             if (!sessions[sessionKey]) {
-                sessions[sessionKey] = { Date: student.Date, Time: student.Time, qps: {} };
+                sessions[sessionKey] = { Date: student.Date, Time: student.Time, streams: {} };
             }
             
-            // Initialize QP Code entry if not exists
-            if (!sessions[sessionKey].qps[qpCode]) {
-                sessions[sessionKey].qps[qpCode] = {
-                    courseNames: new Set(), // *** FIX: Store unique course names in a Set ***
+            // Init Stream
+            if (!sessions[sessionKey].streams[streamName]) {
+                sessions[sessionKey].streams[streamName] = {}; // Will hold QP Codes
+            }
+
+            // Init QP Code
+            if (!sessions[sessionKey].streams[streamName][qpCode]) {
+                sessions[sessionKey].streams[streamName][qpCode] = {
+                    courseNames: new Set(),
                     rooms: {},
                     total: 0
                 };
             }
             
-            // Add course name to the Set
-            sessions[sessionKey].qps[qpCode].courseNames.add(courseName);
+            // Add Data
+            sessions[sessionKey].streams[streamName][qpCode].courseNames.add(courseName);
 
-            if (!sessions[sessionKey].qps[qpCode].rooms[roomName]) {
-                sessions[sessionKey].qps[qpCode].rooms[roomName] = 0;
+            if (!sessions[sessionKey].streams[streamName][qpCode].rooms[roomName]) {
+                sessions[sessionKey].streams[streamName][qpCode].rooms[roomName] = 0;
             }
             
-            sessions[sessionKey].qps[qpCode].rooms[roomName]++;
-            sessions[sessionKey].qps[qpCode].total++;
+            sessions[sessionKey].streams[streamName][qpCode].rooms[roomName]++;
+            sessions[sessionKey].streams[streamName][qpCode].total++;
         }
         
         let allPagesHtml = '';
@@ -1832,10 +1839,9 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
             return;
         }
 
+        // Loop Sessions
         for (const sessionKey of sortedSessionKeys) {
             const session = sessions[sessionKey];
-            
-            // Get Room Serial Numbers
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
 
@@ -1848,58 +1854,85 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
                     </div>
             `;
             
-            const sortedQPCodes = Object.keys(session.qps).sort();
+            // 2. Sort Streams (Regular First)
+            const sortedStreams = Object.keys(session.streams).sort((a, b) => {
+                const idxA = currentStreamConfig.indexOf(a);
+                const idxB = currentStreamConfig.indexOf(b);
+                // If both are in config, use config order. If not (e.g. old data), push to end.
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (a === "Regular") return -1;
+                if (b === "Regular") return 1;
+                return a.localeCompare(b);
+            });
 
-            for (const qpCode of sortedQPCodes) {
-                const qpData = session.qps[qpCode];
-                
-                // *** FIX: Join all course names ***
-                const courseList = Array.from(qpData.courseNames).sort().join(', ');
-                
-                allPagesHtml += `<h4 class="qp-header">QP Code: ${qpCode} &nbsp; <span style="font-weight:normal; font-size: 0.9em;">(Courses: ${courseList})</span></h4>`;
-                
+            // Loop Streams
+            for (const streamName of sortedStreams) {
+                const qpCodesInStream = session.streams[streamName];
+                const sortedQPCodes = Object.keys(qpCodesInStream).sort();
+
+                // Stream Header
                 allPagesHtml += `
-                    <table class="qp-distribution-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 80%;">Room</th>
-                                <th style="width: 20%;">Student Count</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                    <div style="margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid #333; padding-bottom: 5px;">
+                        <span style="font-size: 14pt; font-weight: bold; background-color: #eee; padding: 4px 8px; border-radius: 4px;">Stream: ${streamName}</span>
+                    </div>
                 `;
-                
-                const sortedRoomKeys = Object.keys(qpData.rooms).sort((a, b) => {
-                    const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
-                    const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-                    return numA - numB;
-                });
 
-                for (const roomName of sortedRoomKeys) {
-                    const count = qpData.rooms[roomName];
+                // Loop QP Codes
+                for (const qpCode of sortedQPCodes) {
+                    const qpData = qpCodesInStream[qpCode];
+                    const courseList = Array.from(qpData.courseNames).sort().join(', ');
                     
-                    const roomInfo = currentRoomConfig[roomName];
-                    const location = (roomInfo && roomInfo.location) ? ` <span style="font-size: 0.85em; color: #555;">(${roomInfo.location})</span>` : "";
-                    const serialNo = roomSerialMap[roomName] || '-';
-
+                    allPagesHtml += `<h4 class="qp-header" style="margin-top: 10px;">QP Code: ${qpCode} &nbsp; <span style="font-weight:normal; font-size: 0.9em; font-style: italic;">(Courses: ${courseList})</span></h4>`;
+                    
                     allPagesHtml += `
-                        <tr>
-                            <td><strong>${serialNo} | ${roomName}</strong>${location}</td>
-                            <td>${count}</td>
-                        </tr>
+                        <table class="qp-distribution-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80%;">Room</th>
+                                    <th style="width: 20%;">Student Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    const sortedRoomKeys = Object.keys(qpData.rooms).sort((a, b) => {
+                        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+                        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+                        return numA - numB;
+                    });
+
+// ... inside the loop iterating over sortedRoomKeys ...
+
+                    for (const roomName of sortedRoomKeys) {
+                        const count = qpData.rooms[roomName];
+                        
+                        // Get Room Info
+                        const roomInfo = currentRoomConfig[roomName];
+                        
+                        // *** FIX: Use Location as the primary display. Fallback to Room Name if empty. ***
+                        const displayLocation = (roomInfo && roomInfo.location) ? roomInfo.location : roomName;
+                        
+                        const serialNo = roomSerialMap[roomName] || '-';
+
+                        allPagesHtml += `
+                            <tr>
+                                <td><strong>${serialNo} | ${displayLocation}</strong></td>
+                                <td>${count}</td>
+                            </tr>
+                        `;
+                    }
+                    
+                    allPagesHtml += `
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td style="text-align: right; font-weight: bold;">Total (${streamName})</td>
+                                <td style="font-weight: bold;">${qpData.total}</td>
+                            </tr>
+                        </tfoot>
+                        </table>
                     `;
                 }
-                
-                allPagesHtml += `
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td style="text-align: right; font-weight: bold;">Total</td>
-                            <td style="font-weight: bold;">${qpData.total}</td>
-                        </tr>
-                    </tfoot>
-                    </table>
-                `;
             }
             allPagesHtml += `</div>`; 
         }
