@@ -3915,29 +3915,64 @@ window.deleteRoom = function(index) {
     }
 };
 
-// Show room selection modal (Updated with Stream Selector)
 // Show room selection modal (Smart Stream Selector)
+// Show room selection modal (Updated with Smart Default)
 function showRoomSelectionModal() {
     getRoomCapacitiesFromStorage();
     roomSelectionList.innerHTML = '';
 
-    // 1. Create Stream Selector UI (Only if multiple streams exist)
-    let streamSelectHtml = '';
-    if (currentStreamConfig.length > 1) {
-        streamSelectHtml = `
-            <div class="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
-                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Fill Room with Stream:</label>
-                <select id="allotment-stream-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
-                    ${currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('')}
-                </select>
-            </div>
-        `;
+    // --- SMART DEFAULT CALCULATION ---
+    // 1. Calculate remaining students per stream
+    const [date, time] = currentSessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const scribeRegNos = new Set((JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]')).map(s => s.regNo));
+    
+    // Count Needed vs Allotted
+    const stats = {};
+    currentStreamConfig.forEach(s => stats[s] = { needed: 0, allotted: 0 });
+    if(!stats["Regular"]) stats["Regular"] = { needed: 0, allotted: 0 };
+
+    // Count Needed
+    sessionStudents.forEach(s => {
+        if (!scribeRegNos.has(s['Register Number'])) {
+            const strm = s.Stream || "Regular";
+            if (!stats[strm]) stats[strm] = { needed: 0, allotted: 0 };
+            stats[strm].needed++;
+        }
+    });
+    // Count Allotted
+    currentSessionAllotment.forEach(room => {
+        const roomStream = room.stream || "Regular";
+        if (!stats[roomStream]) stats[roomStream] = { needed: 0, allotted: 0 };
+        stats[roomStream].allotted += room.students.length;
+    });
+
+    // Find first stream that is NOT finished
+    let suggestedStream = currentStreamConfig[0]; // Default to first
+    for (const stream of currentStreamConfig) {
+        const s = stats[stream];
+        if (s && (s.needed - s.allotted) > 0) {
+            suggestedStream = stream;
+            break; // Found one with students remaining
+        }
     }
-    // If 1 stream, we don't show HTML, but we default to index 0 later
+    // --------------------------------
+
+    // 2. Create Stream Selector UI (Using suggestedStream)
+    const streamSelectHtml = `
+        <div class="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Fill Room with Stream:</label>
+            <select id="allotment-stream-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                ${currentStreamConfig.map(s => `<option value="${s}" ${s === suggestedStream ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+        </div>
+    `;
     roomSelectionList.insertAdjacentHTML('beforeend', streamSelectHtml);
 
-    // 2. List Rooms
+    // ... rest of the function (Room List) remains the same ...
+    // 3. List Rooms
     const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
+    // ... (keep the existing sorting/looping logic here) ...
     
     const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
@@ -3960,10 +3995,7 @@ function showRoomSelectionModal() {
         
         if (!isAllotted) {
             roomOption.onclick = () => {
-                // Smart Capture: If dropdown exists, use value. Else use default stream.
-                const streamEl = document.getElementById('allotment-stream-select');
-                const selectedStream = streamEl ? streamEl.value : currentStreamConfig[0];
-                
+                const selectedStream = document.getElementById('allotment-stream-select').value;
                 selectRoomForAllotment(roomName, room.capacity, selectedStream);
             };
         }
@@ -5030,8 +5062,8 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
     });
 
     // 3A. Show Single Session Details (Original Function)
+   // 3A. Show Single Session Details (Updated with Stream & Location)
     function showStudentDetailsModal(regNo, sessionKey) {
-        // UI Toggle
         document.getElementById('search-result-single-view').classList.remove('hidden');
         document.getElementById('search-result-global-view').classList.add('hidden');
 
@@ -5040,36 +5072,43 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
         
         if (!student) { alert("Student not found in this session."); return; }
 
-        // Run Allocation for this specific session to get room info
+        // Allocation Logic
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
         const allocatedSessionData = performOriginalAllocation(sessionStudents);
         const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
 
-        // Scribe check
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
         const scribeRoom = sessionScribeAllotment[regNo];
 
-        // QP Code
         loadQPCodes(); 
         const sessionQPCodes = qpCodeMap[sessionKey] || {};
         const courseKey = getBase64CourseKey(student.Course);
         const qpCode = sessionQPCodes[courseKey] || "N/A";
 
-        // Populate Modal
+        // Populate Basic Info
         searchResultName.textContent = student.Name;
         searchResultRegNo.textContent = student['Register Number'];
         
-        // Single View Details
+        // *** FIX: Add Stream ***
+        document.getElementById('search-result-stream').textContent = student.Stream || "Regular"; 
         document.getElementById('search-result-course').textContent = student.Course;
         document.getElementById('search-result-qpcode').textContent = qpCode;
 
-        if (allocatedStudent) {
+        // *** FIX: Add Location ***
+        if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
             const roomName = allocatedStudent['Room No'];
             const roomInfo = currentRoomConfig[roomName] || {};
+            
             document.getElementById('search-result-room').textContent = roomName;
             document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
+            // Show Location
             document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
+            document.getElementById('search-result-room-location-block').classList.remove('hidden');
+        } else {
+             document.getElementById('search-result-room').textContent = "Not Allotted";
+             document.getElementById('search-result-seat').textContent = "-";
+             document.getElementById('search-result-room-location-block').classList.add('hidden');
         }
 
         if (scribeRoom) {
@@ -5085,19 +5124,15 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
     }
 
     // 3B. Show Global Details (New Function)
+    // 3B. Show Global Details (Updated with Location)
     function showGlobalStudentDetails(regNo) {
-        // UI Toggle
         document.getElementById('search-result-single-view').classList.add('hidden');
         document.getElementById('search-result-global-view').classList.remove('hidden');
 
-        // Find all exams for this student
         const exams = allStudentData.filter(s => s['Register Number'] === regNo);
-        
         if (exams.length === 0) return;
 
-        // Sort by Date/Time
         exams.sort((a, b) => {
-             // Simple date parse (DD.MM.YYYY)
              const d1 = a.Date.split('.').reverse().join('');
              const d2 = b.Date.split('.').reverse().join('');
              return d1.localeCompare(d2) || a.Time.localeCompare(b.Time);
@@ -5109,22 +5144,18 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
         const tbody = document.getElementById('global-search-table-body');
         tbody.innerHTML = '';
 
-        loadQPCodes(); // Ensure QP codes are loaded
+        loadQPCodes();
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-
-        // For Global Search, we want to show Room info if possible.
-        // NOTE: Calculating allocation for ALL sessions is heavy, but for one student it's acceptable.
         
         exams.forEach(exam => {
             const sessionKey = `${exam.Date} | ${exam.Time}`;
-            
-            // 1. QP Code
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
             const courseKey = getBase64CourseKey(exam.Course);
             const qpCode = sessionQPCodes[courseKey] || "";
             const qpDisplay = qpCode ? `[QP: ${qpCode}]` : "";
+            const streamDisplay = exam.Stream || "Regular";
 
-            // 2. Room Info (Run allocation logic for this single session)
+            // Calculate allocation for this specific session
             const sessionStudents = allStudentData.filter(s => s.Date === exam.Date && s.Time === exam.Time);
             const allocatedSession = performOriginalAllocation(sessionStudents);
             const studentAlloc = allocatedSession.find(s => s['Register Number'] === regNo);
@@ -5132,13 +5163,14 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
             let roomDisplay = "Not Allotted";
             let rowClass = "";
 
-            if (studentAlloc) {
+            if (studentAlloc && studentAlloc['Room No'] !== "Unallotted") {
                 const roomName = studentAlloc['Room No'];
+                // *** FIX: Get Location ***
                 const roomInfo = currentRoomConfig[roomName] || {};
-                const location = roomInfo.location ? ` (${roomInfo.location})` : "";
+                const location = roomInfo.location ? ` <br><span class="text-xs text-gray-500">(${roomInfo.location})</span>` : "";
+                
                 roomDisplay = `<strong>${roomName}</strong> (Seat: ${studentAlloc.seatNumber})${location}`;
                 
-                // Check Scribe
                 const sessionScribeMap = allScribeAllotments[sessionKey] || {};
                 const scribeRoom = sessionScribeMap[regNo];
                 if (scribeRoom) {
@@ -5157,6 +5189,7 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
                 <td class="px-3 py-2 border-b text-xs">
                     ${exam.Course}<br>
                     <span class="font-bold text-gray-600">${qpDisplay}</span>
+                    <span class="text-indigo-600 ml-1">(${streamDisplay})</span>
                 </td>
                 <td class="px-3 py-2 border-b text-sm">${roomDisplay}</td>
             `;
