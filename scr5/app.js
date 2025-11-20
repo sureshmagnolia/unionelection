@@ -5601,19 +5601,26 @@ async function findMyCollege(user) {
     }
     // ==========================================
 // ==========================================
-    // 🐍 PYTHON INTEGRATION (Updated Comparison Logic)
+    // 🐍 PYTHON INTEGRATION (Connects PDF to Merge Logic)
     // ==========================================
 
     window.handlePythonExtraction = function(jsonString) {
         console.log("Received data from Python...");
-        const selectedStream = pdfStreamSelect.value || "Regular"; // Grab from UI
+        
+        // Get the stream from the dropdown (or default to "Regular" if empty)
+        const pdfStreamSelect = document.getElementById('pdf-stream-select');
+        const selectedStream = pdfStreamSelect ? (pdfStreamSelect.value || "Regular") : "Regular";
+
         try {
-            const parsedData = JSON.parse(jsonString);
+            // *** FIX: Changed 'const' to 'let' so we can modify it ***
+            let parsedData = JSON.parse(jsonString);
+            
             // INJECT STREAM TAG INTO PYTHON DATA
             parsedData = parsedData.map(item => ({
                 ...item,
                 Stream: selectedStream
             }));
+
             if (parsedData.length === 0) {
                 alert("Extraction completed, but no student data was found.");
                 return;
@@ -5625,12 +5632,12 @@ async function findMyCollege(user) {
             // 2. Check against existing data
             if (!allStudentData || allStudentData.length === 0) {
                 loadStudentData(tempNewData);
-                alert(`Success! Extracted ${tempNewData.length} records from PDF.`);
+                alert(`Success! Extracted ${tempNewData.length} records from PDF for stream: ${selectedStream}`);
             } else {
                 // Create Set of keys from EXISTING data
                 const existingKeys = new Set(allStudentData.map(getRecordKey));
                 
-                // Filter NEW data: Keep only if Key is NOT in existing set
+                // Filter NEW data
                 tempUniqueData = tempNewData.filter(s => {
                     return !existingKeys.has(getRecordKey(s));
                 });
