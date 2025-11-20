@@ -1501,6 +1501,7 @@ generateReportButton.addEventListener('click', async () => {
 });
     
 // --- (V29) Event listener for the "Day-wise Student List" button ---
+// --- (V29) Event listener for "Seating Details for Candidates" (Notice Board Style) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateDaywiseReportButton.disabled = true;
@@ -1513,12 +1514,10 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         getRoomCapacitiesFromStorage(); 
         
-        // Get base data (Session filtered if needed)
         const baseData = getFilteredReportData('day-wise');
         if (baseData.length === 0) { alert("No data found."); return; }
 
-        // --- NEW LOGIC: Split Data by Stream ---
-        // Even if "All" is selected, we process streams sequentially
+        // 1. Split Data by Stream
         const dataByStream = {};
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
@@ -1528,7 +1527,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             dataByStream[strm].push(row);
         });
 
-        // Sort Streams (Regular first)
         const sortedStreamNames = Object.keys(dataByStream).sort((a, b) => {
             if (a === "Regular") return -1;
             if (b === "Regular") return 1;
@@ -1537,41 +1535,19 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
-        const STUDENTS_PER_COLUMN = 45; 
-        const COLUMNS_PER_PAGE = 2; 
-        const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
+        
+        // Pagination Constants
+        const MAX_ROWS_PER_PAGE = 42; // Safe limit for A4
 
-        // Helper to build table HTML (Same as before)
-        function buildColumnTable(studentChunk) {
-            let rowsHtml = '';
-            let currentCourse = ""; 
-            studentChunk.forEach(student => {
-                if (student.Course !== currentCourse) {
-                    currentCourse = student.Course;
-                    rowsHtml += `<tr><td colspan="4" style="background-color: #ddd; font-weight: bold; padding: 2px; border: 1px solid #999;">${student.Course}</td></tr>`;
-                }
-                let roomName = student['Room No'];
-                let seatNo = student.seatNumber; 
-                let rowStyle = '';
-                if (student.isScribe) {
-                    const sessionKeyPipe = `${student.Date} | ${student.Time}`;
-                    const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
-                    roomName = sessionScribeAllotment[student['Register Number']] || 'N/A'; 
-                    seatNo = 'Scribe'; 
-                    rowStyle = 'font-weight: bold; color: #c2410c;'; 
-                }
-                const roomInfo = currentRoomConfig[roomName] || {};
-                const displayRoom = roomInfo.location ? roomInfo.location : roomName;
-                rowsHtml += `<tr style="${rowStyle}"><td>${student['Register Number']}</td><td>${student.Name}</td><td>${displayRoom}</td><td style="text-align: center;">${seatNo}</td></tr>`;
-            });
-            return `<table class="daywise-report-table"><thead><tr><th style="width: 15%;">Register No</th><th style="width: 25%;">Name</th><th style="width: 50%;">Location</th><th style="width: 10%;">Seat</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
-        }
-
-        // --- MAIN LOOP: Iterate Streams -> Then Sessions ---
+        // MAIN LOOP: Iterate Streams
         for (const streamName of sortedStreamNames) {
             const streamData = dataByStream[streamName];
-            // Allocate rooms (Manual check)
+            // Run allocation to get Room/Seat info
             const processed_rows = performOriginalAllocation(streamData);
+            
+            // Get Serial Map
+            const sampleSession = streamData.length > 0 ? `${streamData[0].Date} | ${streamData[0].Time}` : "";
+            const roomSerialMap = getRoomSerialMap(sampleSession);
 
             // Group by Session
             const daySessions = {};
@@ -1583,55 +1559,99 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
             const sortedSessionKeys = Object.keys(daySessions).sort();
 
+            // Iterate Sessions
             sortedSessionKeys.forEach(key => {
                 const session = daySessions[key];
                 
-                // Sort Students
-                session.students.sort((a, b) => {
-                    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                    return a['Register Number'].localeCompare(b['Register Number']);
-                });
+                // 2. Group Students by Room (The core of this layout)
+                const studentsByRoom = {};
                 
-                for (let i = 0; i < session.students.length; i += STUDENTS_PER_PAGE) {
-                    const pageStudents = session.students.slice(i, i + STUDENTS_PER_PAGE);
-                    totalPagesGenerated++;
+                session.students.forEach(s => {
+                    let roomName = s['Room No'];
+                    // Handle Scribe Room Override
+                    if (s.isScribe) {
+                        const sessionKeyPipe = `${s.Date} | ${s.Time}`;
+                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[s['Register Number']];
+                        if (scribeRoom) roomName = scribeRoom;
+                    }
                     
-                    const col1Students = pageStudents.slice(0, STUDENTS_PER_COLUMN);
-                    const col2Students = pageStudents.slice(STUDENTS_PER_COLUMN); 
-                    
-                    let columnHtml = '';
-                    if (col2Students.length === 0) columnHtml = `<div class="column">${buildColumnTable(col1Students)}</div>`;
-                    else columnHtml = `<div class="column-container"><div class="column">${buildColumnTable(col1Students)}</div><div class="column">${buildColumnTable(col2Students)}</div></div>`;
-                    
-                    // Scribe Summary (Filtered to current Stream)
-                    let scribeListHtml = '';
-                    if (i + STUDENTS_PER_PAGE >= session.students.length) {
-                         const sessionScribes = session.students.filter(s => s.isScribe);
-                         if (sessionScribes.length > 0) {
-                            scribeListHtml = `<div class="mt-4 p-2 border border-orange-500 bg-orange-50"><strong>Scribe Summary (${streamName}):</strong> ${sessionScribes.length} students.</div>`;
-                         }
+                    if (!studentsByRoom[roomName]) studentsByRoom[roomName] = [];
+                    studentsByRoom[roomName].push(s);
+                });
+
+                // Sort Rooms: Regular Priority -> Serial -> Name
+                const sortedRooms = Object.keys(studentsByRoom).sort((a, b) => {
+                    const serA = roomSerialMap[a] || 9999;
+                    const serB = roomSerialMap[b] || 9999;
+                    return serA - serB;
+                });
+
+                // 3. Page Builder Logic
+                let currentPageRows = [];
+                let currentRowCount = 0;
+
+                sortedRooms.forEach(roomName => {
+                    const roomStudents = studentsByRoom[roomName];
+                    // Sort students by Seat No
+                    roomStudents.sort((a, b) => {
+                        // Handle numeric or string seats
+                        const sA = parseInt(a.seatNumber) || 0;
+                        const sB = parseInt(b.seatNumber) || 0;
+                        return sA - sB;
+                    });
+
+                    // Calculate space needed (Header + Students)
+                    const spaceNeeded = 1 + roomStudents.length; 
+
+                    // Check if we need a new page
+                    if (currentRowCount + spaceNeeded > MAX_ROWS_PER_PAGE && currentRowCount > 0) {
+                        // Flush current page
+                        allPagesHtml += renderPage(currentPageRows, streamName, session, currentRowCount);
+                        totalPagesGenerated++;
+                        currentPageRows = [];
+                        currentRowCount = 0;
                     }
 
-                    allPagesHtml += `
-                        <div class="print-page print-page-daywise">
-                            <div class="print-header-group" style="position: relative;">
-                                <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
-                                    Stream: ${streamName}
-                                </div>
-                                <h1>Seating Details for Candidates</h1>
-                                <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
-                            </div>
-                            ${columnHtml}
-                            ${scribeListHtml}
-                        </div>
-                    `;
+                    // Add Room Header
+                    const roomInfo = currentRoomConfig[roomName] || {};
+                    const location = roomInfo.location ? ` (${roomInfo.location})` : "";
+                    const serial = roomSerialMap[roomName] || "";
+                    const headerTitle = serial ? `${serial} | ${roomName}${location}` : `${roomName}${location}`;
+
+                    currentPageRows.push({ type: 'header', text: headerTitle });
+                    
+                    // Add Students
+                    roomStudents.forEach(s => {
+                        currentPageRows.push({ 
+                            type: 'student', 
+                            reg: s['Register Number'], 
+                            name: s.Name, 
+                            seat: s.isScribe ? 'Scribe' : s.seatNumber,
+                            isScribe: s.isScribe
+                        });
+                    });
+
+                    currentRowCount += spaceNeeded;
+                });
+
+                // Flush last page
+                if (currentPageRows.length > 0) {
+                    allPagesHtml += renderPage(currentPageRows, streamName, session, currentRowCount);
+                    totalPagesGenerated++;
+                }
+
+                // 4. Scribe Summary Page (Only if Scribes exist)
+                const sessionScribes = session.students.filter(s => s.isScribe);
+                if (sessionScribes.length > 0) {
+                    allPagesHtml += renderScribeSummaryPage(sessionScribes, streamName, session, allScribeAllotments);
+                    totalPagesGenerated++;
                 }
             });
         }
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} pages (Grouped by Stream).`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} pages (Grouped by Room).`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Daywise_Seating_Details"; 
     } catch (e) {
@@ -1642,6 +1662,117 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
     }
 });
+
+// --- Helper: Render a Single Page of Seating Details ---
+function renderPage(rows, streamName, session, rowCount) {
+    // Dynamic Font Sizing
+    let tableClass = "text-base"; // Default 12pt approx
+    if (rowCount > 35) tableClass = "text-sm"; // 10pt approx
+    
+    let tableBodyHtml = "";
+    
+    rows.forEach(row => {
+        if (row.type === 'header') {
+            // Merged Header Row for Room
+            tableBodyHtml += `
+                <tr class="bg-gray-200 print:bg-gray-200">
+                    <td colspan="3" style="font-weight: bold; font-size: 1.1em; padding: 6px; border: 1px solid #000; text-align: center;">
+                        ${row.text}
+                    </td>
+                </tr>
+            `;
+        } else {
+            // Student Row
+            const scribeStyle = row.isScribe ? 'font-weight:bold; color:#c2410c;' : '';
+            tableBodyHtml += `
+                <tr style="${scribeStyle}">
+                    <td style="border: 1px solid #ccc; padding: 4px 8px; width: 30%;">${row.reg}</td>
+                    <td style="border: 1px solid #ccc; padding: 4px 8px; width: 50%;">${row.name}</td>
+                    <td style="border: 1px solid #ccc; padding: 4px 8px; width: 20%; text-align: center; font-weight: bold;">${row.seat}</td>
+                </tr>
+            `;
+        }
+    });
+
+    return `
+        <div class="print-page print-page-daywise">
+            <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
+                <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
+                    Stream: ${streamName}
+                </div>
+                <h1>Seating Details for Candidates</h1>
+                <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; ${rowCount > 35 ? 'font-size: 10pt;' : 'font-size: 11pt;'}">
+                <thead>
+                    <tr style="background-color: #f3f4f6;">
+                        <th style="border: 1px solid #000; padding: 6px; text-align: left;">Register Number</th>
+                        <th style="border: 1px solid #000; padding: 6px; text-align: left;">Name</th>
+                        <th style="border: 1px solid #000; padding: 6px; text-align: center;">Seat No</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableBodyHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// --- Helper: Render Scribe Summary Page ---
+function renderScribeSummaryPage(scribes, streamName, session, allotments) {
+    // ... (Using previous scribe summary logic, wrapped in a function) ...
+    const scribesByRoom = {};
+    scribes.forEach(s => {
+        const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+        const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+        if(!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
+        scribesByRoom[newRoom].push(s);
+    });
+
+    let summaryRows = '';
+    Object.keys(scribesByRoom).sort().forEach(roomName => {
+         const students = scribesByRoom[roomName];
+         let rowFontSize = '10pt';
+         if (students.length > 15) rowFontSize = '9pt';
+         
+         const studentList = students.map(s => `${s.Name} (${s['Register Number']})`).join(', ');
+         const roomInfo = currentRoomConfig[roomName] || {};
+         const location = roomInfo.location ? `<br><span style="font-size:0.8em;color:#666">(${roomInfo.location})</span>` : "";
+
+         summaryRows += `
+            <tr>
+                <td style="font-weight:bold; font-size:11pt; vertical-align:top; width: 25%; border:1px solid #000; padding:8px;">${roomName}${location}</td>
+                <td style="font-size:${rowFontSize}; line-height:1.4; border:1px solid #000; padding:8px;">${studentList}</td>
+                <td style="text-align:center; font-weight:bold; width:10%; border:1px solid #000; padding:8px;">${students.length}</td>
+            </tr>
+         `;
+    });
+
+    return `
+        <div class="print-page">
+            <div class="print-header-group">
+                <h1>Scribe Assistance Summary</h1>
+                <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+                <h3 style="border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 15px;">Stream: ${streamName}</h3>
+            </div>
+            
+            <table class="scribe-report-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background-color:#eee;">
+                        <th style="border:1px solid #000; padding:8px;">Scribe Room</th>
+                        <th style="border:1px solid #000; padding:8px;">Allocated Students</th>
+                        <th style="border:1px solid #000; padding:8px;">Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${summaryRows}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
 
 // --- V91: Event listener for "Generate Question Paper Report" (Added report type set) ---
 // --- Event listener for "Generate Question Paper Report" (Stream Wise) ---
