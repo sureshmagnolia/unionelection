@@ -1267,6 +1267,7 @@ function checkManualAllotment(sessionKey) {
 }
 
 // --- 1. Event listener for the "Generate Room-wise Report" button ---
+// --- 1. Event listener for the "Generate Room-wise Report" button ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     
@@ -1284,17 +1285,13 @@ generateReportButton.addEventListener('click', async () => {
         getRoomCapacitiesFromStorage(); 
         loadQPCodes(); 
         
-        // 1. Get FILTERED RAW student data
         const data = getFilteredReportData('room-wise');
         if (data.length === 0) {
             alert("No data found for the selected filter/session."); 
             return;
         }
         
-        // 2. Get the ORIGINAL allocation with seat numbers
         const processed_rows_with_rooms = performOriginalAllocation(data);
-
-        // 3. Load scribe data and create final list
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         const final_student_list_for_report = [];
         
@@ -1303,94 +1300,72 @@ generateReportButton.addEventListener('click', async () => {
                 const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                 const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
                 const scribeRoom = sessionScribeAllotment[student['Register Number']] || 'N/A';
-                
-                final_student_list_for_report.push({ 
-                    ...student, 
-                    Name: student.Name, 
-                    remark: `${scribeRoom}`, 
-                    isPlaceholder: true 
-                });
+                final_student_list_for_report.push({ ...student, Name: student.Name, remark: `${scribeRoom}`, isPlaceholder: true });
             } else {
                 final_student_list_for_report.push(student);
             }
         }
         
-        // 4. Store data for CSV
         lastGeneratedRoomData = processed_rows_with_rooms; 
         lastGeneratedReportType = "Roomwise_Seating_Report";
 
-        // 5. Group data for Report Generation
         const sessions = {};
         loadQPCodes(); 
         final_student_list_for_report.forEach(student => {
             const key = `${student.Date}_${student.Time}_${student['Room No']}`;
             if (!sessions[key]) {
                 sessions[key] = {
-                    Date: student.Date,
-                    Time: student.Time,
-                    Room: student['Room No'],
-                    students: [],
-                    courseCounts: {}
+                    Date: student.Date, Time: student.Time, Room: student['Room No'],
+                    students: [], courseCounts: {}
                 };
             }
             sessions[key].students.push(student);
-            
             const course = student.Course;
-            if (!sessions[key].courseCounts[course]) {
-                sessions[key].courseCounts[course] = 0;
-            }
-            sessions[key].courseCounts[course]++;
+            sessions[key].courseCounts[course] = (sessions[key].courseCounts[course] || 0) + 1;
         });
 
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
-        
-        const sortedSessionKeys = Object.keys(sessions).sort((a, b) => {
-            return getNumericSortKey(a).localeCompare(getNumericSortKey(b));
-        });
+        const sortedSessionKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
 
-        // 6. Build the HTML report pages
         sortedSessionKeys.forEach(key => {
             const session = sessions[key];
-            
-            // Get location for this room
             const roomInfo = currentRoomConfig[session.Room];
             const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
             const locationHtml = location ? `<div class="report-location-header">Location: ${location}</div>` : "";
-
-            // Get Room Serial Number
+            
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
             const serialNo = roomSerialMap[session.Room] || '-';
-
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
 
-            // --- Prepare Course Summary & QP Split-up ---
+            // --- Determine Stream for this Room ---
+            // Since rooms are separated, we take the stream from the first student
+            const pageStream = session.students.length > 0 ? (session.students[0].Stream || "Regular") : "Regular";
+            // --------------------------------------
+
             let courseSummaryHtml = '';
             const uniqueQPCodesInRoom = new Set();
-
             for (const [courseName, count] of Object.entries(session.courseCounts)) {
                 const courseKey = getBase64CourseKey(courseName);
                 const qpCode = sessionQPCodes[courseKey];
-                
-                // Add to QP List for Balance section
                 if (qpCode) uniqueQPCodesInRoom.add(qpCode);
                 else uniqueQPCodesInRoom.add(courseName.substring(0, 15)); 
-
                 const qpDisplay = qpCode ? ` (QP: ${qpCode})` : "";
                 courseSummaryHtml += `<div style="font-size: 9pt; margin-bottom: 2px;">${courseName}${qpDisplay}: <strong>${count}</strong></div>`; 
             }
             
-            // Build the Balance Split-up HTML
             let qpBalanceHtml = '';
             uniqueQPCodesInRoom.forEach(code => {
                 qpBalanceHtml += `<span style="white-space: nowrap;">${code}: __________</span> &nbsp;&nbsp; `;
             });
-            // --------------------------------------------
             
-            // *** FIX: Removed ${session.Room} from the header below ***
             const pageHeaderHtml = `
-                <div class="print-header-group">
+                <div class="print-page-break"></div>
+                <div class="print-header-group" style="position: relative;">
+                    <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
+                        Stream: ${pageStream}
+                    </div>
                     <h1>${currentCollegeName}</h1> 
                     <h2>${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
                     ${locationHtml} 
@@ -1421,11 +1396,9 @@ generateReportButton.addEventListener('click', async () => {
                         <strong style="font-size: 10pt;">Course Summary:</strong>
                         <div style="margin-top: 4px;">${courseSummaryHtml}</div>
                     </div>
-                    
                     <div style="font-size: 9pt; line-height: 1.4;">
                         <div><strong>Answer Booklets Received:</strong> _________________</div>
                         <div><strong>Answer Booklets Used:</strong> _________________</div>
-                        
                         <div style="margin-top: 4px; margin-bottom: 4px;">
                             <strong>Answer Booklets Returned (Balance):</strong><br>
                             <div style="margin-top: 6px; line-height: 1.8;">
@@ -1434,7 +1407,6 @@ generateReportButton.addEventListener('click', async () => {
                             </div>
                         </div>
                     </div>
-
                     <div class="signature" style="margin-left: auto; text-align: center;">
                         Name and Dated Signature of the Invigilator
                     </div>
@@ -1442,25 +1414,20 @@ generateReportButton.addEventListener('click', async () => {
                 </div>
             `;
 
-            let previousCourseName = ""; 
-            let previousRegNoPrefix = ""; 
+            let previousCourseName = ""; let previousRegNoPrefix = ""; 
             const regNoRegex = /^([A-Z]+)(\d+)$/; 
 
-function generateTableRows(studentList) {
+            function generateTableRows(studentList) {
                 let rowsHtml = '';
                 studentList.forEach((student) => { 
                     const seatNumber = student.seatNumber;
                     const asterisk = student.isPlaceholder ? '*' : '';
-                    
-                    // Use Base64 Key for Table Rows too
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
-                    
                     const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; 
                     
                     const courseWords = student.Course.split(/\s+/);
                     const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
-                    
                     const tableCourseName = qpCodePrefix + truncatedCourse;
                     
                     let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
@@ -1469,17 +1436,11 @@ function generateTableRows(studentList) {
                     const regNo = student['Register Number'];
                     let displayRegNo = regNo;
                     const match = regNo.match(regNoRegex);
-                    
                     if (match) {
-                        const prefix = match[1];
-                        const number = match[2];
-                        if (prefix === previousRegNoPrefix) {
-                            displayRegNo = number; 
-                        }
+                        const prefix = match[1]; const number = match[2];
+                        if (prefix === previousRegNoPrefix) displayRegNo = number; 
                         previousRegNoPrefix = prefix; 
-                    } else {
-                        previousRegNoPrefix = ""; 
-                    }
+                    } else { previousRegNoPrefix = ""; }
 
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     const remarkText = student.remark || ''; 
@@ -1502,8 +1463,7 @@ function generateTableRows(studentList) {
             const studentsPage1 = studentsWithIndex.slice(0, 20); 
             const studentsPage2 = studentsWithIndex.slice(20);
 
-            previousCourseName = ""; 
-            previousRegNoPrefix = ""; 
+            previousCourseName = ""; previousRegNoPrefix = ""; 
             const tableRowsPage1 = generateTableRows(studentsPage1);
             allPagesHtml += `<div class="print-page">${pageHeaderHtml}${tableHeaderHtml}${tableRowsPage1}</tbody></table>`; 
             if (studentsPage2.length === 0) allPagesHtml += invigilatorFooterHtml;
@@ -1511,8 +1471,7 @@ function generateTableRows(studentList) {
             totalPagesGenerated++;
             
             if (studentsPage2.length > 0) {
-                previousCourseName = ""; 
-                previousRegNoPrefix = ""; 
+                previousCourseName = ""; previousRegNoPrefix = ""; 
                 const tableRowsPage2 = generateTableRows(studentsPage2);
                 allPagesHtml += `<div class="print-page">${tableHeaderHtml}${tableRowsPage2}</tbody></table>${invigilatorFooterHtml}</div>`; 
                 totalPagesGenerated++;
@@ -2118,14 +2077,10 @@ function formatRegNoList(regNos) {
     return outputHtml.join('<br>');
 }
         
-// --- (V56) Event listener for "Generate Absentee Statement" (Renamed) ---
-// --- (V56) Event listener for "Generate Absentee Statement" (Dynamic Font Scaling) ---
+// --- (V56) Event listener for "Generate Absentee Statement" (Stream Label Added) ---
 generateAbsenteeReportButton.addEventListener('click', async () => {
     const sessionKey = sessionSelect.value;
-    if (!sessionKey) {
-        alert("Please select a session first.");
-        return;
-    }
+    if (!sessionKey) { alert("Please select a session first."); return; }
 
     generateAbsenteeReportButton.disabled = true;
     generateAbsenteeReportButton.textContent = "Generating...";
@@ -2133,19 +2088,16 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
     
     try {
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
         const [date, time] = sessionKey.split(' | ');
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
         const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
         const absenteeRegNos = new Set(allAbsentees[sessionKey] || []);
         loadQPCodes(); 
         
-        // 3. Group students by QP CODE -> Then by COURSE
         const qpGroups = {};
         
         for (const student of sessionStudents) {
             const courseDisplay = student.Course;
-            
             const courseKey = getBase64CourseKey(courseDisplay);
             if (!courseKey) continue; 
             
@@ -2153,20 +2105,13 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
             const qpCode = sessionCodes[courseKey] || "Not Entered"; 
             
             if (!qpGroups[qpCode]) {
-                qpGroups[qpCode] = {
-                    code: qpCode,
-                    courses: {}, 
-                    grandTotalPresent: 0,
-                    grandTotalAbsent: 0
-                };
+                qpGroups[qpCode] = { code: qpCode, courses: {}, grandTotalPresent: 0, grandTotalAbsent: 0, streams: new Set() };
             }
             
+            qpGroups[qpCode].streams.add(student.Stream || "Regular"); // Track streams for this QP
+
             if (!qpGroups[qpCode].courses[courseDisplay]) {
-                qpGroups[qpCode].courses[courseDisplay] = {
-                    name: courseDisplay,
-                    present: [],
-                    absent: []
-                };
+                qpGroups[qpCode].courses[courseDisplay] = { name: courseDisplay, present: [], absent: [] };
             }
             
             if (absenteeRegNos.has(student['Register Number'])) {
@@ -2178,7 +2123,6 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
             }
         }
         
-        // 4. Build Report Pages
         let allPagesHtml = '';
         let totalPages = 0;
         const sortedQpKeys = Object.keys(qpGroups).sort();
@@ -2187,26 +2131,18 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
             totalPages++;
             const qpData = qpGroups[qpCode];
             
-            // --- DYNAMIC FONT CALCULATION ---
-            let totalStudentsInQP = 0;
-            Object.values(qpData.courses).forEach(c => {
-                totalStudentsInQP += c.present.length + c.absent.length;
-            });
+            // Determine Stream Label
+            const streamList = Array.from(qpData.streams);
+            const streamLabel = streamList.length === 1 ? streamList[0] : "Combined";
 
+            // Dynamic Font Size Logic
+            let totalStudentsInQP = 0;
+            Object.values(qpData.courses).forEach(c => totalStudentsInQP += c.present.length + c.absent.length);
             let dynamicFontSize = '13pt';
             let dynamicLineHeight = '1.6';
-
-            if (totalStudentsInQP > 150) {
-                dynamicFontSize = '9pt';
-                dynamicLineHeight = '1.3';
-            } else if (totalStudentsInQP > 100) {
-                dynamicFontSize = '10pt';
-                dynamicLineHeight = '1.4';
-            } else if (totalStudentsInQP > 60) {
-                dynamicFontSize = '11pt';
-                dynamicLineHeight = '1.5';
-            }
-            // ----------------------------------------
+            if (totalStudentsInQP > 150) { dynamicFontSize = '9pt'; dynamicLineHeight = '1.3'; }
+            else if (totalStudentsInQP > 100) { dynamicFontSize = '10pt'; dynamicLineHeight = '1.4'; }
+            else if (totalStudentsInQP > 60) { dynamicFontSize = '11pt'; dynamicLineHeight = '1.5'; }
 
             const sortedCourses = Object.keys(qpData.courses).sort();
             let tableRowsHtml = '';
@@ -2231,7 +2167,6 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
                 `;
             }
             
-            // Add Total Row for the QP Code
             tableRowsHtml += `
                 <tr style="background-color: #eee; border-top: 3px double #000;">
                     <td colspan="2" style="padding: 10px;">
@@ -2245,13 +2180,15 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
             
             allPagesHtml += `
                 <div class="print-page">
-                    <div class="print-header-group">
+                    <div class="print-header-group" style="position: relative;">
+                        <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
+                            Stream: ${streamLabel}
+                        </div>
                         <h1>${currentCollegeName}</h1>
                         <h2>Statement of Answer Scripts</h2>
                         <h3>${date} &nbsp;|&nbsp; ${time}</h3>
                         <h3 style="border: 1px solid black; padding: 5px; display: inline-block; margin-top: 5px;">QP Code: ${qpCode}</h3>
                     </div>
-                
                     <table class="absentee-report-table" style="margin-top: 1rem;">
                         <thead>
                             <tr>
@@ -2263,7 +2200,6 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
                             ${tableRowsHtml}
                         </tbody>
                     </table>
-                    
                     <div class="absentee-footer">
                         <div class="signature">
                             Chief Superintendent
@@ -2291,7 +2227,7 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
 });
 
 
-// *** CORRECTED: Event listener for "Generate Scribe Report" ***
+// *** UPDATED: Event listener for "Generate Scribe Report" (Stream Label Added) ***
 generateScribeReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -2308,100 +2244,60 @@ generateScribeReportButton.addEventListener('click', async () => {
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         getRoomCapacitiesFromStorage(); 
         
-        // 1. Get FILTERED data
         const data = getFilteredReportData('scribe-report'); 
-        if (!data || data.length === 0) {
-            alert("No data found for the selected filter/session.");
-            return;
-        }
-        
-        // 2. Get global scribe list
+        if (!data || data.length === 0) { alert("No data found."); return; }
         loadGlobalScribeList();
-        if (globalScribeList.length === 0) {
-            alert("No students have been added to the Scribe List in Scribe Assistance.");
-            return;
-        }
         const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-        
-        // 3. Get all scribe students from the filtered data
         const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
-        if (allScribeStudents.length === 0) {
-            alert("No scribe students found in the selected data.");
-            return;
-        }
+        if (allScribeStudents.length === 0) { alert("No scribe students found."); return; }
         
-        // 4. Get Original Room Allotments
-        // We use 'data' here (which is already filtered by session) to generate correct seat numbers
-        const originalAllotments = performOriginalAllocation(data); 
-        
-        // *** FIX 1: Use COMPOSITE KEY (Date|Time|RegNo) to prevent overwriting ***
+        const allDataRaw = JSON.parse(jsonDataStore.innerHTML || '[]');
+        const originalAllotments = performOriginalAllocation(allDataRaw); 
         const originalRoomMap = originalAllotments.reduce((map, s) => {
             const key = `${s.Date}|${s.Time}|${s['Register Number']}`;
             map[key] = { room: s['Room No'], seat: s.seatNumber };
             return map;
         }, {});
 
-        // 5. Load Scribe Allotments and QP Codes
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         loadQPCodes(); 
 
-        // 6. Collate all data
         const reportRows = [];
         for (const s of allScribeStudents) {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-            
-            // Use Base64 Key
             const courseKey = getBase64CourseKey(s.Course);
-            
-            // *** FIX 2: Look up using the COMPOSITE KEY ***
             const lookupKey = `${s.Date}|${s.Time}|${s['Register Number']}`;
             const originalRoomData = originalRoomMap[lookupKey] || { room: 'N/A', seat: 'N/A' };
-            
-            // --- Get Room Serial Map for this session ---
             const roomSerialMap = getRoomSerialMap(sessionKey);
-            
-            // --- Format Original Room with Serial ---
             const orgSerial = roomSerialMap[originalRoomData.room] || '-';
             const originalRoomDisplay = `${orgSerial} - ${originalRoomData.room} (Seat: ${originalRoomData.seat})`;
-            
-            // --- Format Scribe Room with Serial & Location ---
             const rawScribeRoom = sessionScribeRooms[s['Register Number']];
             let scribeRoomDisplay = 'Not Allotted';
             
             if (rawScribeRoom) {
                 const rInfo = currentRoomConfig[rawScribeRoom];
                 const rLoc = (rInfo && rInfo.location) ? ` (${rInfo.location})` : ""; 
-                
-                // Get Serial for Scribe Room
                 const scribeSerial = roomSerialMap[rawScribeRoom] || '-';
                 scribeRoomDisplay = `${scribeSerial} - ${rawScribeRoom}${rLoc}`;
             }
 
             reportRows.push({
-                Date: s.Date,
-                Time: s.Time,
-                RegisterNumber: s['Register Number'],
-                Name: s.Name,
-                Course: s.Course,
-                OriginalRoom: originalRoomDisplay, // Correct Data
-                ScribeRoom: scribeRoomDisplay,     // Correct Data
-                QPCode: sessionQPCodes[courseKey] || 'N/A'
+                Date: s.Date, Time: s.Time, RegisterNumber: s['Register Number'],
+                Name: s.Name, Course: s.Course, OriginalRoom: originalRoomDisplay,
+                ScribeRoom: scribeRoomDisplay, QPCode: sessionQPCodes[courseKey] || 'N/A',
+                Stream: s.Stream || "Regular"
             });
         }
         
-        // 7. Group by Session
         const sessions = {};
         for (const row of reportRows) {
             const key = `${row.Date}_${row.Time}`;
-            if (!sessions[key]) {
-                sessions[key] = { Date: row.Date, Time: row.Time, students: [] };
-            }
+            if (!sessions[key]) sessions[key] = { Date: row.Date, Time: row.Time, students: [] };
             sessions[key].students.push(row);
         }
 
-        // 8. Build HTML
         let allPagesHtml = '';
         let totalPages = 0;
         const sortedSessionKeys = Object.keys(sessions).sort();
@@ -2409,6 +2305,10 @@ generateScribeReportButton.addEventListener('click', async () => {
         sortedSessionKeys.forEach(key => {
             const session = sessions[key];
             totalPages++;
+            
+            // Determine Stream Label for Header
+            const streamsInSession = new Set(session.students.map(s => s.Stream));
+            const streamLabel = streamsInSession.size === 1 ? Array.from(streamsInSession)[0] : "Combined";
             
             let tableRowsHtml = '';
             session.students.forEach((student, index) => {
@@ -2427,7 +2327,10 @@ generateScribeReportButton.addEventListener('click', async () => {
             
             allPagesHtml += `
                 <div class="print-page">
-                    <div class="print-header-group">
+                    <div class="print-header-group" style="position: relative;">
+                        <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
+                            Stream: ${streamLabel}
+                        </div>
                         <h1>${currentCollegeName}</h1>
                         <h2>Scribe Assistance Report</h2>
                         <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
@@ -2450,17 +2353,14 @@ generateScribeReportButton.addEventListener('click', async () => {
             `;
         });
         
-        // 9. Show report
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPages} scribe report pages for ${sortedSessionKeys.length} sessions.`;
+        reportStatus.textContent = `Generated ${totalPages} scribe report pages.`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Scribe_Assistance_Report";
-
     } catch (e) {
-        console.error("Error generating scribe report:", e);
+        console.error("Error:", e);
         alert("Error generating report: " + e.message);
-        reportStatus.textContent = "Generation failed.";
         reportControls.classList.remove('hidden');
     } finally {
         generateScribeReportButton.disabled = false;
