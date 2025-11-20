@@ -1513,30 +1513,35 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         getRoomCapacitiesFromStorage(); 
         
-        const data = getFilteredReportData('day-wise');
-        if (data.length === 0) { alert("No data found."); return; }
+        // Get base data (Session filtered if needed)
+        const baseData = getFilteredReportData('day-wise');
+        if (baseData.length === 0) { alert("No data found."); return; }
+
+        // --- NEW LOGIC: Split Data by Stream ---
+        // Even if "All" is selected, we process streams sequentially
+        const dataByStream = {};
+        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
-        const processed_rows_with_rooms = performOriginalAllocation(data); 
-
-        // 1. Determine Stream Label for Header
-        // If filtered to one stream, show that. If "All", check data.
-        const uniqueStreams = new Set(processed_rows_with_rooms.map(s => s.Stream || "Regular"));
-        const streamLabel = uniqueStreams.size === 1 ? Array.from(uniqueStreams)[0] : "Combined";
-
-        const daySessions = {};
-        processed_rows_with_rooms.forEach(student => {
-            const key = `${student.Date}_${student.Time}`;
-            if (!daySessions[key]) daySessions[key] = { Date: student.Date, Time: student.Time, students: [] };
-            daySessions[key].students.push(student);
+        baseData.forEach(row => {
+            const strm = row.Stream || "Regular";
+            if (!dataByStream[strm]) dataByStream[strm] = [];
+            dataByStream[strm].push(row);
         });
 
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        // Sort Streams (Regular first)
+        const sortedStreamNames = Object.keys(dataByStream).sort((a, b) => {
+            if (a === "Regular") return -1;
+            if (b === "Regular") return 1;
+            return a.localeCompare(b);
+        });
+
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
         const STUDENTS_PER_COLUMN = 45; 
         const COLUMNS_PER_PAGE = 2; 
         const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
 
+        // Helper to build table HTML (Same as before)
         function buildColumnTable(studentChunk) {
             let rowsHtml = '';
             let currentCourse = ""; 
@@ -1555,65 +1560,78 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     seatNo = 'Scribe'; 
                     rowStyle = 'font-weight: bold; color: #c2410c;'; 
                 }
-                // Show Location if available
-                const roomInfo = currentRoomConfig[roomName];
-                const displayRoom = (roomInfo && roomInfo.location) ? roomInfo.location : roomName;
-                
+                const roomInfo = currentRoomConfig[roomName] || {};
+                const displayRoom = roomInfo.location ? roomInfo.location : roomName;
                 rowsHtml += `<tr style="${rowStyle}"><td>${student['Register Number']}</td><td>${student.Name}</td><td>${displayRoom}</td><td style="text-align: center;">${seatNo}</td></tr>`;
             });
             return `<table class="daywise-report-table"><thead><tr><th style="width: 15%;">Register No</th><th style="width: 25%;">Name</th><th style="width: 50%;">Location</th><th style="width: 10%;">Seat</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
         }
 
-        const sortedSessionKeys = Object.keys(daySessions).sort();
+        // --- MAIN LOOP: Iterate Streams -> Then Sessions ---
+        for (const streamName of sortedStreamNames) {
+            const streamData = dataByStream[streamName];
+            // Allocate rooms (Manual check)
+            const processed_rows = performOriginalAllocation(streamData);
 
-        sortedSessionKeys.forEach(key => {
-            const session = daySessions[key];
-            session.students.sort((a, b) => {
-                if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                return a['Register Number'].localeCompare(b['Register Number']);
+            // Group by Session
+            const daySessions = {};
+            processed_rows.forEach(student => {
+                const key = `${student.Date}_${student.Time}`;
+                if (!daySessions[key]) daySessions[key] = { Date: student.Date, Time: student.Time, students: [] };
+                daySessions[key].students.push(student);
             });
-            
-            for (let i = 0; i < session.students.length; i += STUDENTS_PER_PAGE) {
-                const pageStudents = session.students.slice(i, i + STUDENTS_PER_PAGE);
-                totalPagesGenerated++;
-                
-                const col1Students = pageStudents.slice(0, STUDENTS_PER_COLUMN);
-                const col2Students = pageStudents.slice(STUDENTS_PER_COLUMN); 
-                
-                let columnHtml = '';
-                if (col2Students.length === 0) columnHtml = `<div class="column">${buildColumnTable(col1Students)}</div>`;
-                else columnHtml = `<div class="column-container"><div class="column">${buildColumnTable(col1Students)}</div><div class="column">${buildColumnTable(col2Students)}</div></div>`;
-                
-                // Scribe Summary (Existing logic kept compact)
-                let scribeListHtml = '';
-                if (i + STUDENTS_PER_PAGE >= session.students.length) {
-                     const sessionScribes = session.students.filter(s => s.isScribe);
-                     if (sessionScribes.length > 0) {
-                        // ... (Your existing Scribe Summary Logic here) ...
-                        // For brevity, assume basic list logic or copy from previous version
-                        scribeListHtml = `<div class="mt-4 p-2 border border-orange-500 bg-orange-50"><strong>Scribe Summary:</strong> ${sessionScribes.length} students.</div>`;
-                     }
-                }
 
-            allPagesHtml += `
-                <div class="print-page print-page-daywise">
-                    <div class="print-header-group" style="position: relative;">
-                         <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
-                            Stream: ${streamLabel}
+            const sortedSessionKeys = Object.keys(daySessions).sort();
+
+            sortedSessionKeys.forEach(key => {
+                const session = daySessions[key];
+                
+                // Sort Students
+                session.students.sort((a, b) => {
+                    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                    return a['Register Number'].localeCompare(b['Register Number']);
+                });
+                
+                for (let i = 0; i < session.students.length; i += STUDENTS_PER_PAGE) {
+                    const pageStudents = session.students.slice(i, i + STUDENTS_PER_PAGE);
+                    totalPagesGenerated++;
+                    
+                    const col1Students = pageStudents.slice(0, STUDENTS_PER_COLUMN);
+                    const col2Students = pageStudents.slice(STUDENTS_PER_COLUMN); 
+                    
+                    let columnHtml = '';
+                    if (col2Students.length === 0) columnHtml = `<div class="column">${buildColumnTable(col1Students)}</div>`;
+                    else columnHtml = `<div class="column-container"><div class="column">${buildColumnTable(col1Students)}</div><div class="column">${buildColumnTable(col2Students)}</div></div>`;
+                    
+                    // Scribe Summary (Filtered to current Stream)
+                    let scribeListHtml = '';
+                    if (i + STUDENTS_PER_PAGE >= session.students.length) {
+                         const sessionScribes = session.students.filter(s => s.isScribe);
+                         if (sessionScribes.length > 0) {
+                            scribeListHtml = `<div class="mt-4 p-2 border border-orange-500 bg-orange-50"><strong>Scribe Summary (${streamName}):</strong> ${sessionScribes.length} students.</div>`;
+                         }
+                    }
+
+                    allPagesHtml += `
+                        <div class="print-page print-page-daywise">
+                            <div class="print-header-group" style="position: relative;">
+                                <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
+                                    Stream: ${streamName}
+                                </div>
+                                <h1>Seating Details for Candidates</h1>
+                                <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+                            </div>
+                            ${columnHtml}
+                            ${scribeListHtml}
                         </div>
-                        <h1>Seating Details for Candidates</h1>
-                        <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
-                    </div>
-                    ${columnHtml}
-                    ${scribeListHtml}
-                </div>
-            `;
-            }
-        });
+                    `;
+                }
+            });
+        }
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} pages (Grouped by Stream).`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Daywise_Seating_Details"; 
     } catch (e) {
