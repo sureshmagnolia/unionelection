@@ -1500,11 +1500,11 @@ generateReportButton.addEventListener('click', async () => {
     }
 });
     
-// --- (V38) Event listener for "Seating Details" (Final Notice Board Layout) ---
+// --- (V39) Event listener for "Seating Details" (Strict 32-Row Limit) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateDaywiseReportButton.disabled = true;
-    generateDaywiseReportButton.textContent = "Generating Layout...";
+    generateDaywiseReportButton.textContent = "Generating Layout (32 Rows)...";
     reportOutputArea.innerHTML = "";
     reportControls.classList.add('hidden');
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -1519,11 +1519,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         const colSelect = document.getElementById('reports-column-select');
         const NUM_COLS = colSelect ? parseInt(colSelect.value) : 2;
 
-        // --- HEIGHT CONSTANTS ---
-        const PAGE_MAX_HEIGHT = 960; 
-        const ROW_HEIGHT = 22;       
-        const HEADER_HEIGHT = 35;    
-        const SPACER_HEIGHT = 5;
+        // --- STRICT ROW LIMITS ---
+        const MAX_ITEMS_PER_COL = 32; // User Requested Limit
 
         const dataByStream = {};
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
@@ -1563,7 +1560,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 const session = daySessions[key];
                 const flatItems = [];
                 
-                // Group by Course
                 const studentsByCourse = {};
                 session.students.forEach(s => {
                     if (!studentsByCourse[s.Course]) studentsByCourse[s.Course] = [];
@@ -1575,7 +1571,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     const courseStudents = studentsByCourse[courseName];
                     courseStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-                    flatItems.push({ type: 'header', text: courseName, height: HEADER_HEIGHT });
+                    // Header counts as 1 item
+                    flatItems.push({ type: 'header', text: courseName });
 
                     courseStudents.forEach(s => {
                         let roomName = s['Room No'];
@@ -1587,8 +1584,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                         const roomInfo = currentRoomConfig[roomName] || {};
                         const location = roomInfo.location ? `(${roomInfo.location})` : "";
                         const serial = roomSerialMap[roomName] || "";
-                        
-                        // Format: Serial | Room
                         const locDisplay = location 
                             ? `<b>${serial} | ${roomInfo.location}</b><br><span style="font-size:0.75em">(${roomName})</span>`
                             : `<b>${serial} | ${roomName}</b>`;
@@ -1600,76 +1595,54 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                             seat: s.isScribe ? 'Scribe' : s.seatNumber,
                             locationRaw: roomName,
                             locationDisplay: locDisplay,
-                            isScribe: s.isScribe,
-                            height: ROW_HEIGHT
+                            isScribe: s.isScribe
                         });
                     });
-                    flatItems.push({ type: 'spacer', height: SPACER_HEIGHT });
+                    // Spacer counts as 1 item
+                    flatItems.push({ type: 'spacer' });
                 });
 
+                // Scribe Summary
                 const sessionScribes = session.students.filter(s => s.isScribe);
                 if (sessionScribes.length > 0) {
-                    flatItems.push({ type: 'divider', text: "SCRIBE ASSISTANCE SUMMARY", height: 45 });
+                    flatItems.push({ type: 'divider', text: "SCRIBE ASSISTANCE SUMMARY" });
                     const scribeRows = prepareScribeSummaryRows(sessionScribes, session, allScribeAllotments);
-                    scribeRows.forEach(r => {
-                        r.height = Math.max(ROW_HEIGHT, 15 * r.studentCount);
-                        flatItems.push(r);
-                    });
+                    scribeRows.forEach(r => flatItems.push(r));
                 }
 
-                // --- FILLER ENGINE ---
+                // --- STRICT COLUMN FILLER ---
                 let col1Items = [];
                 let col2Items = [];
-                let h1 = 0;
-                let h2 = 0;
-                let fillingRight = false;
-
+                
                 const flushPage = () => {
                     if (col1Items.length > 0 || col2Items.length > 0) {
                         totalPagesGenerated++;
-                        // Render Page
                         let pageHtml = render2ColPage(col1Items, col2Items, streamName, session, NUM_COLS);
-                        // Inject Page Number
+                        // *** INJECT PAGE NUMBER ***
                         pageHtml = pageHtml.replace('{{PAGE_NO}}', totalPagesGenerated);
                         allPagesHtml += pageHtml;
                         
-                        // Reset
                         col1Items = []; col2Items = [];
-                        h1 = 0; h2 = 0;
-                        fillingRight = false;
                     }
                 };
 
                 flatItems.forEach(item => {
                     if (NUM_COLS === 1) {
-                        if (h1 + item.height > PAGE_MAX_HEIGHT) flushPage();
+                        if (col1Items.length >= MAX_ITEMS_PER_COL) flushPage();
                         col1Items.push(item);
-                        h1 += item.height;
                     } else {
-                        if (!fillingRight) {
-                            if (h1 + item.height <= PAGE_MAX_HEIGHT) {
-                                col1Items.push(item);
-                                h1 += item.height;
-                            } else {
-                                fillingRight = true;
-                                if (h2 + item.height <= PAGE_MAX_HEIGHT) {
-                                    col2Items.push(item);
-                                    h2 += item.height;
-                                } else {
-                                    flushPage();
-                                    col1Items.push(item);
-                                    h1 += item.height;
-                                }
-                            }
-                        } else {
-                            if (h2 + item.height <= PAGE_MAX_HEIGHT) {
-                                col2Items.push(item);
-                                h2 += item.height;
-                            } else {
-                                flushPage();
-                                col1Items.push(item);
-                                h1 += item.height;
-                            }
+                        // Fill Col 1 first
+                        if (col1Items.length < MAX_ITEMS_PER_COL) {
+                            col1Items.push(item);
+                        } 
+                        // Then Fill Col 2
+                        else if (col2Items.length < MAX_ITEMS_PER_COL) {
+                            col2Items.push(item);
+                        } 
+                        // Both Full -> Flush -> Add to Col 1 of new page
+                        else {
+                            flushPage();
+                            col1Items.push(item);
                         }
                     }
                 });
@@ -1679,7 +1652,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} Pages.`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} Pages (Strict 32 Rows).`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Daywise_Seating_Details"; 
     } catch (e) {
@@ -1690,6 +1663,146 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
     }
 });
+
+// --- Helper: Scribe Rows ---
+function prepareScribeSummaryRows(scribes, session, allotments) {
+    const scribesByRoom = {};
+    scribes.forEach(s => {
+        const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+        const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+        if(!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
+        scribesByRoom[newRoom].push(s);
+    });
+    const rows = [];
+    Object.keys(scribesByRoom).sort().forEach(roomName => {
+        const students = scribesByRoom[roomName];
+        const studentList = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
+        const roomInfo = currentRoomConfig[roomName] || {};
+        const location = roomInfo.location ? `(${roomInfo.location})` : "";
+        rows.push({
+            type: 'scribe-room',
+            roomDisplay: `${roomName} ${location}`,
+            content: studentList,
+            studentCount: students.length
+        });
+    });
+    return rows;
+}
+
+// --- Helper: Render 2-Column Page (Header Centered + Page #) ---
+function render2ColPage(col1, col2, streamName, session, numCols) {
+    const renderTable = (items) => {
+        if (!items || items.length === 0) return "";
+        let html = "";
+        let lastLocation = ""; 
+
+        items.forEach((row, idx) => {
+            if (row.type === 'header') {
+                html += `
+                    <tr class="bg-gray-200 print:bg-gray-200">
+                        <td colspan="4" style="font-weight: bold; font-size: 0.85em; padding: 3px 4px; border: 1px solid #000; text-align: left; border-top: 2px solid #000;">
+                            ${row.text}
+                        </td>
+                    </tr>`;
+                lastLocation = ""; 
+            } else if (row.type === 'student') {
+                const sClass = row.isScribe ? 'font-bold text-orange-700' : '';
+                let locContent = "";
+                let rowBorder = "border-top: 1px solid #ddd;"; 
+                
+                if (row.locationRaw !== lastLocation) {
+                    locContent = row.locationDisplay;
+                    rowBorder = "border-top: 2px solid #000;"; 
+                    lastLocation = row.locationRaw;
+                }
+
+                html += `
+                    <tr class="${sClass}">
+                        <td style="border-left: 1px solid #000; border-right: 1px solid #000; ${rowBorder} padding: 2px; width: 25%; vertical-align: top; text-align: center; font-size:0.8em; background-color: #fff;">
+                            ${locContent}
+                        </td>
+                        <td style="border: 1px solid #000; padding: 2px; width: 20%; text-align:left; font-size: 0.9em; vertical-align: top;">${row.reg}</td>
+                        <td style="border: 1px solid #000; padding: 2px 4px; width: 45%; font-size: 0.8em; overflow: hidden; vertical-align: top;">${row.name}</td>
+                        <td style="border: 1px solid #000; padding: 2px; width: 10%; text-align: center; font-weight: bold; font-size: 0.9em; vertical-align: top;">${row.seat}</td>
+                    </tr>`;
+            } else if (row.type === 'divider') {
+                html += `<tr><td colspan="4" style="border-bottom: 2px double #000; font-weight: bold; text-align: center; padding: 5px 0 2px; font-size:0.9em;">${row.text}</td></tr>`;
+            } else if (row.type === 'scribe-room') {
+                html += `<tr><td colspan="4" style="border: 1px solid #000; padding: 4px; font-size: 0.8em;"><strong>${row.roomDisplay}:</strong> ${row.content}</td></tr>`;
+            } else if (row.type === 'spacer') {
+                html += `<tr><td colspan="4" style="height:8px; border:0;"></td></tr>`;
+            }
+        });
+        return html;
+    };
+
+    const tableHeader = `
+        <thead>
+            <tr style="background-color: #f3f4f6; border-bottom: 2px solid #000;">
+                <th style="border: 1px solid #000; padding: 2px; font-size:0.85em;">Loc</th>
+                <th style="border: 1px solid #000; padding: 2px; font-size:0.85em;">Reg No</th>
+                <th style="border: 1px solid #000; padding: 2px; font-size:0.85em;">Name</th>
+                <th style="border: 1px solid #000; padding: 2px; font-size:0.85em;">St</th>
+            </tr>
+        </thead>`;
+
+    let bodyContent = "";
+    if (numCols === 1) {
+        bodyContent = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
+                ${tableHeader}
+                <tbody>${renderTable(col1)}</tbody>
+            </table>`;
+    } else {
+        bodyContent = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; align-items: start;">
+                <div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                        ${tableHeader}
+                        <tbody>${renderTable(col1)}</tbody>
+                    </table>
+                </div>
+                <div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                        ${tableHeader}
+                        <tbody>${renderTable(col2)}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+
+    return `
+        <div class="print-page print-page-daywise" style="height: 100%; position: relative;">
+            
+            <div class="print-header-group" style="width: 100%; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 5px; position: relative;">
+                
+                <div style="position: absolute; top: 0; left: 0; border: 2px solid #000; padding: 4px 10px; background: #fff;">
+                    <span style="font-size: 10pt; font-weight: bold;">Page</span><br>
+                    <span style="font-size: 16pt; font-weight: bold;">{{PAGE_NO}}</span>
+                </div>
+
+                <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px; background: #eee;">
+                    ${streamName}
+                </div>
+
+                <div style="text-align: center; width: 100%;"> 
+                    <h1 style="font-size: 16pt; font-weight: bold; margin: 0; text-transform: uppercase;">${currentCollegeName}</h1>
+                    <h2 style="font-size: 12pt; margin: 4px 0 0 0; font-weight: bold;">Seating Details for Candidates</h2>
+                    <h3 style="font-size: 11pt; margin: 2px 0 0 0;">${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
+                </div>
+            </div>
+            
+            <div style="width: 100%;">
+                ${bodyContent}
+            </div>
+            
+            <div style="position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #eee; padding-top: 2px;">
+                Page {{PAGE_NO}} - Generated by ExamFlow System
+            </div>
+        </div>
+    `;
+}
+
 
 // --- Helper: Render 2-Column Page (Centered Header + Page No) ---
 function render2ColPage(col1, col2, streamName, session, numCols) {
