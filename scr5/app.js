@@ -1292,18 +1292,21 @@ generateReportButton.addEventListener('click', async () => {
             let previousRegNoPrefix = ""; 
             const regNoRegex = /^([A-Z]+)(\d+)$/; 
 
-            function generateTableRows(studentList) {
+function generateTableRows(studentList) {
                 let rowsHtml = '';
                 studentList.forEach((student) => { 
                     const seatNumber = student.seatNumber;
                     const asterisk = student.isPlaceholder ? '*' : '';
                     
+                    // Use Base64 Key for Table Rows too
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
+                    
                     const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; 
                     
                     const courseWords = student.Course.split(/\s+/);
                     const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
+                    
                     const tableCourseName = qpCodePrefix + truncatedCourse;
                     
                     let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
@@ -1331,7 +1334,7 @@ generateReportButton.addEventListener('click', async () => {
                         <tr ${rowClass}>
                             <td class="sl-col">${seatNumber}${asterisk}</td>
                             <td class="course-col">${displayCourseName}</td>
-                            <td class="reg-col">${displayRegNo}</td>
+                            <td class="reg-col" style="font-size: 13pt; font-weight: bold;">${displayRegNo}</td>
                             <td class="name-col">${student.Name}</td>
                             <td class="remarks-col">${remarkText}</td>
                             <td class="signature-col"></td>
