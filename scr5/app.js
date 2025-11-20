@@ -1502,15 +1502,10 @@ generateReportButton.addEventListener('click', async () => {
     
 // --- (V40) Event listener for "Seating Details" (Final Fixed Page Numbers) ---
 
-
 // ==========================================
-// 📋 NOTICE BOARD REPORT LOGIC (FINAL FIX)
-// ==========================================
-// ==========================================
-// 📋 NOTICE BOARD REPORT LOGIC (Complete)
+// 📋 NOTICE BOARD REPORT LOGIC (Restored & Fixed)
 // ==========================================
 
-// 1. Main Logic Function
 async function generateNoticeBoardReport(numCols) {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1533,6 +1528,8 @@ async function generateNoticeBoardReport(numCols) {
         if (baseData.length === 0) { alert("No data found."); return; }
 
         const MAX_ROWS_PER_COL = 40; 
+        
+        // 1. Split by Stream (Default to "Regular" if missing)
         const dataByStream = {};
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
@@ -1550,10 +1547,16 @@ async function generateNoticeBoardReport(numCols) {
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
 
+        // MAIN LOOP
         for (const streamName of sortedStreamNames) {
             const streamData = dataByStream[streamName];
             const processed_rows = performOriginalAllocation(streamData);
-            const sampleSession = streamData.length > 0 ? `${streamData[0].Date} | ${streamData[0].Time}` : "";
+            
+            // Get Sample Session for Serial Map (Robust check)
+            let sampleSession = "";
+            if (streamData.length > 0) {
+                sampleSession = `${streamData[0].Date} | ${streamData[0].Time}`;
+            }
             const roomSerialMap = getRoomSerialMap(sampleSession);
 
             const daySessions = {};
@@ -1610,6 +1613,7 @@ async function generateNoticeBoardReport(numCols) {
                     printQueue.push({ type: 'spacer' });
                 });
 
+                // Scribe Summary
                 const sessionScribes = session.students.filter(s => s.isScribe);
                 if (sessionScribes.length > 0) {
                     printQueue.push({ type: 'divider', text: "SCRIBE SUMMARY" });
@@ -1617,15 +1621,15 @@ async function generateNoticeBoardReport(numCols) {
                     scribeRows.forEach(r => printQueue.push(r));
                 }
 
+                // Page Filler
                 let col1 = [];
                 let col2 = [];
                 
                 const flushPage = () => {
                     if (col1.length > 0 || col2.length > 0) {
                         totalPagesGenerated++;
-                        let pageHtml = renderNoticePage(
-                            col1, col2, String(streamName), session, numCols, totalPagesGenerated
-                        );
+                        // *** CRITICAL FIX: Explicit arguments matching definition ***
+                        let pageHtml = renderNoticePage(col1, col2, streamName, session, numCols, totalPagesGenerated);
                         allPagesHtml += pageHtml;
                         col1 = []; col2 = [];
                     }
@@ -1663,10 +1667,7 @@ async function generateNoticeBoardReport(numCols) {
     }
 }
 
-
-
-
-// 3. Helper: Render Page
+// --- Helper: Render Page (Fixed Definition) ---
 function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
     
     const renderColumn = (rows) => {
@@ -1676,17 +1677,15 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
 
         rows.forEach((row) => {
             if (row.type === 'header') {
-                const headerText = row.text || "";
                 html += `
                     <tr class="bg-gray-200 print:bg-gray-200">
                         <td colspan="4" style="font-weight: bold; font-size: 0.85em; padding: 3px 4px; border: 1px solid #000; text-align: left; border-top: 2px solid #000;">
-                            ${headerText}
+                            ${row.text || ""}
                         </td>
                     </tr>`;
                 lastLocation = ""; 
             } else if (row.type === 'student') {
                 const sClass = row.isScribe ? 'font-bold text-orange-700' : '';
-                
                 let locContent = row.locationDisplay || "";
                 let rowBorder = "border-top: 2px solid #000;"; 
 
@@ -1706,10 +1705,9 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
                         <td style="border: 1px solid #000; padding: 2px; width: 10%; text-align: center; font-weight: bold; font-size: 0.9em; vertical-align: top;">${row.seat || ""}</td>
                     </tr>`;
             } else if (row.type === 'divider') {
-                const divText = row.text || "";
-                html += `<tr><td colspan="4" style="border-bottom: 2px double #000; font-weight: bold; text-align: center; padding: 5px 0 2px; font-size:0.9em;">${divText}</td></tr>`;
+                html += `<tr><td colspan="4" style="border-bottom: 2px double #000; font-weight: bold; text-align: center; padding: 5px 0 2px; font-size:0.9em;">${row.text}</td></tr>`;
             } else if (row.type === 'scribe-room') {
-                html += `<tr><td colspan="4" style="border: 1px solid #000; padding: 4px; font-size: 0.8em;"><strong>${row.roomDisplay || ""}:</strong> ${row.content || ""}</td></tr>`;
+                html += `<tr><td colspan="4" style="border: 1px solid #000; padding: 4px; font-size: 0.8em;"><strong>${row.roomDisplay}:</strong> ${row.content}</td></tr>`;
             } else if (row.type === 'spacer') {
                 html += `<tr><td colspan="4" style="height:4px; border:0;"></td></tr>`;
             }
@@ -1752,6 +1750,7 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
             </div>`;
     }
 
+    // SAFE ACCESS to session data
     const dateStr = (session && session.Date) ? session.Date : "Unknown Date";
     const timeStr = (session && session.Time) ? session.Time : "Unknown Time";
 
@@ -1759,16 +1758,13 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
         <div class="print-page print-page-daywise" style="height: 100%; display: flex; flex-direction: column;">
             
             <div class="print-header-group" style="width: 100%; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 5px; position: relative;">
-                
                 <div style="position: absolute; top: 0; left: 0; border: 2px solid #000; padding: 4px 10px; background: #fff;">
                     <span style="font-size: 10pt; font-weight: bold;">Page</span><br>
                     <span style="font-size: 16pt; font-weight: bold;">${pageNo || 1}</span>
                 </div>
-
                 <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px; background: #eee;">
                     ${streamName || "Regular"}
                 </div>
-
                 <div style="text-align: center; width: 100%;"> 
                     <h1 style="font-size: 16pt; font-weight: bold; margin: 0; text-transform: uppercase;">${currentCollegeName}</h1>
                     <h2 style="font-size: 12pt; margin: 4px 0 0 0; font-weight: bold;">Seating Details for Candidates</h2>
