@@ -1501,7 +1501,7 @@ generateReportButton.addEventListener('click', async () => {
 });
     
 // --- (V29) Event listener for the "Day-wise Student List" button ---
-// --- (V29) Event listener for "Seating Details for Candidates" (Notice Board Style) ---
+// --- (V29) Event listener for "Seating Details for Candidates" (Course-Wise Notice Board) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateDaywiseReportButton.disabled = true;
@@ -1537,15 +1537,14 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         let totalPagesGenerated = 0;
         
         // Pagination Constants
-        const MAX_ROWS_PER_PAGE = 42; // Safe limit for A4
+        const MAX_ROWS_PER_PAGE = 45; // Tight packing for cost saving
 
         // MAIN LOOP: Iterate Streams
         for (const streamName of sortedStreamNames) {
             const streamData = dataByStream[streamName];
-            // Run allocation to get Room/Seat info
             const processed_rows = performOriginalAllocation(streamData);
             
-            // Get Serial Map
+            // Get Serial Map for Room Numbers
             const sampleSession = streamData.length > 0 ? `${streamData[0].Date} | ${streamData[0].Time}` : "";
             const roomSerialMap = getRoomSerialMap(sampleSession);
 
@@ -1563,86 +1562,101 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             sortedSessionKeys.forEach(key => {
                 const session = daySessions[key];
                 
-                // 2. Group Students by Room (The core of this layout)
-                const studentsByRoom = {};
+                // 2. Group Students by COURSE (The Fix)
+                const studentsByCourse = {};
                 
                 session.students.forEach(s => {
-                    let roomName = s['Room No'];
-                    // Handle Scribe Room Override
-                    if (s.isScribe) {
-                        const sessionKeyPipe = `${s.Date} | ${s.Time}`;
-                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[s['Register Number']];
-                        if (scribeRoom) roomName = scribeRoom;
-                    }
-                    
-                    if (!studentsByRoom[roomName]) studentsByRoom[roomName] = [];
-                    studentsByRoom[roomName].push(s);
+                    const courseName = s.Course;
+                    if (!studentsByCourse[courseName]) studentsByCourse[courseName] = [];
+                    studentsByCourse[courseName].push(s);
                 });
 
-                // Sort Rooms: Regular Priority -> Serial -> Name
-                const sortedRooms = Object.keys(studentsByRoom).sort((a, b) => {
-                    const serA = roomSerialMap[a] || 9999;
-                    const serB = roomSerialMap[b] || 9999;
-                    return serA - serB;
-                });
+                // Sort Courses Alphabetically
+                const sortedCourses = Object.keys(studentsByCourse).sort();
 
                 // 3. Page Builder Logic
                 let currentPageRows = [];
                 let currentRowCount = 0;
 
-                sortedRooms.forEach(roomName => {
-                    const roomStudents = studentsByRoom[roomName];
-                    // Sort students by Seat No
-                    roomStudents.sort((a, b) => {
-                        // Handle numeric or string seats
-                        const sA = parseInt(a.seatNumber) || 0;
-                        const sB = parseInt(b.seatNumber) || 0;
-                        return sA - sB;
-                    });
+                sortedCourses.forEach(courseName => {
+                    const courseStudents = studentsByCourse[courseName];
+                    
+                    // Sort students by Register Number
+                    courseStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-                    // Calculate space needed (Header + Students)
-                    const spaceNeeded = 1 + roomStudents.length; 
+                    // Get QP Code
+                    loadQPCodes();
+                    const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+                    const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
+                    const courseKey = getBase64CourseKey(courseName);
+                    const qpCode = sessionQPCodes[courseKey] || "";
+                    const qpDisplay = qpCode ? `(QP: ${qpCode})` : "";
 
-                    // Check if we need a new page
-                    if (currentRowCount + spaceNeeded > MAX_ROWS_PER_PAGE && currentRowCount > 0) {
-                        // Flush current page
-                        allPagesHtml += renderPage(currentPageRows, streamName, session, currentRowCount);
+                    // Add Header for Course
+                    const headerTitle = `${courseName} ${qpDisplay}`;
+                    
+                    // Check if Header + 1st student fits
+                    if (currentRowCount + 2 > MAX_ROWS_PER_PAGE && currentRowCount > 0) {
+                        allPagesHtml += renderNoticePage(currentPageRows, streamName, session, currentRowCount);
                         totalPagesGenerated++;
                         currentPageRows = [];
                         currentRowCount = 0;
                     }
-
-                    // Add Room Header
-                    const roomInfo = currentRoomConfig[roomName] || {};
-                    const location = roomInfo.location ? ` (${roomInfo.location})` : "";
-                    const serial = roomSerialMap[roomName] || "";
-                    const headerTitle = serial ? `${serial} | ${roomName}${location}` : `${roomName}${location}`;
-
-                    currentPageRows.push({ type: 'header', text: headerTitle });
                     
+                    currentPageRows.push({ type: 'header', text: headerTitle });
+                    currentRowCount++;
+
                     // Add Students
-                    roomStudents.forEach(s => {
+                    courseStudents.forEach(s => {
+                        // Calculate Room Display
+                        let roomName = s['Room No'];
+                        if (s.isScribe) {
+                            const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[s['Register Number']];
+                            if (scribeRoom) roomName = scribeRoom;
+                        }
+                        
+                        const roomInfo = currentRoomConfig[roomName] || {};
+                        const location = roomInfo.location ? ` (${roomInfo.location})` : "";
+                        const serial = roomSerialMap[roomName] || "";
+                        // Display: Serial | Room (Loc)
+                        // e.g. "1 | Room 10 (Block A)"
+                        const roomDisplay = (roomName !== "Unallotted") 
+                            ? `<strong>${serial} | ${roomName}</strong>${location}` 
+                            : "Unallotted";
+
+                        // Check Page Break
+                        if (currentRowCount >= MAX_ROWS_PER_PAGE) {
+                            allPagesHtml += renderNoticePage(currentPageRows, streamName, session, currentRowCount);
+                            totalPagesGenerated++;
+                            currentPageRows = [];
+                            currentRowCount = 0;
+                            // Repeat Header on new page for continuity
+                            currentPageRows.push({ type: 'header', text: `${headerTitle} (Cont.)` });
+                            currentRowCount++;
+                        }
+
                         currentPageRows.push({ 
                             type: 'student', 
                             reg: s['Register Number'], 
                             name: s.Name, 
+                            room: roomDisplay,
                             seat: s.isScribe ? 'Scribe' : s.seatNumber,
                             isScribe: s.isScribe
                         });
+                        currentRowCount++;
                     });
-
-                    currentRowCount += spaceNeeded;
                 });
 
                 // Flush last page
                 if (currentPageRows.length > 0) {
-                    allPagesHtml += renderPage(currentPageRows, streamName, session, currentRowCount);
+                    allPagesHtml += renderNoticePage(currentPageRows, streamName, session, currentRowCount);
                     totalPagesGenerated++;
                 }
 
-                // 4. Scribe Summary Page (Only if Scribes exist)
+                // 4. Scribe Summary Page (Existing Logic)
                 const sessionScribes = session.students.filter(s => s.isScribe);
                 if (sessionScribes.length > 0) {
+                    // Reuse existing renderScribeSummaryPage helper
                     allPagesHtml += renderScribeSummaryPage(sessionScribes, streamName, session, allScribeAllotments);
                     totalPagesGenerated++;
                 }
@@ -1651,7 +1665,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} pages (Grouped by Room).`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} pages (Course-Wise Notice).`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Daywise_Seating_Details"; 
     } catch (e) {
@@ -1662,6 +1676,61 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
     }
 });
+
+// --- Helper: Render Notice Page (Course Wise) ---
+function renderNoticePage(rows, streamName, session, rowCount) {
+    let tableBodyHtml = "";
+    
+    rows.forEach(row => {
+        if (row.type === 'header') {
+            // Course Header
+            tableBodyHtml += `
+                <tr class="bg-gray-200 print:bg-gray-200">
+                    <td colspan="4" style="font-weight: bold; font-size: 1.0em; padding: 4px 8px; border: 1px solid #000; text-align: left;">
+                        ${row.text}
+                    </td>
+                </tr>
+            `;
+        } else {
+            // Student Row
+            const scribeStyle = row.isScribe ? 'font-weight:bold; color:#c2410c;' : '';
+            tableBodyHtml += `
+                <tr style="${scribeStyle}">
+                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 15%;">${row.reg}</td>
+                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 35%;">${row.name}</td>
+                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 40%; font-size: 0.95em;">${row.room}</td>
+                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 10%; text-align: center; font-weight: bold;">${row.seat}</td>
+                </tr>
+            `;
+        }
+    });
+
+    return `
+        <div class="print-page print-page-daywise">
+            <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
+                <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
+                    Stream: ${streamName}
+                </div>
+                <h1>Seating Details for Candidates</h1>
+                <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
+                <thead>
+                    <tr style="background-color: #f3f4f6;">
+                        <th style="border: 1px solid #000; padding: 4px; text-align: left;">Register No</th>
+                        <th style="border: 1px solid #000; padding: 4px; text-align: left;">Name</th>
+                        <th style="border: 1px solid #000; padding: 4px; text-align: left;">Room / Location</th>
+                        <th style="border: 1px solid #000; padding: 4px; text-align: center;">Seat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableBodyHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
 
 // --- Helper: Render a Single Page of Seating Details ---
 function renderPage(rows, streamName, session, rowCount) {
