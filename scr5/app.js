@@ -1500,8 +1500,7 @@ generateReportButton.addEventListener('click', async () => {
     }
 });
     
-// --- (V29) Event listener for the "Day-wise Student List" button ---
-// --- (V29) Event listener for "Seating Details for Candidates" (Course-Wise Notice Board) ---
+// --- (V29) Event listener for "Seating Details for Candidates" (Notice Board Style) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateDaywiseReportButton.disabled = true;
@@ -1543,12 +1542,9 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         for (const streamName of sortedStreamNames) {
             const streamData = dataByStream[streamName];
             const processed_rows = performOriginalAllocation(streamData);
-            
-            // Get Serial Map for Room Numbers
             const sampleSession = streamData.length > 0 ? `${streamData[0].Date} | ${streamData[0].Time}` : "";
             const roomSerialMap = getRoomSerialMap(sampleSession);
 
-            // Group by Session
             const daySessions = {};
             processed_rows.forEach(student => {
                 const key = `${student.Date}_${student.Time}`;
@@ -1558,11 +1554,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
             const sortedSessionKeys = Object.keys(daySessions).sort();
 
-            // Iterate Sessions
             sortedSessionKeys.forEach(key => {
                 const session = daySessions[key];
-                
-                // 2. Group Students by COURSE (The Fix)
                 const studentsByCourse = {};
                 
                 session.students.forEach(s => {
@@ -1571,31 +1564,18 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     studentsByCourse[courseName].push(s);
                 });
 
-                // Sort Courses Alphabetically
                 const sortedCourses = Object.keys(studentsByCourse).sort();
-
-                // 3. Page Builder Logic
                 let currentPageRows = [];
                 let currentRowCount = 0;
 
                 sortedCourses.forEach(courseName => {
                     const courseStudents = studentsByCourse[courseName];
-                    
-                    // Sort students by Register Number
                     courseStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-                    // Get QP Code
-                    loadQPCodes();
-                    const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-                    const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
-                    const courseKey = getBase64CourseKey(courseName);
-                    const qpCode = sessionQPCodes[courseKey] || "";
-                    const qpDisplay = qpCode ? `(QP: ${qpCode})` : "";
-
-                    // Add Header for Course
-                    const headerTitle = `${courseName} ${qpDisplay}`;
+                    // *** FIX: Removed QP Code Logic here ***
+                    const headerTitle = `${courseName}`; // Clean Course Name only
+                    // ***************************************
                     
-                    // Check if Header + 1st student fits
                     if (currentRowCount + 2 > MAX_ROWS_PER_PAGE && currentRowCount > 0) {
                         allPagesHtml += renderNoticePage(currentPageRows, streamName, session, currentRowCount);
                         totalPagesGenerated++;
@@ -1606,11 +1586,10 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     currentPageRows.push({ type: 'header', text: headerTitle });
                     currentRowCount++;
 
-                    // Add Students
                     courseStudents.forEach(s => {
-                        // Calculate Room Display
                         let roomName = s['Room No'];
                         if (s.isScribe) {
+                            const sessionKeyPipe = `${s.Date} | ${s.Time}`;
                             const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[s['Register Number']];
                             if (scribeRoom) roomName = scribeRoom;
                         }
@@ -1618,19 +1597,15 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                         const roomInfo = currentRoomConfig[roomName] || {};
                         const location = roomInfo.location ? ` (${roomInfo.location})` : "";
                         const serial = roomSerialMap[roomName] || "";
-                        // Display: Serial | Room (Loc)
-                        // e.g. "1 | Room 10 (Block A)"
                         const roomDisplay = (roomName !== "Unallotted") 
                             ? `<strong>${serial} | ${roomName}</strong>${location}` 
                             : "Unallotted";
 
-                        // Check Page Break
                         if (currentRowCount >= MAX_ROWS_PER_PAGE) {
                             allPagesHtml += renderNoticePage(currentPageRows, streamName, session, currentRowCount);
                             totalPagesGenerated++;
                             currentPageRows = [];
                             currentRowCount = 0;
-                            // Repeat Header on new page for continuity
                             currentPageRows.push({ type: 'header', text: `${headerTitle} (Cont.)` });
                             currentRowCount++;
                         }
@@ -1647,16 +1622,13 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     });
                 });
 
-                // Flush last page
                 if (currentPageRows.length > 0) {
                     allPagesHtml += renderNoticePage(currentPageRows, streamName, session, currentRowCount);
                     totalPagesGenerated++;
                 }
 
-                // 4. Scribe Summary Page (Existing Logic)
                 const sessionScribes = session.students.filter(s => s.isScribe);
                 if (sessionScribes.length > 0) {
-                    // Reuse existing renderScribeSummaryPage helper
                     allPagesHtml += renderScribeSummaryPage(sessionScribes, streamName, session, allScribeAllotments);
                     totalPagesGenerated++;
                 }
@@ -1676,6 +1648,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
     }
 });
+
 
 // --- Helper: Render Notice Page (Course Wise with Merged Location) ---
 function renderNoticePage(rows, streamName, session, rowCount) {
