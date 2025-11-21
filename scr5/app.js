@@ -6421,11 +6421,30 @@ editDataContainer.addEventListener('click', (e) => {
     }
 });
 
-// 7. NEW Function: Open the Edit/Add Modal (With Stream Support)
+// 7. NEW Function: Open the Edit/Add Modal (With Date/Time Conversion)
 function openStudentEditModal(rowIndex) {
     // Populate Stream Dropdown
     const streamSelect = document.getElementById('modal-edit-stream');
     streamSelect.innerHTML = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+
+    // Helper to convert DD.MM.YYYY -> YYYY-MM-DD
+    const toInputDate = (dateStr) => {
+        if (!dateStr) return "";
+        const [d, m, y] = dateStr.split('.');
+        return `${y}-${m}-${d}`;
+    };
+
+    // Helper to convert HH:MM AM/PM -> HH:MM (24h)
+    const toInputTime = (timeStr) => {
+        if (!timeStr) return "";
+        const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!match) return "";
+        let [_, h, m, p] = match;
+        h = parseInt(h);
+        if (p.toUpperCase() === 'PM' && h < 12) h += 12;
+        if (p.toUpperCase() === 'AM' && h === 12) h = 0;
+        return `${String(h).padStart(2, '0')}:${m}`;
+    };
 
     if (rowIndex === null) {
         // --- ADDING A NEW STUDENT ---
@@ -6433,12 +6452,14 @@ function openStudentEditModal(rowIndex) {
         currentlyEditingIndex = null; 
         
         const [date, time] = currentEditSession.split(' | ');
-        modalDate.value = date;
-        modalTime.value = time;
+        
+        modalDate.value = toInputDate(date); // Convert for picker
+        modalTime.value = toInputTime(time); // Convert for picker
+        
         modalCourse.value = currentEditCourse;
         modalRegNo.value = "ENTER_REG_NO";
         modalName.value = "New Student";
-        streamSelect.value = currentStreamConfig[0]; // Default to first stream
+        streamSelect.value = currentStreamConfig[0]; 
 
     } else {
         // --- EDITING AN EXISTING STUDENT ---
@@ -6446,12 +6467,14 @@ function openStudentEditModal(rowIndex) {
         currentlyEditingIndex = rowIndex; 
         
         const student = currentCourseStudents[rowIndex];
-        modalDate.value = student.Date;
-        modalTime.value = student.Time;
+        
+        modalDate.value = toInputDate(student.Date); // Convert
+        modalTime.value = toInputTime(student.Time); // Convert
+        
         modalCourse.value = student.Course;
         modalRegNo.value = student['Register Number'];
         modalName.value = student.Name;
-        streamSelect.value = student.Stream || currentStreamConfig[0]; // Set current stream
+        streamSelect.value = student.Stream || currentStreamConfig[0]; 
     }
     
     studentEditModal.classList.remove('hidden');
@@ -6467,26 +6490,44 @@ function closeStudentEditModal() {
 modalCancelBtn.addEventListener('click', closeStudentEditModal);
 
 modalSaveBtn.addEventListener('click', () => {
-    const newDate = modalDate.value.trim();
-    const newTime = modalTime.value.trim();
+    // Raw values from Date/Time pickers
+    const rawDate = modalDate.value; // YYYY-MM-DD
+    const rawTime = modalTime.value; // HH:MM
+
     const newCourse = modalCourse.value.trim();
     const newRegNo = modalRegNo.value.trim();
     const newName = modalName.value.trim();
-    const newStream = document.getElementById('modal-edit-stream').value; // Capture Stream
+    const newStream = document.getElementById('modal-edit-stream').value;
 
-    if (!newRegNo || !newName || !newDate || !newTime || !newCourse) {
+    if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
         alert('All fields must be filled.');
         return;
     }
 
+    // --- CONVERT BACK TO CSV FORMAT ---
+    
+    // 1. Convert Date: YYYY-MM-DD -> DD.MM.YYYY
+    const [y, m, d] = rawDate.split('-');
+    const formattedDate = `${d}.${m}.${y}`;
+
+    // 2. Convert Time: HH:MM -> HH:MM AM/PM
+    const [h, min] = rawTime.split(':');
+    let hours = parseInt(h);
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 should be 12
+    const formattedTime = `${hours}:${min} ${ampm}`;
+
+    // ----------------------------------
+
     if (confirm("Are you sure you want to save these changes?")) {
         const studentObj = {
-            Date: newDate,
-            Time: newTime,
+            Date: formattedDate,
+            Time: formattedTime,
             Course: newCourse,
             'Register Number': newRegNo,
             Name: newName,
-            Stream: newStream // Save Stream
+            Stream: newStream 
         };
 
         if (currentlyEditingIndex !== null) {
