@@ -323,30 +323,44 @@
                     </select>
                 </div>
 
-                <div id="bulk-course-update-container" class="hidden mt-4 mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-    <h3 class="text-sm font-bold text-yellow-800 mb-3 uppercase flex items-center gap-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-        Reschedule / Change Stream for All Students in this Course
-    </h3>
+
+
+                <div id="bulk-course-update-container" class="hidden mt-4 mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg transition-all">
+    <div class="flex justify-between items-center mb-3">
+        <h3 class="text-sm font-bold text-yellow-800 uppercase flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Reschedule / Change Stream for All Students in this Course
+        </h3>
+        <button id="btn-bulk-edit-mode" class="text-xs flex items-center gap-1 bg-white border border-yellow-300 text-yellow-700 px-3 py-1 rounded hover:bg-yellow-100 transition shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+            </svg>
+            Unlock to Edit
+        </button>
+    </div>
     
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end opacity-50 pointer-events-none transition-opacity" id="bulk-inputs-wrapper">
         <div>
-            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New Date (DD.MM.YYYY)</label>
-            <input type="text" id="bulk-new-date" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500" placeholder="e.g. 25.11.2025">
+            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New Date</label>
+            <div class="relative">
+                <input type="date" id="bulk-new-date" disabled class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500 cursor-pointer bg-gray-50" onclick="this.showPicker()">
+            </div>
         </div>
         
         <div>
             <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New Time</label>
-            <input type="text" id="bulk-new-time" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500" placeholder="e.g. 02:00 PM">
+            <div class="relative">
+                <input type="time" id="bulk-new-time" disabled class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500 cursor-pointer bg-gray-50" onclick="this.showPicker()">
+            </div>
         </div>
 
         <div>
             <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New Stream</label>
-            <select id="bulk-new-stream" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500">
+            <select id="bulk-new-stream" disabled class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500 bg-gray-50">
                 </select>
         </div>
 
-        <button id="btn-bulk-apply-changes" class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-yellow-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+        <button id="btn-bulk-apply-changes" disabled class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-yellow-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed">
             Apply to All
         </button>
     </div>
