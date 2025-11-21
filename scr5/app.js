@@ -3712,200 +3712,196 @@ generateQPaperReportButton.addEventListener('click', async () => {
 });
 
 
-// *** UPDATED: Event listener for QP Distribution (Stream-Wise Grouping) ***
-generateQpDistributionReportButton.addEventListener('click', async () => {
-    const sessionKey = reportsSessionSelect.value; 
-    if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
-    
-    generateQpDistributionReportButton.disabled = true;
-    generateQpDistributionReportButton.textContent = "Generating...";
-    reportOutputArea.innerHTML = "";
-    reportControls.classList.add('hidden');
-    roomCsvDownloadContainer.innerHTML = "";
-    lastGeneratedReportType = "";
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    try {
-        currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        getRoomCapacitiesFromStorage(); 
+// --- Event listener for "Generate QP Distribution Report" (V2: QP-Centric with Stream Demarcation) ---
+const generateQpDistributionReportButton = document.getElementById('generate-qp-distribution-report-button');
+
+if (generateQpDistributionReportButton) {
+    generateQpDistributionReportButton.addEventListener('click', async () => {
+        const sessionKey = reportsSessionSelect.value; 
+        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
         
-        const data = getFilteredReportData('qp-distribution');
-        if (data.length === 0) {
-            alert("No data found for the selected filter/session.");
-            generateQpDistributionReportButton.disabled = false;
-            generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
-            return;
-        }
-
-        const processed_rows_with_rooms = performOriginalAllocation(data);
-        loadQPCodes(); 
-
-        // 1. Group by Session -> Then by STREAM -> Then by QP Code
-        const sessions = {};
-        for (const student of processed_rows_with_rooms) {
-            const sessionKey = `${student.Date}_${student.Time}`;
-            const roomName = student['Room No'];
-            const courseName = student.Course;
-            const streamName = student.Stream || "Regular"; // Stream Layer
-
-            const courseKey = getBase64CourseKey(courseName);
-            const sessionKeyPipe = `${student.Date} | ${student.Time}`;
-            const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
-            const qpCode = sessionQPCodes[courseKey] || 'N/A'; 
-
-            // Init Session
-            if (!sessions[sessionKey]) {
-                sessions[sessionKey] = { Date: student.Date, Time: student.Time, streams: {} };
-            }
-            
-            // Init Stream
-            if (!sessions[sessionKey].streams[streamName]) {
-                sessions[sessionKey].streams[streamName] = {}; // Will hold QP Codes
-            }
-
-            // Init QP Code
-            if (!sessions[sessionKey].streams[streamName][qpCode]) {
-                sessions[sessionKey].streams[streamName][qpCode] = {
-                    courseNames: new Set(),
-                    rooms: {},
-                    total: 0
-                };
-            }
-            
-            // Add Data
-            sessions[sessionKey].streams[streamName][qpCode].courseNames.add(courseName);
-
-            if (!sessions[sessionKey].streams[streamName][qpCode].rooms[roomName]) {
-                sessions[sessionKey].streams[streamName][qpCode].rooms[roomName] = 0;
-            }
-            
-            sessions[sessionKey].streams[streamName][qpCode].rooms[roomName]++;
-            sessions[sessionKey].streams[streamName][qpCode].total++;
-        }
+        generateQpDistributionReportButton.disabled = true;
+        generateQpDistributionReportButton.textContent = "Generating...";
+        reportOutputArea.innerHTML = "";
+        reportControls.classList.add('hidden');
+        roomCsvDownloadContainer.innerHTML = "";
+        lastGeneratedReportType = "";
+        await new Promise(resolve => setTimeout(resolve, 50));
         
-        let allPagesHtml = '';
-        const sortedSessionKeys = Object.keys(sessions).sort();
-        
-        if (sortedSessionKeys.length === 0) {
-            alert("No data to report.");
-            generateQpDistributionReportButton.disabled = false;
-            generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
-            return;
-        }
-
-        // Loop Sessions
-        for (const sessionKey of sortedSessionKeys) {
-            const session = sessions[sessionKey];
-            const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-            const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
-
-            allPagesHtml += `
-                <div class="print-page">
-                    <div class="print-header-group">
-                        <h1>${currentCollegeName}</h1>
-                        <h2>Question Paper Distribution by QP Code</h2>
-                        <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
-                    </div>
-            `;
+        try {
+            currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+            getRoomCapacitiesFromStorage(); 
+            loadQPCodes(); 
             
-            // 2. Sort Streams (Regular First)
-            const sortedStreams = Object.keys(session.streams).sort((a, b) => {
-                const idxA = currentStreamConfig.indexOf(a);
-                const idxB = currentStreamConfig.indexOf(b);
-                // If both are in config, use config order. If not (e.g. old data), push to end.
-                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                if (a === "Regular") return -1;
-                if (b === "Regular") return 1;
-                return a.localeCompare(b);
-            });
+            const data = getFilteredReportData('qp-distribution');
+            if (data.length === 0) {
+                alert("No data found for the selected filter/session.");
+                return;
+            }
 
-            // Loop Streams
-            for (const streamName of sortedStreams) {
-                const qpCodesInStream = session.streams[streamName];
-                const sortedQPCodes = Object.keys(qpCodesInStream).sort();
+            const processed_rows_with_rooms = performOriginalAllocation(data);
 
-                // Stream Header
+            // 1. Group by Session -> Then by QP Code (Unified across streams)
+            const sessions = {};
+            for (const student of processed_rows_with_rooms) {
+                const sessionKey = `${student.Date}_${student.Time}`;
+                const roomName = student['Room No'];
+                const courseName = student.Course;
+                const streamName = student.Stream || "Regular"; 
+
+                const courseKey = getBase64CourseKey(courseName);
+                const sessionKeyPipe = `${student.Date} | ${student.Time}`;
+                const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
+                const qpCode = sessionQPCodes[courseKey] || 'N/A'; 
+
+                // Init Session
+                if (!sessions[sessionKey]) {
+                    sessions[sessionKey] = { Date: student.Date, Time: student.Time, qpCodes: {} };
+                }
+                
+                // Init QP Code Bucket
+                if (!sessions[sessionKey].qpCodes[qpCode]) {
+                    sessions[sessionKey].qpCodes[qpCode] = {
+                        courseNames: new Set(),
+                        rooms: {},
+                        total: 0,
+                        streamTotals: {}
+                    };
+                }
+                
+                const qpEntry = sessions[sessionKey].qpCodes[qpCode];
+                
+                // Update Stats
+                qpEntry.courseNames.add(courseName);
+                qpEntry.total++;
+                
+                // Stream Global Count
+                if (!qpEntry.streamTotals[streamName]) qpEntry.streamTotals[streamName] = 0;
+                qpEntry.streamTotals[streamName]++;
+
+                // Room Specific Count
+                if (!qpEntry.rooms[roomName]) {
+                    qpEntry.rooms[roomName] = { total: 0, streams: {} };
+                }
+                
+                qpEntry.rooms[roomName].total++;
+                if (!qpEntry.rooms[roomName].streams[streamName]) {
+                    qpEntry.rooms[roomName].streams[streamName] = 0;
+                }
+                qpEntry.rooms[roomName].streams[streamName]++;
+            }
+            
+            let allPagesHtml = '';
+            const sortedSessionKeys = Object.keys(sessions).sort();
+            
+            // Loop Sessions
+            for (const sessionKey of sortedSessionKeys) {
+                const session = sessions[sessionKey];
+                const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+                const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
+
                 allPagesHtml += `
-                    <div style="margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid #333; padding-bottom: 5px;">
-                        <span style="font-size: 14pt; font-weight: bold; background-color: #eee; padding: 4px 8px; border-radius: 4px;">Stream: ${streamName}</span>
-                    </div>
+                    <div class="print-page">
+                        <div class="print-header-group">
+                            <h1>${currentCollegeName}</h1>
+                            <h2>Question Paper Distribution</h2>
+                            <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
+                        </div>
                 `;
+                
+                const sortedQPCodes = Object.keys(session.qpCodes).sort();
 
                 // Loop QP Codes
                 for (const qpCode of sortedQPCodes) {
-                    const qpData = qpCodesInStream[qpCode];
+                    const qpData = session.qpCodes[qpCode];
                     const courseList = Array.from(qpData.courseNames).sort().join(', ');
                     
-                    allPagesHtml += `<h4 class="qp-header" style="margin-top: 10px;">QP Code: ${qpCode} &nbsp; <span style="font-weight:normal; font-size: 0.9em; font-style: italic;">(Courses: ${courseList})</span></h4>`;
-                    
+                    // Build Stream Total String (e.g., "Regular: 50, Distance: 20")
+                    const grandStreamParts = [];
+                    Object.entries(qpData.streamTotals).forEach(([strm, cnt]) => {
+                        grandStreamParts.push(`${strm}: ${cnt}`);
+                    });
+                    const grandStreamString = grandStreamParts.join(', ');
+
                     allPagesHtml += `
-                        <table class="qp-distribution-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 80%;">Room</th>
-                                    <th style="width: 20%;">Student Count</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                        <div style="margin-top: 1.5rem; border: 1px solid #000; padding: 10px; page-break-inside: avoid;">
+                            <h4 style="font-size: 12pt; font-weight: bold; margin: 0; border-bottom: 1px dotted #000; padding-bottom: 5px;">
+                                QP Code: <span style="background-color:#eee; padding:2px 5px;">${qpCode}</span>
+                            </h4>
+                            <div style="font-size: 9pt; margin-top: 5px; font-style: italic; color: #444;">
+                                Courses: ${courseList}
+                            </div>
+                        
+                            <table class="qp-distribution-table" style="margin-top: 10px; width: 100%; border-collapse: collapse; font-size: 10pt;">
+                                <thead>
+                                    <tr style="background-color: #f9f9f9;">
+                                        <th style="width: 50%; border: 1px solid #ccc; padding: 4px;">Room</th>
+                                        <th style="width: 35%; border: 1px solid #ccc; padding: 4px;">Stream Breakdown</th>
+                                        <th style="width: 15%; border: 1px solid #ccc; padding: 4px; text-align:center;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                     `;
                     
+                    // Sort Rooms Numerically
                     const sortedRoomKeys = Object.keys(qpData.rooms).sort((a, b) => {
                         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
                         const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
                         return numA - numB;
                     });
 
-// ... inside the loop iterating over sortedRoomKeys ...
-
                     for (const roomName of sortedRoomKeys) {
-                        const count = qpData.rooms[roomName];
-                        
-                        // Get Room Info
+                        const rData = qpData.rooms[roomName];
                         const roomInfo = currentRoomConfig[roomName];
-                        
-                        // *** FIX: Use Location as the primary display. Fallback to Room Name if empty. ***
                         const displayLocation = (roomInfo && roomInfo.location) ? roomInfo.location : roomName;
-                        
                         const serialNo = roomSerialMap[roomName] || '-';
-
+                        
+                        // Build Room-Stream String
+                        const streamParts = [];
+                        Object.entries(rData.streams).forEach(([strm, cnt]) => {
+                            streamParts.push(`<span style="white-space:nowrap;">${strm}: <strong>${cnt}</strong></span>`);
+                        });
+                        
                         allPagesHtml += `
                             <tr>
-                                <td><strong>${serialNo} | ${displayLocation}</strong></td>
-                                <td>${count}</td>
+                                <td style="border: 1px solid #ccc; padding: 4px;"><strong>${serialNo} | ${displayLocation}</strong> <span style="font-size:0.85em; color:#666;">(${roomName})</span></td>
+                                <td style="border: 1px solid #ccc; padding: 4px; font-size: 0.9em;">${streamParts.join(', ')}</td>
+                                <td style="border: 1px solid #ccc; padding: 4px; text-align: center; font-weight: bold;">${rData.total}</td>
                             </tr>
                         `;
                     }
                     
                     allPagesHtml += `
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td style="text-align: right; font-weight: bold;">Total (${streamName})</td>
-                                <td style="font-weight: bold;">${qpData.total}</td>
-                            </tr>
-                        </tfoot>
-                        </table>
+                                </tbody>
+                                <tfoot style="background-color: #f0f0f0;">
+                                    <tr>
+                                        <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; text-align: right;">Total:</td>
+                                        <td style="border: 1px solid #ccc; padding: 6px; font-size: 0.9em; font-weight:bold;">${grandStreamString}</td>
+                                        <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; text-align: center; font-size: 1.1em;">${qpData.total}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     `;
                 }
+                allPagesHtml += `</div>`; 
             }
-            allPagesHtml += `</div>`; 
-        }
-        
-        reportOutputArea.innerHTML = allPagesHtml;
-        reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated QP Distribution Report for ${sortedSessionKeys.length} sessions.`;
-        reportControls.classList.remove('hidden');
-        lastGeneratedReportType = "QP_Distribution_Report";
+            
+            reportOutputArea.innerHTML = allPagesHtml;
+            reportOutputArea.style.display = 'block'; 
+            reportStatus.textContent = `Generated QP Distribution Report.`;
+            reportControls.classList.remove('hidden');
+            lastGeneratedReportType = "QP_Distribution_Report";
 
-    } catch (e) {
-        console.error("Error generating QP Distribution report:", e);
-        reportStatus.textContent = "An error occurred generating the report.";
-        reportControls.classList.remove('hidden');
-    } finally {
-        generateQpDistributionReportButton.disabled = false;
-        generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
-    }
-});
+        } catch (e) {
+            console.error("Error:", e);
+            alert("Error: " + e.message);
+        } finally {
+            generateQpDistributionReportButton.disabled = false;
+            generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
+        }
+    });
+}
 
 
 // *** NEW: Helper for Absentee Report (V10.1 FIX) ***
