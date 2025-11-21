@@ -6749,7 +6749,7 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
         generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
     }
 });
-// --- Event listener for "Generate Room Stickers" (V8: Grid Columns & Strict Truncation) ---
+// --- Event listener for "Generate Room Stickers" (V9: Wider Reg No Column) ---
 const generateStickerButton = document.getElementById('generate-sticker-button');
 
 if (generateStickerButton) {
@@ -6831,7 +6831,7 @@ if (generateStickerButton) {
                 const numCourses = sortedCourses.length;
                 
                 // --- DYNAMIC LAYOUT ---
-                let internalCols = "1fr 1fr 1fr"; // 3 Columns of students
+                let internalCols = "1fr 1fr 1fr"; 
                 let rowPadding = "1px";
                 let regFontSize = "9pt"; 
                 let nameFontSize = "8.5pt";
@@ -6856,13 +6856,13 @@ if (generateStickerButton) {
                         const seatDisplay = s.seatNumber !== undefined ? s.seatNumber : '-';
                         const displayName = getTruncatedName(s.Name, 20);
                         
-                        // *** STRICT GRID LAYOUT ***
-                        // Cols: Seat(25px) | Reg(80px) | Name(Auto)
+                        // *** UPDATED GRID: 25px | 105px | Auto ***
+                        // 105px ensures the Register Number is never cut off
                         studentGridHtml += `
-                            <div style="display: grid; grid-template-columns: 25px 80px 1fr; align-items: center; border-bottom: 1px dotted #ccc; padding: ${rowPadding} 0; font-size: ${regFontSize};">
+                            <div style="display: grid; grid-template-columns: 25px 105px 1fr; align-items: center; border-bottom: 1px dotted #ccc; padding: ${rowPadding} 0; font-size: ${regFontSize};">
                                 <div style="text-align: center; font-weight: bold; border-right: 1px solid #ddd;">${seatDisplay}</div>
-                                <div style="text-align: left; font-weight: bold; padding-left: 4px; border-right: 1px solid #ddd; overflow:hidden; white-space:nowrap;">${s['Register Number']}</div>
-                                <div style="padding-left: 4px; font-size: ${nameFontSize}; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #333;">
+                                <div style="text-align: left; font-weight: bold; padding-left: 5px; border-right: 1px solid #ddd; overflow:hidden; white-space:nowrap;">${s['Register Number']}</div>
+                                <div style="padding-left: 5px; font-size: ${nameFontSize}; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #333;">
                                     ${displayName} ${scribeBadge}
                                 </div>
                             </div>
@@ -6881,7 +6881,7 @@ if (generateStickerButton) {
                     `;
                 });
 
-                // Sticker HTML
+                // Sticker HTML (Fixed 135mm)
                 const stickerHtml = `
                     <div class="exam-sticker" style="border: 2px dashed #000; padding: 6px 8px; height: 135mm; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; background: white; width: 100%;">
                         
