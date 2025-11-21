@@ -1101,6 +1101,155 @@ function updateDashboard() {
     }
 }
 
+// ==========================================
+// 📅 CALENDAR LOGIC
+// ==========================================
+
+let currentCalDate = new Date();
+
+function initCalendar() {
+    renderCalendar();
+    
+    const prevBtn = document.getElementById('cal-prev-btn');
+    const nextBtn = document.getElementById('cal-next-btn');
+    
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            currentCalDate.setMonth(currentCalDate.getMonth() - 1);
+            renderCalendar();
+        });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            currentCalDate.setMonth(currentCalDate.getMonth() + 1);
+            renderCalendar();
+        });
+    }
+}
+
+function renderCalendar() {
+    const grid = document.getElementById('calendar-days-grid');
+    const title = document.getElementById('cal-month-display');
+    if (!grid || !title) return;
+
+    // 1. Setup Date Info
+    const year = currentCalDate.getFullYear();
+    const month = currentCalDate.getMonth();
+    
+    // Month Names
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    title.textContent = `${monthNames[month]} ${year}`;
+
+    // 2. Calculate Days
+    const firstDayIndex = new Date(year, month, 1).getDay(); // Day of week (0-6)
+    const daysInMonth = new Date(year, month + 1, 0).getDate(); // Total days
+    
+    // 3. Pre-process Exam Data for this Month
+    // Create a map: "DD" -> { am: {students, regHalls, othHalls}, pm: {...} }
+    const monthData = {};
+    
+    if (allStudentData && allStudentData.length > 0) {
+        const targetMonthStr = String(month + 1).padStart(2, '0');
+        const targetYearStr = String(year);
+        
+        allStudentData.forEach(s => {
+            // Date format assumed DD.MM.YYYY
+            const [d, m, y] = s.Date.split('.');
+            if (m === targetMonthStr && y === targetYearStr) {
+                const dayKey = parseInt(d); // remove leading zero
+                
+                // Determine Session
+                const isPM = s.Time.toUpperCase().includes("PM") || (s.Time.includes("12:") && !s.Time.includes("AM")); // Simple heuristic
+                const sessionKey = isPM ? 'pm' : 'am';
+                
+                if (!monthData[dayKey]) monthData[dayKey] = { 
+                    am: { students: 0, regCount: 0, othCount: 0 }, 
+                    pm: { students: 0, regCount: 0, othCount: 0 } 
+                };
+                
+                const stats = monthData[dayKey][sessionKey];
+                stats.students++;
+                if (!s.Stream || s.Stream === "Regular") stats.regCount++;
+                else stats.othCount++;
+            }
+        });
+    }
+
+    // 4. Build Grid HTML
+    let html = "";
+
+    // Empty cells for previous month
+    for (let i = 0; i < firstDayIndex; i++) {
+        html += `<div class="bg-gray-100 min-h-[80px]"></div>`;
+    }
+
+    // Actual Days
+    for (let day = 1; day <= daysInMonth; day++) {
+        const data = monthData[day];
+        let topClass = "bg-white";
+        let botClass = "bg-white";
+        let tooltipHtml = "";
+        
+        // Today Highlight
+        const isToday = (day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear());
+        const dayNumberClass = isToday ? "bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm" : "text-gray-700";
+
+        if (data) {
+            // Check AM
+            if (data.am.students > 0) {
+                topClass = "bg-red-500 opacity-90";
+                const regHalls = Math.ceil(data.am.regCount / 30);
+                const othHalls = Math.ceil(data.am.othCount / 30);
+                tooltipHtml += `
+                    <div class='mb-2'>
+                        <strong class='text-red-200'>Morning:</strong><br>
+                        Students: ${data.am.students}<br>
+                        Reg Halls: ${regHalls}<br>
+                        Other Halls: ${othHalls}
+                    </div>`;
+            }
+            // Check PM
+            if (data.pm.students > 0) {
+                botClass = "bg-red-500 opacity-90";
+                const regHalls = Math.ceil(data.pm.regCount / 30);
+                const othHalls = Math.ceil(data.pm.othCount / 30);
+                tooltipHtml += `
+                    <div>
+                        <strong class='text-red-200'>Afternoon:</strong><br>
+                        Students: ${data.pm.students}<br>
+                        Reg Halls: ${regHalls}<br>
+                        Other Halls: ${othHalls}
+                    </div>`;
+            }
+        }
+
+        // Tooltip Wrapper
+        const tooltip = tooltipHtml ? `
+            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-gray-800 text-white text-xs rounded p-2 shadow-lg z-20 hidden group-hover:block pointer-events-none text-center">
+                ${tooltipHtml}
+                <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+            </div>
+        ` : "";
+
+        html += `
+            <div class="group relative bg-white min-h-[80px] flex flex-col border-white hover:bg-blue-50 transition-colors cursor-default">
+                <div class="h-1/2 w-full ${topClass} p-1">
+                    <span class="text-sm font-bold ${dayNumberClass} relative z-10">${day}</span>
+                </div>
+                <div class="h-1/2 w-full ${botClass}"></div>
+                
+                ${tooltip}
+            </div>
+        `;
+    }
+
+    grid.innerHTML = html;
+}
+
+// Add initialization call to your existing loadInitialData or updateDashboard
+// For now, we'll trigger it once the DOM is ready in app.js logic
+setTimeout(initCalendar, 1000);
+    
 // --- Helper: Update the Specific Date Grid ---
 function updateSpecificDateGrid(dateStr, gridElement) {
     if (!dateStr) {
@@ -5418,7 +5567,7 @@ function loadInitialData() {
     // 1. Load configurations
     loadRoomConfig(); 
     loadStreamConfig(); // <--- ADD THIS LINE (Fixes the Empty Dropdown)
-    
+    initCalendar();
     // 2. Check for base student data persistence
     const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
     if (savedDataJson) {
