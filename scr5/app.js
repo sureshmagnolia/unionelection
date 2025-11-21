@@ -1503,8 +1503,6 @@ generateReportButton.addEventListener('click', async () => {
     }
 });
     
-// --- (V40) Event listener for "Seating Details" (Final Fixed Page Numbers) ---
-
 // --- (V29 Restored) Event listener for the "Day-wise Student List" (Single Button) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
@@ -1549,16 +1547,13 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         const COLUMNS_PER_PAGE = colsInput ? parseInt(colsInput.value, 10) : 1; 
         const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE;
 
-   // Helper to build a small table for one column (With Merged Location)
+// Helper to build a small table for one column (Optimized Widths & Merging)
         function buildColumnTable(studentChunk) {
-            // 1. Pre-process data to calculate RowSpans
+            // 1. Pre-process data for RowSpans
             const processedRows = studentChunk.map((student, index) => {
-                // Determine if this row starts a new Course block
-                // (First item in chunk always triggers a header for clarity)
                 const prevCourse = (index === 0) ? "" : studentChunk[index-1].Course;
                 const isCourseHeader = (student.Course !== prevCourse);
 
-                // Determine Room/Location Display
                 let roomName = student['Room No'];
                 let seatNo = student.seatNumber;
                 let rowStyle = '';
@@ -1576,89 +1571,73 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 const displayRoom = (roomInfo.location && roomInfo.location.trim() !== "") ? roomInfo.location : roomName;
 
                 return {
-                    student,
-                    isCourseHeader,
-                    displayRoom,
-                    seatNo,
-                    rowStyle,
-                    courseName: student.Course,
-                    span: 1,            // Default span
-                    skipLocation: false // Default visibility
+                    student, isCourseHeader, displayRoom, seatNo, rowStyle,
+                    courseName: student.Course, span: 1, skipLocation: false
                 };
             });
 
-            // 2. Calculate Merges (RowSpan Logic)
+            // 2. Calculate Merges
             for (let i = 0; i < processedRows.length; i++) {
                 if (processedRows[i].skipLocation) continue;
-
                 let span = 1;
-                // Look ahead to find identical locations
                 for (let j = i + 1; j < processedRows.length; j++) {
                     const current = processedRows[i];
                     const next = processedRows[j];
-
-                    // STOP merging if:
-                    // 1. A Course Header appears (it interrupts the visual flow)
-                    if (next.isCourseHeader) break;
-                    // 2. The location changes
-                    if (next.displayRoom !== current.displayRoom) break;
-
-                    // If safe, increment span and hide the next cell
+                    if (next.isCourseHeader || next.displayRoom !== current.displayRoom) break;
                     span++;
                     next.skipLocation = true;
                 }
                 processedRows[i].span = span;
             }
 
-            // 3. Build HTML
+            // 3. Build HTML with OPTIMIZED COLUMN WIDTHS
+            // Widths: Loc(25%), Reg(15% - Fit), Name(52% - NoWrap), Seat(8% - Fit)
             let rowsHtml = '';
             
             processedRows.forEach(row => {
-                // Insert Course Header Row if needed
                 if (row.isCourseHeader) {
                     rowsHtml += `
                         <tr>
                             <td colspan="4" style="background-color: #eee; font-weight: bold; padding: 2px 4px; border: 1px solid #999; font-size: 0.85em;">
                                 ${row.courseName}
                             </td>
-                        </tr>
-                    `;
+                        </tr>`;
                 }
 
                 rowsHtml += `<tr style="${row.rowStyle}">`;
                 
-                // LOCATION CELL (Merged)
                 if (!row.skipLocation) {
                     const rowspanAttr = row.span > 1 ? `rowspan="${row.span}"` : '';
-                    // Center vertically if merged
                     const valign = row.span > 1 ? 'vertical-align: middle;' : 'vertical-align: top;';
-                    // White background ensures text remains readable
                     rowsHtml += `<td ${rowspanAttr} style="padding: 2px 4px; font-size:0.85em; background-color: #fff; ${valign}">${row.displayRoom}</td>`;
                 }
 
-                // DATA CELLS
                 rowsHtml += `
                         <td style="padding: 1px 4px;">${row.student['Register Number']}</td>
-                        <td style="padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${row.student.Name}</td>
+                        <td style="padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0;">
+                            ${row.student.Name}
+                        </td>
                         <td style="padding: 1px 4px; text-align: center;">${row.seatNo}</td>
                     </tr>
                 `;
             });
 
             return `
-                <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt;">
+                <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt; table-layout: fixed;">
+                    <colgroup>
+                        <col style="width: 25%;"> <col style="width: 15%;"> <col style="width: 52%;"> <col style="width: 8%;">  </colgroup>
                     <thead>
                         <tr>
-                            <th style="width: 30%;">Location</th>
-                            <th style="width: 20%;">Reg No</th>
-                            <th style="width: 40%;">Name</th>
-                            <th style="width: 10%;">Seat</th>
+                            <th>Location</th>
+                            <th>Reg No</th>
+                            <th>Name</th>
+                            <th>Seat</th>
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
             `;
-        }
+        }   
         
 
         // Main Loop
@@ -1705,32 +1684,51 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                     
                     // Scribe Summary Logic (Last Page Only)
                     let scribeListHtml = '';
-                    if (i + STUDENTS_PER_PAGE >= session.students.length) {
-                        const sessionScribes = session.students.filter(s => s.isScribe);
-                        if (sessionScribes.length > 0) {
-                            scribeListHtml = renderScribeSummaryBlock(sessionScribes, session, allScribeAllotments);
-                        }
+                    // ... inside sortedSessionKeys loop ...
+
+                // 1. Generate Student Pages
+                for (let i = 0; i < session.students.length; i += STUDENTS_PER_PAGE) {
+                    const pageStudents = session.students.slice(i, i + STUDENTS_PER_PAGE);
+                    totalPagesGenerated++;
+                    
+                    const col1Students = pageStudents.slice(0, STUDENTS_PER_COLUMN);
+                    const col2Students = pageStudents.slice(STUDENTS_PER_COLUMN); 
+                    
+                    let columnHtml = '';
+                    if (col2Students.length === 0) {
+                        columnHtml = `<div class="column" style="width:100%">${buildColumnTable(col1Students)}</div>`;
+                    } else {
+                        columnHtml = `
+                            <div class="column-container" style="display:flex; gap:15px;">
+                                <div class="column" style="flex:1">${buildColumnTable(col1Students)}</div>
+                                <div class="column" style="flex:1">${buildColumnTable(col2Students)}</div>
+                            </div>
+                        `;
                     }
+                    
+                    // Add Student Page
+                    allPagesHtml += `
+                        <div class="print-page print-page-daywise">
+                            <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
+                                <div style="position: absolute; top: 0; left: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
+                                    Page ${totalPagesGenerated}
+                                </div>
+                                <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
+                                    ${streamName}
+                                </div>
+                                <h1>Seating Details</h1>
+                                <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+                            </div>
+                            ${columnHtml}
+                        </div>
+                    `;
+                }
 
-allPagesHtml += `
-    <div class="print-page print-page-daywise">
-        <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
-            
-            <div style="position: absolute; top: 0; left: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
-                Page ${totalPagesGenerated}
-            </div>
-
-            <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
-                ${streamName}
-            </div>
-            
-            <h1>Seating Details</h1>
-            <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
-        </div>
-        ${columnHtml}
-        ${scribeListHtml}
-    </div>
-`;
+                // 2. Generate Separate Scribe Page (If scribes exist in this session)
+                const sessionScribes = session.students.filter(s => s.isScribe);
+                if (sessionScribes.length > 0) {
+                    // Generate the large, aesthetic summary page
+                    allPagesHtml += renderScribeSummaryPage(sessionScribes, streamName, session, allScribeAllotments);
                 }
             });
         }
@@ -3426,56 +3424,73 @@ function renderPage(rows, streamName, session, rowCount) {
     `;
 }
 
-// --- Helper: Render Scribe Summary Page ---
+// Helper: Generate a dedicated Scribe Page with Dynamic Sizing
 function renderScribeSummaryPage(scribes, streamName, session, allotments) {
-    // ... (Using previous scribe summary logic, wrapped in a function) ...
+    // 1. Group Scribes by Room (using Location logic)
     const scribesByRoom = {};
     scribes.forEach(s => {
         const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-        const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
-        if(!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
-        scribesByRoom[newRoom].push(s);
+        let roomName = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+        
+        // Get clean location/room name for grouping
+        const roomInfo = currentRoomConfig[roomName] || {};
+        const locationDisplay = (roomInfo.location && roomInfo.location.trim() !== "") ? 
+                                `${roomName} <br><span style="font-weight:normal; font-size:0.8em">(${roomInfo.location})</span>` : 
+                                roomName;
+                                
+        if (!scribesByRoom[locationDisplay]) scribesByRoom[locationDisplay] = [];
+        scribesByRoom[locationDisplay].push(s);
     });
 
-    let summaryRows = '';
-    Object.keys(scribesByRoom).sort().forEach(roomName => {
-         const students = scribesByRoom[roomName];
-         let rowFontSize = '10pt';
-         if (students.length > 15) rowFontSize = '9pt';
-         
-         const studentList = students.map(s => `${s.Name} (${s['Register Number']})`).join(', ');
-         const roomInfo = currentRoomConfig[roomName] || {};
-         const location = roomInfo.location ? `<br><span style="font-size:0.8em;color:#666">(${roomInfo.location})</span>` : "";
+    // 2. Calculate Dynamic Font Size based on Volume
+    // A4 page can comfortably hold ~25-30 lines at normal size.
+    const roomCount = Object.keys(scribesByRoom).length;
+    const totalStudents = scribes.length;
+    // Heuristic: Rooms take up space (header) + Students take up space (lines)
+    const densityScore = (roomCount * 2) + (totalStudents * 0.5);
 
-         summaryRows += `
+    let fontSize = '14pt'; // Default Large
+    if (densityScore > 15) fontSize = '12pt';
+    if (densityScore > 25) fontSize = '11pt';
+    if (densityScore > 35) fontSize = '10pt';
+
+    // 3. Build Table Rows
+    let rowsHtml = '';
+    Object.keys(scribesByRoom).sort().forEach(roomDisplay => {
+        const students = scribesByRoom[roomDisplay];
+        const studentNames = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
+        
+        rowsHtml += `
             <tr>
-                <td style="font-weight:bold; font-size:11pt; vertical-align:top; width: 25%; border:1px solid #000; padding:8px;">${roomName}${location}</td>
-                <td style="font-size:${rowFontSize}; line-height:1.4; border:1px solid #000; padding:8px;">${studentList}</td>
-                <td style="text-align:center; font-weight:bold; width:10%; border:1px solid #000; padding:8px;">${students.length}</td>
+                <td style="width:30%; vertical-align:top; padding: 10px;">${roomDisplay}</td>
+                <td style="width:70%; vertical-align:top; padding: 10px; line-height:1.4;">${studentNames}</td>
             </tr>
-         `;
+        `;
     });
 
+    // 4. Return Full Page HTML
     return `
-        <div class="print-page">
-            <div class="print-header-group">
+        <div class="print-page" style="display: flex; flex-direction: column; justify-content: center;">
+            <div class="print-header-group" style="margin-bottom: 20px; text-align: center;">
                 <h1>Scribe Assistance Summary</h1>
-                <h2>${currentCollegeName} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
-                <h3 style="border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 15px;">Stream: ${streamName}</h3>
+                <h2>${currentCollegeName}</h2>
+                <h3>${session.Date} &nbsp;|&nbsp; ${session.Time} &nbsp; (${streamName})</h3>
             </div>
             
-            <table class="scribe-report-table" style="width:100%; border-collapse:collapse;">
-                <thead>
-                    <tr style="background-color:#eee;">
-                        <th style="border:1px solid #000; padding:8px;">Scribe Room</th>
-                        <th style="border:1px solid #000; padding:8px;">Allocated Students</th>
-                        <th style="border:1px solid #000; padding:8px;">Count</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${summaryRows}
-                </tbody>
-            </table>
+            <div style="border: 2px solid #000; padding: 5px; flex-grow: 1;">
+                <table style="width: 100%; border-collapse: collapse; font-size: ${fontSize};">
+                    <thead>
+                        <tr style="background-color: #eee; border-bottom: 2px solid #000;">
+                            <th style="text-align: left; padding: 10px; border-right: 1px solid #000;">Room Location</th>
+                            <th style="text-align: left; padding: 10px;">Candidates</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            </div>
+            <div style="text-align: right; margin-top: 10px; font-size: 10pt;">
+                Total Scribes: <strong>${totalStudents}</strong>
+            </div>
         </div>
     `;
 }
