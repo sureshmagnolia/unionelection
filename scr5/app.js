@@ -6750,7 +6750,7 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate Room Stickers" (V3: Seat No & Margin Fix) ---
+// --- Event listener for "Generate Room Stickers" (V4: Dynamic Fit, Seat No, Clean Header) ---
 const generateStickerButton = document.getElementById('generate-sticker-button');
 
 if (generateStickerButton) {
@@ -6808,8 +6808,23 @@ if (generateStickerButton) {
                 if (session.Room === "Unallotted" || session.Room === "N/A") return;
 
                 const roomInfo = currentRoomConfig[session.Room] || {};
-                const location = (roomInfo.location) ? roomInfo.location : "";
                 
+                // --- NEW HEADER LOGIC: Location Bold, Fallback to Room ---
+                const hasLocation = (roomInfo.location && roomInfo.location.trim() !== "");
+                const mainDisplay = hasLocation ? roomInfo.location : session.Room;
+                const subDisplay = hasLocation ? `(${session.Room})` : ""; // Optional: Show room no small if location exists?
+                // User requested: "Give Room Number only if Location is absent." -> So strictly one.
+                const headerTitle = mainDisplay;
+                
+                // --- DYNAMIC FONT SCALING ---
+                const totalStudents = session.students.length;
+                let rowFontSize = "10pt";
+                let rowPadding = "2px";
+                
+                // Scale down if crowded
+                if (totalStudents > 35) { rowFontSize = "8pt"; rowPadding = "0px"; }
+                else if (totalStudents > 25) { rowFontSize = "9pt"; rowPadding = "1px"; }
+
                 const studentsByCourse = {};
                 session.students.forEach(s => {
                     if (!studentsByCourse[s.Course]) studentsByCourse[s.Course] = [];
@@ -6821,7 +6836,6 @@ if (generateStickerButton) {
                 
                 sortedCourses.forEach(courseName => {
                     const students = studentsByCourse[courseName];
-                    // Sort by Seat Number if available, else RegNo
                     students.sort((a, b) => (a.seatNumber || 999) - (b.seatNumber || 999));
                     
                     let studentGridHtml = '';
@@ -6829,19 +6843,19 @@ if (generateStickerButton) {
                         const scribeBadge = s.isScribeDisplay ? '<span style="font-size:0.7em; color:white; bg-color:black; padding:0 2px; border-radius:2px; background:black; margin-left:2px;">SCRIBE</span>' : '';
                         const seatDisplay = s.seatNumber !== undefined ? s.seatNumber : '-';
                         
-                        // New Layout: Seat | Reg | Name
+                        // Layout: Seat | Reg | Name
                         studentGridHtml += `
-                            <div style="display:flex; align-items:center; border-bottom:1px dotted #ccc; padding:2px 0;">
-                                <span style="font-weight:bold; font-size:10pt; width:25px; text-align:center; border-right:1px solid #ddd; margin-right:4px; flex-shrink:0;">${seatDisplay}</span>
-                                <span style="font-weight:bold; font-size:10pt; width:95px; flex-shrink:0;">${s['Register Number']}</span>
-                                <span style="font-size:9pt; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#333;">${s.Name} ${scribeBadge}</span>
+                            <div style="display:flex; align-items:center; border-bottom:1px dotted #ccc; padding:${rowPadding} 0; font-size:${rowFontSize};">
+                                <span style="font-weight:bold; width:20px; text-align:center; border-right:1px solid #ddd; margin-right:4px; flex-shrink:0;">${seatDisplay}</span>
+                                <span style="font-weight:bold; width:90px; flex-shrink:0;">${s['Register Number']}</span>
+                                <span style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#333;">${s.Name} ${scribeBadge}</span>
                             </div>
                         `;
                     });
 
                     courseBlocksHtml += `
                         <div style="margin-bottom: 5px; break-inside: avoid;">
-                            <div style="font-weight:bold; font-size:9pt; background:#f3f4f6; padding:2px 5px; border:1px solid #e5e7eb; margin-bottom:2px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
+                            <div style="font-weight:bold; font-size:${rowFontSize}; background:#f3f4f6; padding:1px 4px; border:1px solid #e5e7eb; margin-bottom:1px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
                                 ${courseName} (${students.length})
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; row-gap: 0;">
@@ -6851,23 +6865,26 @@ if (generateStickerButton) {
                     `;
                 });
 
-                // Sticker HTML (Fixed Height ~138mm)
+                // Sticker HTML (Fixed Height 135mm)
                 const stickerHtml = `
-                    <div class="exam-sticker" style="border: 2px dashed #333; padding: 10px; height: 138mm; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; background: white; width: 100%;">
-                        <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 2px; margin-bottom: 5px; flex-shrink: 0;">
-                            <h1 style="font-size: 14pt; font-weight: bold; margin: 0; text-transform: uppercase; line-height: 1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${currentCollegeName}</h1>
-                            <div style="font-size: 10pt; font-weight: bold; margin-top: 2px; color: #444;">
+                    <div class="exam-sticker" style="border: 2px dashed #666; padding: 10px; height: 135mm; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; background: white; width: 100%;">
+                        
+                        <div style="text-align: center; margin-bottom: 5px; flex-shrink: 0;">
+                            <h1 style="font-size: 12pt; font-weight: bold; margin: 0; text-transform: uppercase; line-height: 1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${currentCollegeName}</h1>
+                            <div style="font-size: 9pt; font-weight: bold; margin-top: 2px; color: #444;">
                                 ${session.Date} &nbsp;|&nbsp; ${session.Time}
                             </div>
-                            <div style="display:flex; justify-content: space-between; align-items:center; margin-top: 3px; background: #000; color: #fff; padding: 3px 10px;">
-                                <span style="font-size: 9pt; font-weight: normal; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; max-width: 70%;">${location}</span>
-                                <span style="font-size: 16pt; font-weight: bold;">${session.Room}</span>
+                            
+                            <div style="margin-top: 4px; border: 2px solid #000; padding: 4px 8px; text-align: center;">
+                                <span style="font-size: 14pt; font-weight: bold; display:block; line-height:1.1;">${headerTitle}</span>
                             </div>
                         </div>
-                        <div style="flex-grow: 1; overflow: hidden;">
+
+                        <div style="flex-grow: 1; overflow: hidden; border-top: 1px solid #eee; padding-top: 2px;">
                             ${courseBlocksHtml}
                         </div>
-                        <div style="text-align: center; font-size: 9pt; color: #000; margin-top: 2px; flex-shrink: 0; border-top: 1px solid #ccc; padding-top: 2px; font-weight:bold;">
+
+                        <div style="text-align: center; font-size: 8pt; color: #000; margin-top: 2px; flex-shrink: 0; border-top: 1px solid #000; padding-top: 2px; font-weight:bold;">
                             Total Candidates: ${session.students.length}
                         </div>
                     </div>
@@ -6893,11 +6910,11 @@ if (generateStickerButton) {
                     /* Print Mode */
                     @media print {
                         @page {
-                            margin: 0; /* Reset browser margin */
+                            margin: 0; 
                             size: A4 portrait;
                         }
                         .print-page-sticker {
-                            padding: 10mm !important; /* Physical margin on paper */
+                            padding: 10mm 5mm !important; /* Top/Bot: 10mm, Left/Right: 5mm */
                             margin: 0 !important;
                             border: none !important;
                             box-shadow: none !important;
@@ -6905,18 +6922,18 @@ if (generateStickerButton) {
                             width: 210mm !important;
                             display: flex;
                             flex-direction: column;
-                            justify-content: space-between; /* Distribute top/bottom */
+                            justify-content: space-between; 
                             box-sizing: border-box;
                         }
-                        /* Hide screen separator */
+                        /* Hide gaps/shadows */
                         .sticker-gap { display: none !important; }
                         
-                        /* Ensure Sticker maintains its look */
                         .exam-sticker {
-                            border: 2px dashed #000 !important;
-                            height: 136mm !important; /* Slightly less than half (297-20)/2 */
+                            border: 2px dashed #666 !important;
+                            height: 135mm !important; 
                             break-inside: avoid;
                             width: 100% !important;
+                            box-shadow: none !important;
                         }
                     }
                 </style>
@@ -6951,6 +6968,7 @@ if (generateStickerButton) {
         }
     });
 }
+
 
 // Also update real_disable_all_report_buttons to include the new button ID
 const originalDisableFunc = window.real_disable_all_report_buttons;
