@@ -1270,8 +1270,7 @@ function checkManualAllotment(sessionKey) {
     return true;
 }
 
-
-// --- 1. Event listener for the "Generate Room-wise Report" button (V3: Layout & Data Fixes) ---
+// --- 1. Event listener for the "Generate Room-wise Report" button (V4: Margins & Height Fix) ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1329,19 +1328,30 @@ generateReportButton.addEventListener('click', async () => {
             sessions[key].courseCounts[course] = (sessions[key].courseCounts[course] || 0) + 1;
         });
 
-        let allPagesHtml = '';
+        // --- INJECT CUSTOM STYLES FOR THIS REPORT ---
+        // 1. Padding reduced to 15mm (was 20mm+) to fit more content.
+        // 2. Row height fixed to 2.1rem (approx 34px) to prevent overflow.
+        let allPagesHtml = `
+            <style>
+                .print-page-room { 
+                    padding: 15mm !important; 
+                }
+                .room-report-row { 
+                    height: 2.1rem !important; 
+                }
+                @media print {
+                    .print-page-room { padding: 10mm !important; } /* Even tighter for print */
+                }
+            </style>
+        `;
+        
         let totalPagesGenerated = 0;
         const sortedSessionKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
 
         // --- Helper: Clean & Truncate Course Name ---
         function getSmartCourseName(fullName) {
-            // 1. Remove content inside square brackets []
             let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
-            
-            // 2. Remove trailing hyphens or spaces
             cleanName = cleanName.replace(/\s-\s$/, '').trim();
-
-            // 3. Truncate: 1st 3 Words ... Last Word
             const words = cleanName.split(/\s+/);
             if (words.length <= 4) return cleanName;
             return `${words.slice(0, 3).join(' ')} ... ${words[words.length - 1]}`;
@@ -1351,7 +1361,7 @@ generateReportButton.addEventListener('click', async () => {
             const session = sessions[key];
             const roomInfo = currentRoomConfig[session.Room];
             const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
-            const locationHtml = location ? `<div class="report-location-header">Location: ${location}</div>` : "";
+            const locationHtml = location ? `<div class="report-location-header" style="margin-bottom: 5px; padding-bottom: 5px;">Location: ${location}</div>` : "";
             
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
@@ -1359,9 +1369,9 @@ generateReportButton.addEventListener('click', async () => {
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
             const pageStream = session.students.length > 0 ? (session.students[0].Stream || "Regular") : "Regular";
 
-            // --- 1. Build Footer Content (Vertical Stack) ---
+            // --- 1. Build Footer Content ---
             
-            // A. Course Summary (QP Code First, Smart Name)
+            // A. Course Summary
             let courseSummaryRows = '';
             const uniqueQPCodesInRoom = new Set();
             
@@ -1383,7 +1393,7 @@ generateReportButton.addEventListener('click', async () => {
                     </tr>`;
             }
 
-            // B. Booklet Details (Written Scripts)
+            // B. Booklet Details (Used/Written)
             let writtenScriptsHtml = '';
             uniqueQPCodesInRoom.forEach(code => {
                 writtenScriptsHtml += `<span style="margin-right: 15px; white-space: nowrap;">${code}: <span style="border-bottom: 1px solid #000; display: inline-block; width: 35px;"></span></span> `;
@@ -1392,7 +1402,6 @@ generateReportButton.addEventListener('click', async () => {
             const hasScribe = session.students.some(s => s.isPlaceholder);
             const scribeFootnote = hasScribe ? '<div class="scribe-footnote" style="margin-top:5px;">* = Scribe Assistance</div>' : '';
 
-            // C. Full Footer HTML (Neat Vertical Stack)
             const invigilatorFooterHtml = `
                 <div class="invigilator-footer" style="margin-top: 1rem; padding-top: 0; page-break-inside: avoid; font-size: 9pt;">
                     
@@ -1465,10 +1474,6 @@ generateReportButton.addEventListener('click', async () => {
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
                     const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; 
-                    
-                    // Use same clean name logic for table too? 
-                    // User said "Course Name Truncated Dynamically" inside *Course Summary*.
-                    // For Main Table, let's keep the standard short truncation to save space.
                     const courseWords = student.Course.split(/\s+/);
                     const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
                     const tableCourseName = qpCodePrefix + truncatedCourse;
@@ -1479,22 +1484,22 @@ generateReportButton.addEventListener('click', async () => {
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     const remarkText = student.remark || ''; 
                     
-                    // *** TIGHTER PADDING HERE (2px) TO PREVENT PAGE 1 OVERFLOW ***
+                    // *** ROW HEIGHT FIXED TO 2.1rem ***
                     rowsHtml += `
-                        <tr ${rowClass} style="height: 2.5rem;">
-                            <td class="sl-col" style="padding: 2px 4px;">${seatNumber}${asterisk}</td>
-                            <td class="course-col" style="padding: 2px 4px;">${displayCourseName}</td>
-                            <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold; padding: 2px 4px;">${displayRegNo}</td>
-                            <td class="name-col" style="padding: 2px 4px;">${student.Name}</td>
-                            <td class="remarks-col" style="padding: 2px 4px;">${remarkText}</td>
-                            <td class="signature-col" style="padding: 2px 4px;"></td>
+                        <tr ${rowClass} class="room-report-row">
+                            <td class="sl-col" style="padding: 0 4px;">${seatNumber}${asterisk}</td>
+                            <td class="course-col" style="padding: 0 4px;">${displayCourseName}</td>
+                            <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold; padding: 0 4px;">${displayRegNo}</td>
+                            <td class="name-col" style="padding: 0 4px;">${student.Name}</td>
+                            <td class="remarks-col" style="padding: 0 4px;">${remarkText}</td>
+                            <td class="signature-col" style="padding: 0 4px;"></td>
                         </tr>
                     `;
                 });
                 return rowsHtml;
             }
             
-            // --- 3. Render Pages (Page 1: 20, Page 2: Rest) ---
+            // --- 3. Render Pages ---
             const studentsPage1 = session.students.sort((a, b) => a.seatNumber - b.seatNumber).slice(0, 20);
             const studentsPage2 = session.students.slice(20); 
 
@@ -1513,7 +1518,6 @@ generateReportButton.addEventListener('click', async () => {
                             ${locationHtml} 
                         </div>`;
                 } else {
-                    // Minimal Header
                     return `
                         <div class="print-header-group" style="margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 2px;">
                             <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10pt; color: #444;">
@@ -1538,12 +1542,9 @@ generateReportButton.addEventListener('click', async () => {
                     </thead>
                     <tbody>`;
 
-            // --- RENDER PAGE 1 ---
-            previousCourseName = ""; previousRegNoPrefix = ""; 
-            const tableRowsPage1 = generateTableRows(studentsPage1);
-            
+            // Render Page 1
             allPagesHtml += `
-                <div class="print-page" style="height: 100%; display: flex; flex-direction: column;">
+                <div class="print-page print-page-room" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(1)}
                     ${tableHeader}
                     ${tableRowsPage1}
@@ -1554,7 +1555,7 @@ generateReportButton.addEventListener('click', async () => {
             `;
             totalPagesGenerated++;
 
-            // --- RENDER PAGE 2 ---
+            // Render Page 2
             previousCourseName = ""; previousRegNoPrefix = ""; 
             const tableRowsPage2 = generateTableRows(studentsPage2);
             
@@ -1566,7 +1567,7 @@ generateReportButton.addEventListener('click', async () => {
             }
 
             allPagesHtml += `
-                <div class="print-page" style="height: 100%; display: flex; flex-direction: column;">
+                <div class="print-page print-page-room" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(2)}
                     ${page2TableContent}
                     ${invigilatorFooterHtml} 
@@ -1578,7 +1579,7 @@ generateReportButton.addEventListener('click', async () => {
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} total pages for ${sortedSessionKeys.length} room sessions.`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
         reportControls.classList.remove('hidden');
         
         roomCsvDownloadContainer.innerHTML = `
@@ -1595,7 +1596,8 @@ generateReportButton.addEventListener('click', async () => {
         generateReportButton.disabled = false;
         generateReportButton.textContent = "Generate Room-wise Seating Report";
     }
-});    
+});
+    
 
 // --- (V29 Restored) Event listener for the "Day-wise Student List" (Single Button) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
