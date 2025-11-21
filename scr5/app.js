@@ -1274,11 +1274,13 @@ function formatDateToCSV(dateObj) {
     return `${dd}.${mm}.${yyyy}`;
 }
 
-// --- Helper: Generate HTML Cards for a Date (With Stream Breakdown) ---
+// --- Helper: Generate HTML Cards for a Date (With Stream-wise Hall Breakdown) ---
 function generateSessionCardsHtml(dateStr) {
+    // Filter students for this specific date
     const studentsForDate = allStudentData.filter(s => s.Date === dateStr);
     if (studentsForDate.length === 0) return null;
 
+    // Group by Time (Session)
     const sessions = {};
     studentsForDate.forEach(s => {
         if (!sessions[s.Time]) sessions[s.Time] = [];
@@ -1287,6 +1289,8 @@ function generateSessionCardsHtml(dateStr) {
 
     const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
     let sessionsHtml = '';
+    
+    // Sort sessions by time
     const sortedTimes = Object.keys(sessions).sort(); 
 
     sortedTimes.forEach(time => {
@@ -1296,48 +1300,93 @@ function generateSessionCardsHtml(dateStr) {
         
         let scribeCount = 0;
         
-        // Stream Counts
+        // 1. Calculate Counts Per Stream
         const streamCounts = {};
         
         students.forEach(s => {
             if (scribeRegNos.has(s['Register Number'])) scribeCount++;
             
-            // Count Streams (Default to Regular if missing)
+            // Default to "Regular" if missing
             const strm = s.Stream || "Regular";
             streamCounts[strm] = (streamCounts[strm] || 0) + 1;
         });
 
-        // Build Stream Breakdown String
-        let streamBreakdownHtml = '';
-        Object.keys(streamCounts).forEach(strm => {
-            streamBreakdownHtml += `<div class="text-xs text-gray-500">${strm}: <strong>${streamCounts[strm]}</strong></div>`;
+        // 2. Build Breakdowns (Candidates & Halls)
+        let candidateBreakdownHtml = '';
+        let hallsBreakdownHtml = '';
+        
+        // Sort streams to keep "Regular" first if possible, or alphabetical
+        const sortedStreams = Object.keys(streamCounts).sort((a, b) => {
+            if (a === "Regular") return -1;
+            if (b === "Regular") return 1;
+            return a.localeCompare(b);
         });
 
-        // Simple Estimation (We will refine this in Chunk 3)
-        const totalHalls = Math.ceil(studentCount / 30); 
+        sortedStreams.forEach(strm => {
+            const count = streamCounts[strm];
+            
+            // Candidate Breakdown Line
+            candidateBreakdownHtml += `
+                <div class="flex justify-between items-center text-[11px] text-gray-600">
+                    <span>${strm}:</span> 
+                    <strong class="text-gray-800">${count}</strong>
+                </div>`;
+            
+            // Hall Calculation: 
+            // "Streams can't mix" means we CEIL each stream independently.
+            // Assuming standard capacity of 30 per hall.
+            const halls = Math.ceil(count / 30);
+            
+            hallsBreakdownHtml += `
+                <div class="flex justify-between items-center text-[11px] text-gray-600 gap-3">
+                    <span>${strm}:</span> 
+                    <strong class="text-indigo-700 bg-indigo-50 px-1.5 rounded">${halls} Halls</strong>
+                </div>`;
+        });
 
+        // 3. Construct Card HTML
         sessionsHtml += `
-            <div class="bg-white border border-indigo-100 rounded-lg shadow-sm p-5 hover:shadow-md transition-shadow">
-                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
-                    <h3 class="text-lg font-bold text-indigo-900 bg-indigo-50 px-3 py-1 rounded-md">${time} Session</h3>
-                    <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Est. Halls: ~${totalHalls}</span>
-                </div>
+            <div class="bg-white border border-indigo-100 rounded-lg shadow-sm p-4 hover:shadow-md transition-all">
                 
-                <div class="grid grid-cols-3 gap-4 text-center">
-                    <div class="flex flex-col justify-center">
-                        <div class="text-2xl font-bold text-gray-800">${studentCount}</div>
-                        <div class="text-xs text-gray-500 font-semibold uppercase mb-1">Candidates</div>
-                        <div class="bg-gray-50 rounded p-1 border border-gray-100">
-                            ${streamBreakdownHtml}
+                <div class="flex justify-between items-start mb-4 border-b border-gray-100 pb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="bg-indigo-600 text-white p-2 rounded-lg shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-800 leading-tight">${time}</h3>
+                            <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Session</p>
                         </div>
                     </div>
-                    <div class="flex flex-col justify-center">
-                        <div class="text-2xl font-bold text-gray-800">${courseCount}</div>
-                        <div class="text-xs text-gray-500 font-semibold uppercase">Courses</div>
+
+                    <div class="bg-gray-50 rounded-md border border-gray-200 p-2 min-w-[120px]">
+                        <div class="text-[10px] font-bold text-gray-400 uppercase mb-1 border-b border-gray-200 pb-1 tracking-wider">Est. Requirements</div>
+                        <div class="space-y-1">
+                            ${hallsBreakdownHtml}
+                        </div>
                     </div>
-                    <div class="flex flex-col justify-center">
+                </div>
+                
+                <div class="grid grid-cols-3 gap-2 text-center divide-x divide-gray-100">
+                    
+                    <div class="px-1 flex flex-col h-full">
+                        <div class="text-2xl font-bold text-gray-800">${studentCount}</div>
+                        <div class="text-[10px] text-gray-400 font-bold uppercase mb-2">Candidates</div>
+                        <div class="mt-auto bg-gray-50 rounded p-2 border border-gray-100 space-y-1 text-left">
+                            ${candidateBreakdownHtml}
+                        </div>
+                    </div>
+
+                    <div class="px-1 flex flex-col justify-start pt-2">
+                        <div class="text-2xl font-bold text-gray-800">${courseCount}</div>
+                        <div class="text-[10px] text-gray-400 font-bold uppercase">Courses</div>
+                    </div>
+
+                    <div class="px-1 flex flex-col justify-start pt-2">
                         <div class="text-2xl font-bold text-gray-800">${scribeCount}</div>
-                        <div class="text-xs text-gray-500 font-semibold uppercase">Scribes</div>
+                        <div class="text-[10px] text-gray-400 font-bold uppercase">Scribes</div>
                     </div>
                 </div>
             </div>
