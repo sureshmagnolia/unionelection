@@ -1617,6 +1617,7 @@ generateReportButton.addEventListener('click', async () => {
     
 
 // --- (V29 Restored) Event listener for the "Day-wise Student List" (Single Button) ---
+// --- (V30 Optimized) Event listener for the "Day-wise Student List" (Compact Report) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1649,7 +1650,19 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             return a.localeCompare(b);
         });
 
-        let allPagesHtml = '';
+        // --- CUSTOM STYLES: Remove Shadow/Border in Print ---
+        let allPagesHtml = `
+            <style>
+                @media print {
+                    .print-page, .print-page-daywise {
+                        box-shadow: none !important;
+                        border: none !important;
+                        margin: 0 auto !important;
+                    }
+                }
+            </style>
+        `;
+
         let totalPagesGenerated = 0;
         
         // Layout Constants (Dynamic from UI)
