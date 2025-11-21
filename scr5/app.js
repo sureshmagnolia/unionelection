@@ -1270,7 +1270,7 @@ function checkManualAllotment(sessionKey) {
     return true;
 }
 
-// --- 1. Event listener for the "Generate Room-wise Report" button (V4: Margins & Height Fix) ---
+// --- 1. Event listener for the "Generate Room-wise Report" button (V5: Fixed Logic Error) ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1328,19 +1328,13 @@ generateReportButton.addEventListener('click', async () => {
             sessions[key].courseCounts[course] = (sessions[key].courseCounts[course] || 0) + 1;
         });
 
-        // --- INJECT CUSTOM STYLES FOR THIS REPORT ---
-        // 1. Padding reduced to 15mm (was 20mm+) to fit more content.
-        // 2. Row height fixed to 2.1rem (approx 34px) to prevent overflow.
+        // Custom Styles for Print Layout
         let allPagesHtml = `
             <style>
-                .print-page-room { 
-                    padding: 15mm !important; 
-                }
-                .room-report-row { 
-                    height: 2.1rem !important; 
-                }
+                .print-page-room { padding: 15mm !important; }
+                .room-report-row { height: 2.1rem !important; }
                 @media print {
-                    .print-page-room { padding: 10mm !important; } /* Even tighter for print */
+                    .print-page-room { padding: 10mm !important; }
                 }
             </style>
         `;
@@ -1348,7 +1342,7 @@ generateReportButton.addEventListener('click', async () => {
         let totalPagesGenerated = 0;
         const sortedSessionKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
 
-        // --- Helper: Clean & Truncate Course Name ---
+        // Helper: Truncate Course Name
         function getSmartCourseName(fullName) {
             let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
             cleanName = cleanName.replace(/\s-\s$/, '').trim();
@@ -1369,9 +1363,9 @@ generateReportButton.addEventListener('click', async () => {
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
             const pageStream = session.students.length > 0 ? (session.students[0].Stream || "Regular") : "Regular";
 
-            // --- 1. Build Footer Content ---
+            // --- 1. Footer Content ---
             
-            // A. Course Summary
+            // Course Summary
             let courseSummaryRows = '';
             const uniqueQPCodesInRoom = new Set();
             
@@ -1393,7 +1387,7 @@ generateReportButton.addEventListener('click', async () => {
                     </tr>`;
             }
 
-            // B. Booklet Details (Used/Written)
+            // Written Booklets
             let writtenScriptsHtml = '';
             uniqueQPCodesInRoom.forEach(code => {
                 writtenScriptsHtml += `<span style="margin-right: 15px; white-space: nowrap;">${code}: <span style="border-bottom: 1px solid #000; display: inline-block; width: 35px;"></span></span> `;
@@ -1474,6 +1468,7 @@ generateReportButton.addEventListener('click', async () => {
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
                     const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; 
+                    
                     const courseWords = student.Course.split(/\s+/);
                     const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
                     const tableCourseName = qpCodePrefix + truncatedCourse;
@@ -1484,7 +1479,6 @@ generateReportButton.addEventListener('click', async () => {
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     const remarkText = student.remark || ''; 
                     
-                    // *** ROW HEIGHT FIXED TO 2.1rem ***
                     rowsHtml += `
                         <tr ${rowClass} class="room-report-row">
                             <td class="sl-col" style="padding: 0 4px;">${seatNumber}${asterisk}</td>
@@ -1542,7 +1536,11 @@ generateReportButton.addEventListener('click', async () => {
                     </thead>
                     <tbody>`;
 
-            // Render Page 1
+            // --- RENDER PAGE 1 ---
+            // *** CRITICAL FIX: GENERATE THE ROWS BEFORE USING THEM ***
+            previousCourseName = ""; previousRegNoPrefix = ""; 
+            const tableRowsPage1 = generateTableRows(studentsPage1);
+            
             allPagesHtml += `
                 <div class="print-page print-page-room" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(1)}
@@ -1555,7 +1553,7 @@ generateReportButton.addEventListener('click', async () => {
             `;
             totalPagesGenerated++;
 
-            // Render Page 2
+            // --- RENDER PAGE 2 ---
             previousCourseName = ""; previousRegNoPrefix = ""; 
             const tableRowsPage2 = generateTableRows(studentsPage2);
             
