@@ -592,6 +592,8 @@ const viewQPCodes = document.getElementById('view-qpcodes');
 const viewReports = document.getElementById('view-reports');
 const viewAbsentees = document.getElementById('view-absentees');
 const navExtractor = document.getElementById('nav-extractor');
+const navHome = document.getElementById('nav-home'); // New
+const viewHome = document.getElementById('view-home'); // New
 const navEditData = document.getElementById('nav-edit-data'); // <-- ADD THIS
 const navSettings = document.getElementById('nav-settings');
 const navQPCodes = document.getElementById('nav-qpcodes');
@@ -629,8 +631,8 @@ const modalCloseSearchResult = document.getElementById('modal-close-search-resul
 // ***************************
 
 const viewEditData = document.getElementById('view-edit-data');
-const allNavButtons = [navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings];
-const allViews = [viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings];
+const allNavButtons = [navHome, navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings];
+const allViews = [viewHome, viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings];
 
 // --- (V26) Get references to NEW Room Settings elements (Now in Settings Tab) ---
 const collegeNameInput = document.getElementById('college-name-input');
@@ -4436,6 +4438,7 @@ function downloadRoomCsv() {
 
 
 // --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
+navHome.addEventListener('click', () => showView(viewHome, navHome));
 navExtractor.addEventListener('click', () => showView(viewExtractor, navExtractor));
 navEditData.addEventListener('click', () => showView(viewEditData, navEditData)); // <-- ADD THIS
 navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
