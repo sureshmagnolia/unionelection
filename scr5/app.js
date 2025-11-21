@@ -1270,7 +1270,7 @@ function checkManualAllotment(sessionKey) {
     return true;
 }
 
-// --- 1. Event listener for the "Generate Room-wise Report" button (Fixed Layout) ---
+// --- 1. Event listener for the "Generate Room-wise Report" button (Optimized V2) ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1332,6 +1332,13 @@ generateReportButton.addEventListener('click', async () => {
         let totalPagesGenerated = 0;
         const sortedSessionKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
 
+        // --- Helper: Truncate Course Name (1st 3 words ... Last word) ---
+        function getTruncatedCourseName(fullName) {
+            const words = fullName.split(/\s+/);
+            if (words.length <= 4) return fullName;
+            return `${words.slice(0, 3).join(' ')} ... ${words[words.length - 1]}`;
+        }
+
         sortedSessionKeys.forEach(key => {
             const session = sessions[key];
             const roomInfo = currentRoomConfig[session.Room];
@@ -1342,61 +1349,72 @@ generateReportButton.addEventListener('click', async () => {
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
             const serialNo = roomSerialMap[session.Room] || '-';
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
-
             const pageStream = session.students.length > 0 ? (session.students[0].Stream || "Regular") : "Regular";
 
-            // --- 1. Build Neat Footer Content ---
+            // --- 1. Build Footer Content (Vertical Stack) ---
+            
+            // A. Course Summary (QP Code First)
             let courseSummaryRows = '';
             const uniqueQPCodesInRoom = new Set();
             
             for (const [courseName, count] of Object.entries(session.courseCounts)) {
                 const courseKey = getBase64CourseKey(courseName);
                 const qpCode = sessionQPCodes[courseKey];
-                if (qpCode) uniqueQPCodesInRoom.add(qpCode);
-                else uniqueQPCodesInRoom.add(courseName.substring(0, 15)); 
+                const qpDisplay = qpCode || "N/A";
                 
-                const qpDisplay = qpCode ? ` (QP: ${qpCode})` : "";
+                if (qpCode) uniqueQPCodesInRoom.add(qpCode);
+                else uniqueQPCodesInRoom.add(courseName.substring(0, 10)); // Fallback key
+                
+                const truncatedName = getTruncatedCourseName(courseName);
+
                 courseSummaryRows += `
                     <tr>
-                        <td style="border: none; padding: 2px 0;">${courseName}${qpDisplay}</td>
-                        <td style="border: none; padding: 2px 0 2px 10px; text-align: right; font-weight: bold;">${count}</td>
+                        <td style="border: 1px solid #ccc; padding: 2px 4px; font-weight:bold; width: 15%;">${qpDisplay}</td>
+                        <td style="border: 1px solid #ccc; padding: 2px 4px; width: 75%; font-size: 8.5pt;">${truncatedName}</td>
+                        <td style="border: 1px solid #ccc; padding: 2px 4px; text-align: center; font-weight: bold; width: 10%;">${count}</td>
                     </tr>`;
             }
 
+            // B. Booklet Balance (Inline Style)
             let qpBalanceHtml = '';
             uniqueQPCodesInRoom.forEach(code => {
-                qpBalanceHtml += `<div style="margin-bottom: 4px;">${code}: <span style="border-bottom: 1px solid #000; display: inline-block; width: 40px;"></span></div>`;
+                // Inline span for compactness
+                qpBalanceHtml += `<span style="margin-right: 15px; display:inline-block;">${code}: <span style="border-bottom: 1px solid #000; display: inline-block; width: 30px;"></span></span> `;
             });
             
             const hasScribe = session.students.some(s => s.isPlaceholder);
             const scribeFootnote = hasScribe ? '<div class="scribe-footnote" style="margin-top:5px;">* = Scribe Assistance</div>' : '';
 
-            // Neat Table-Based Footer Layout
+            // C. Full Footer HTML (Stacked)
             const invigilatorFooterHtml = `
-                <div class="invigilator-footer" style="margin-top: auto; padding-top: 1rem; page-break-inside: avoid;">
-                    <table style="width: 100%; border: none; border-top: 1px solid #000; margin-bottom: 10px;">
-                        <tr style="vertical-align: top;">
-                            <td style="width: 60%; border: none; padding: 10px 10px 0 0;">
-                                <div style="font-weight: bold; text-decoration: underline; margin-bottom: 5px;">Course Summary:</div>
-                                <table style="width: 100%; border: 1px solid #ccc; font-size: 9pt;">
-                                    ${courseSummaryRows}
-                                </table>
-                            </td>
-                            <td style="width: 40%; border: none; padding: 10px 0 0 10px;">
-                                <div style="border: 1px solid #ccc; padding: 8px; font-size: 9pt;">
-                                    <div style="margin-bottom: 6px;"><strong>Booklets Received:</strong> _______</div>
-                                    <div style="margin-bottom: 6px;"><strong>Booklets Used:</strong> _______</div>
-                                    <div style="margin-bottom: 6px;"><strong>Balance Returned:</strong></div>
-                                    <div style="padding-left: 10px; margin-bottom: 6px;">${qpBalanceHtml}</div>
-                                    <div style="border-top: 1px solid #ccc; padding-top: 4px; margin-top: 4px;">
-                                        <strong>Total Returned:</strong> _______
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    </table>
+                <div class="invigilator-footer" style="margin-top: auto; padding-top: 0.5rem; page-break-inside: avoid;">
                     
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 2rem;">
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-weight: bold; font-size: 9pt; margin-bottom: 2px;">Course Summary:</div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                            <thead>
+                                <tr style="background-color: #f9f9f9;">
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">QP Code</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">Course Name</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: center;">Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>${courseSummaryRows}</tbody>
+                        </table>
+                    </div>
+
+                    <div style="border: 1px solid #000; padding: 6px; font-size: 9pt; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: bold;">
+                            <span>Booklets Received: _______</span>
+                            <span>Used: _______</span>
+                            <span>Total Returned: _______</span>
+                        </div>
+                        <div style="border-top: 1px dotted #ccc; padding-top: 4px;">
+                            <strong>Balance:</strong> ${qpBalanceHtml}
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <div style="font-size: 9pt;">${scribeFootnote}</div>
                         <div class="signature" style="text-align: center; width: 200px;">
                             <div style="border-top: 1px solid #000; padding-top: 4px;">Name & Signature of Invigilator</div>
@@ -1405,7 +1423,7 @@ generateReportButton.addEventListener('click', async () => {
                 </div>
             `;
 
-            // --- 2. Table Row Generator with Dynamic Font ---
+            // --- 2. Table Row Generator ---
             let previousCourseName = ""; let previousRegNoPrefix = ""; 
             const regNoRegex = /^([A-Z]+)(\d+)$/; 
 
@@ -1415,7 +1433,6 @@ generateReportButton.addEventListener('click', async () => {
                     const seatNumber = student.seatNumber;
                     const asterisk = student.isPlaceholder ? '*' : '';
                     
-                    // Reg No Processing
                     const regNo = student['Register Number'];
                     let displayRegNo = regNo;
                     const match = regNo.match(regNoRegex);
@@ -1425,13 +1442,11 @@ generateReportButton.addEventListener('click', async () => {
                         previousRegNoPrefix = prefix; 
                     } else { previousRegNoPrefix = ""; }
                     
-                    // Dynamic Font Logic (Capped at 12pt to prevent overflow)
                     const regLen = displayRegNo.length;
                     let regFontSize = "12pt";
                     if (regLen > 12) regFontSize = "10pt";
                     else if (regLen > 10) regFontSize = "11pt";
 
-                    // Course Processing
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
                     const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; 
@@ -1459,29 +1474,33 @@ generateReportButton.addEventListener('click', async () => {
                 return rowsHtml;
             }
             
-            // --- 3. Page Splitting Logic (Force 2 Pages) ---
-            // Page 1: Always 20 students max
+            // --- 3. Render Pages (Page 1: 20, Page 2: Rest) ---
             const studentsPage1 = session.students.sort((a, b) => a.seatNumber - b.seatNumber).slice(0, 20);
-            // Page 2: Remaining students (can be 0)
             const studentsPage2 = session.students.slice(20); 
 
-            // --- RENDER PAGE 1 ---
-            previousCourseName = ""; previousRegNoPrefix = ""; 
-            const tableRowsPage1 = generateTableRows(studentsPage1);
-            
-            // Standard Header for both pages
-            const getHeader = (pageNum) => `
-                <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
-                    <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
-                        ${pageStream}
-                    </div>
-                    <div style="position: absolute; top: 0; left: 0; font-weight: bold; font-size: 12pt;">
-                        Page ${pageNum}
-                    </div>
-                    <h1>${currentCollegeName}</h1> 
-                    <h2>${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
-                    ${locationHtml} 
-                </div>`;
+            const getHeader = (pageNum) => {
+                if (pageNum === 1) {
+                    // FULL Header for Page 1
+                    return `
+                        <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
+                            <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
+                                ${pageStream}
+                            </div>
+                            <h1>${currentCollegeName}</h1> 
+                            <h2>${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+                            ${locationHtml} 
+                        </div>`;
+                } else {
+                    // MINIMAL Header for Page 2
+                    return `
+                        <div class="print-header-group" style="margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;">
+                            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10pt; color: #444;">
+                                <span>Hall: ${serialNo} (${session.Room})</span>
+                                <span>Page 2 - ${pageStream}</span>
+                            </div>
+                        </div>`;
+                }
+            };
 
             const tableHeader = `
                 <table class="print-table">
@@ -1489,7 +1508,7 @@ generateReportButton.addEventListener('click', async () => {
                         <tr>
                             <th class="sl-col">Seat</th>
                             <th class="course-col">Course (QP Code)</th>
-                            <th class="reg-col">Register Number</th>
+                            <th class="reg-col">Reg No</th>
                             <th class="name-col">Name</th>
                             <th class="remarks-col">Remarks</th>
                             <th class="signature-col">Sign</th>
@@ -1497,19 +1516,22 @@ generateReportButton.addEventListener('click', async () => {
                     </thead>
                     <tbody>`;
 
-            // Render Page 1
+            // --- RENDER PAGE 1 ---
+            previousCourseName = ""; previousRegNoPrefix = ""; 
+            const tableRowsPage1 = generateTableRows(studentsPage1);
             allPagesHtml += `
                 <div class="print-page" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(1)}
                     ${tableHeader}
                     ${tableRowsPage1}
                     </tbody></table>
-                    <div style="flex-grow: 1;"></div> </div>
+                    <div style="flex-grow: 1;"></div> 
+                    <div style="text-align:right; font-size:9pt; margin-top:5px;">Continued on Page 2...</div>
+                </div>
             `;
             totalPagesGenerated++;
 
-            // --- RENDER PAGE 2 (ALWAYS) ---
-            // Reset previous values so "ditto" marks don't carry over incorrectly across pages
+            // --- RENDER PAGE 2 ---
             previousCourseName = ""; previousRegNoPrefix = ""; 
             const tableRowsPage2 = generateTableRows(studentsPage2);
             
@@ -1517,16 +1539,15 @@ generateReportButton.addEventListener('click', async () => {
             if (studentsPage2.length > 0) {
                 page2TableContent = `${tableHeader}${tableRowsPage2}</tbody></table>`;
             } else {
-                // If no students, maybe show a small message or just nothing before the footer?
-                // User said "shift Course Summary... to page 2".
-                page2TableContent = `<div style="padding: 10px; text-align: center; font-style: italic; border-bottom: 1px solid #ccc;">(End of Student List)</div>`;
+                page2TableContent = `<div style="padding: 10px; text-align: center; font-style: italic; border-bottom: 1px solid #ccc; color: #666;">(End of Student List)</div>`;
             }
 
             allPagesHtml += `
                 <div class="print-page" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(2)}
                     ${page2TableContent}
-                    <div style="flex-grow: 1;"></div> ${invigilatorFooterHtml}
+                    <div style="flex-grow: 1;"></div> 
+                    ${invigilatorFooterHtml}
                 </div>
             `;
             totalPagesGenerated++;
@@ -1534,7 +1555,7 @@ generateReportButton.addEventListener('click', async () => {
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} total pages for ${sortedSessionKeys.length} room sessions.`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
         reportControls.classList.remove('hidden');
         
         roomCsvDownloadContainer.innerHTML = `
@@ -1545,16 +1566,15 @@ generateReportButton.addEventListener('click', async () => {
         document.getElementById('download-room-csv-button').addEventListener('click', downloadRoomCsv);
 
     } catch (e) {
-        console.error("Error generating room-wise report:", e);
-        reportStatus.textContent = "An error occurred while generating the report.";
-        reportControls.classList.remove('hidden');
+        console.error("Error:", e);
+        reportStatus.textContent = "Error generating report.";
     } finally {
         generateReportButton.disabled = false;
         generateReportButton.textContent = "Generate Room-wise Seating Report";
     }
 });
     
-// --- (V29 Restored) Event listener for the "Day-wise Student List" (Single Button) ---
+
 // --- (V29 Restored) Event listener for the "Day-wise Student List" (Single Button) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
