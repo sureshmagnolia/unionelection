@@ -1019,6 +1019,7 @@ function chunkString(str, size) {
 }
 
 // --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
+// --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
 function updateDashboard() {
     const dashContainer = document.getElementById('data-snapshot');
     const dashStudent = document.getElementById('dash-student-count');
