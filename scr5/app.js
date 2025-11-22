@@ -4450,7 +4450,18 @@ if (generateAbsenteeReportButton) {
             }
             
             // 3. Generate HTML
-            let allPagesHtml = '';
+            // *** FIX: Add styles to remove border/shadow in Print mode ***
+            let allPagesHtml = `
+                <style>
+                    @media print {
+                        .print-page {
+                            box-shadow: none !important;
+                            border: none !important;
+                            margin: 0 auto !important;
+                        }
+                    }
+                </style>
+            `;
             let totalPages = 0;
             
             // Sort Keys: QP Code first, then Stream
