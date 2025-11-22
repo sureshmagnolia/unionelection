@@ -287,7 +287,212 @@ async function createNewCollege(user) {
         alert("Failed to create database. " + e.message);
     }
 }
+// ==========================================
+// ☁️ CLOUD SYNC FUNCTIONS (Fixed & Updated)
+// ==========================================
 
+// 5. CLOUD DOWNLOAD FUNCTION (Fixed Status Update & Timestamp Check)
+function syncDataFromCloud(collegeId) {
+    updateSyncStatus("Connecting...", "neutral");
+    const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
+    
+    const mainRef = doc(db, "colleges", collegeId);
+    
+    const unsubMain = onSnapshot(mainRef, async (docSnap) => {
+        if (docSnap.exists()) {
+            const mainData = docSnap.data();
+            currentCollegeData = mainData; 
+
+            // Admin Permission Check
+            if (currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email)) {
+                if(adminBtn) adminBtn.classList.remove('hidden');
+            } else {
+                if(adminBtn) adminBtn.classList.add('hidden');
+            }
+
+            // === TIMESTAMP CHECK (PREVENT OVERWRITE OF NEW LOCAL DATA) ===
+            const localTime = localStorage.getItem('lastUpdated');
+            
+            if (localTime && mainData.lastUpdated) {
+                if (localTime === mainData.lastUpdated) {
+                    updateSyncStatus("Synced", "success");
+                    return; 
+                }
+                if (localTime > mainData.lastUpdated) {
+                    console.log("⚠️ Local data is newer than cloud. Skipping auto-download to prevent overwrite.");
+                    updateSyncStatus("Unsaved Changes", "neutral"); 
+                    return;
+                }
+            }
+
+            console.log("☁️ New cloud data detected. Downloading...");
+            
+            // 1. Save Main Keys
+            [
+                'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
+                'examQPCodes', 'examScribeList', 'examScribeAllotment', 
+                'examAbsenteeList', 'examSessionNames', 'lastUpdated'
+            ].forEach(key => {
+                if (mainData[key]) localStorage.setItem(key, mainData[key]);
+            });
+
+            // 2. FETCH CHUNKS
+            try {
+                const dataColRef = collection(db, "colleges", collegeId, "data");
+                const q = query(dataColRef, orderBy("index")); 
+                const querySnapshot = await getDocs(q);
+                
+                let fullPayload = "";
+                querySnapshot.forEach((doc) => {
+                    if (doc.id.startsWith("chunk_")) {
+                        fullPayload += doc.data().payload;
+                    }
+                });
+
+                if (fullPayload) {
+                    const bulkData = JSON.parse(fullPayload);
+                    console.log("☁️ Bulk data stitched and parsed.");
+                    ['examBaseData', 'examRoomAllotment'].forEach(key => {
+                        if (bulkData[key]) localStorage.setItem(key, bulkData[key]);
+                    });
+                }
+            } catch (err) {
+                console.error("Bulk fetch error:", err);
+            }
+
+            // 3. Refresh UI
+            updateSyncStatus("Synced", "success");
+            loadInitialData();
+            
+            // Refresh Allotment View if open
+            if (typeof viewRoomAllotment !== 'undefined' && !viewRoomAllotment.classList.contains('hidden') && allotmentSessionSelect.value) {
+                 allotmentSessionSelect.dispatchEvent(new Event('change'));
+            }
+
+        } else {
+            updateSyncStatus("No Cloud Data", "neutral");
+            loadInitialData();
+        }
+    }, (error) => {
+        console.error("Sync Error:", error);
+        updateSyncStatus("Net Error", "error");
+        loadInitialData();
+    });
+}
+
+// 4. CLOUD UPLOAD FUNCTION (Universal Smart Merge)
+async function syncDataToCloud() {
+    if (!currentUser || !currentCollegeId) return;
+    if (isSyncing) return;
+    
+    isSyncing = true;
+    updateSyncStatus("Saving...", "neutral");
+
+    const { db, doc, writeBatch, getDoc } = window.firebase; 
+    
+    try {
+        const batch = writeBatch(db);
+        const mainRef = doc(db, "colleges", currentCollegeId);
+
+        // --- STEP 1: Fetch Current Cloud State ---
+        const cloudSnap = await getDoc(mainRef);
+        let cloudData = {};
+        if (cloudSnap.exists()) {
+            cloudData = cloudSnap.data();
+        }
+
+        // --- STEP 2: Smart Merge Helpers ---
+        const isEmptyOrDefault = (key, val) => {
+            if (!val) return true;
+            if (key === 'examCollegeName') return val === "University of Calicut";
+            if (key === 'examStreamsConfig') return val.includes('["Regular"]');
+            if (key === 'examRoomConfig') return val.length < 2000 && val.includes("Room 30"); 
+            if (key === 'examScribeList') return val === '[]';
+            if (key === 'examQPCodes') return val === '{}';
+            if (key === 'examAbsenteeList') return val === '{}';
+            if (key === 'examSessionNames') return val === '{}';
+            if (key === 'examRoomAllotment' || key === 'examScribeAllotment') return val === '{}' || val.length < 5; 
+            return false;
+        };
+
+        const pickRobusterValue = (key, localVal, cloudVal) => {
+            if (!localVal) return cloudVal || null;
+            if (!cloudVal) return localVal;
+            
+            // If Local is Default/Empty AND Cloud is Robust -> Keep Cloud
+            if (isEmptyOrDefault(key, localVal) && !isEmptyOrDefault(key, cloudVal)) {
+                console.log(`🛡️ Preserving Cloud Value for [${key}]`);
+                localStorage.setItem(key, cloudVal); // Update Local immediately
+                return cloudVal;
+            }
+            return localVal;
+        };
+
+        // --- STEP 3: Prepare Main Data ---
+        const timestamp = new Date().toISOString();
+        localStorage.setItem('lastUpdated', timestamp);
+
+        const settingsKeys = [
+            'examCollegeName', 
+            'examStreamsConfig', 
+            'examRoomConfig', 
+            'examQPCodes', 
+            'examScribeList', 
+            'examScribeAllotment', 
+            'examAbsenteeList',
+            'examSessionNames' // Added for your new feature
+        ];
+
+        const finalMainData = { lastUpdated: timestamp };
+
+        settingsKeys.forEach(key => {
+            const localVal = localStorage.getItem(key);
+            const cloudVal = cloudData[key];
+            const bestVal = pickRobusterValue(key, localVal, cloudVal);
+            if (bestVal) finalMainData[key] = bestVal;
+        });
+
+        // --- STEP 4: Prepare Bulk Data (Students) ---
+        const localBaseData = localStorage.getItem('examBaseData');
+        let localAllotment = localStorage.getItem('examRoomAllotment');
+        
+        const bulkDataObj = {};
+        if (localBaseData) bulkDataObj['examBaseData'] = localBaseData;
+        
+        // Only upload allotment if it exists locally
+        if (localAllotment && localAllotment !== '{}') {
+            bulkDataObj['examRoomAllotment'] = localAllotment;
+        }
+        
+        const bulkString = JSON.stringify(bulkDataObj);
+        const chunks = chunkString(bulkString, 800000); 
+
+        // --- STEP 5: Commit ---
+        batch.update(mainRef, finalMainData);
+
+        chunks.forEach((chunkStr, index) => {
+            const chunkRef = doc(db, "colleges", currentCollegeId, "data", `chunk_${index}`);
+            batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
+        });
+        
+        await batch.commit();
+        
+        console.log(`Data synced! Preserved robust cloud settings.`);
+        updateSyncStatus("Saved", "success");
+        loadInitialData(); 
+
+    } catch (e) {
+        console.error("Sync Up Error:", e);
+        if (e.code === 'not-found') {
+             try {
+                 await window.firebase.setDoc(window.firebase.doc(db, "colleges", currentCollegeId), { lastUpdated: new Date().toISOString() });
+             } catch (retryErr) {}
+        }
+        updateSyncStatus("Save Fail", "error");
+    } finally {
+        isSyncing = false;
+    }
+}
 // DOWNLOAD
 // 4. CLOUD UPLOAD FUNCTION (Universal Smart Merge)
 async function syncDataToCloud() {
