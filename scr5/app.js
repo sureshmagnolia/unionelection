@@ -4743,17 +4743,40 @@ function showView(viewToShow, buttonToActivate) {
 // --- (V48) Save from dynamic form (in Settings) ---
 saveRoomConfigButton.addEventListener('click', () => {
     try {
-        // ... (Existing save logic: gather data from DOM) ...
         const newConfig = {};
         const roomRows = roomConfigContainer.querySelectorAll('.room-row');
-        roomRows.forEach(row => {
-             // ... (Same logic as before) ...
+        let isValid = true; // Flag to track validation
+
+        // Use a standard for loop to allow 'break' on error
+        for (const row of roomRows) {
              const roomName = row.querySelector('.room-name-label').textContent.replace(':', '').trim();
              const capacity = parseInt(row.querySelector('.room-capacity-input').value, 10) || 30;
-             const location = row.querySelector('.room-location-input').value.trim();
+             
+             const locationInput = row.querySelector('.room-location-input');
+             const location = locationInput.value.trim();
+             
+             // *** VALIDATION CHECK ***
+             if (!location) {
+                 alert(`Error: Location is missing for ${roomName}.\n\nPlease enter a location (e.g., "101 - Commerce Block").`);
+                 locationInput.focus(); // Jump to the empty box
+                 locationInput.classList.add('border-red-500', 'ring-1', 'ring-red-500'); // Highlight it
+                 
+                 // Remove highlight after user starts typing
+                 locationInput.addEventListener('input', function() {
+                    this.classList.remove('border-red-500', 'ring-1', 'ring-red-500');
+                 }, { once: true });
+                 
+                 isValid = false;
+                 break; // Stop processing
+             }
+
              newConfig[roomName] = { capacity, location };
-        });
+        }
         
+        // Stop if validation failed
+        if (!isValid) return;
+
+        // Proceed with Save
         localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(newConfig));
         
         roomConfigStatus.textContent = "Settings saved successfully!";
@@ -4761,12 +4784,13 @@ saveRoomConfigButton.addEventListener('click', () => {
         
         // Re-load to LOCK everything
         loadRoomConfig(); 
-        syncDataToCloud();
+        if (typeof syncDataToCloud === 'function') syncDataToCloud();
         
     } catch (e) {
         console.error(e);
     }
 });
+
 
 // --- (V97) College Name Save Logic (Updated with Edit Button) ---
 const editCollegeNameBtn = document.getElementById('edit-college-name-btn');
