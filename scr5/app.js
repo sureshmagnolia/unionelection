@@ -323,7 +323,8 @@ function syncDataFromCloud(collegeId) {
             console.log("☁️ New cloud data detected. Downloading...");
             
             // 1. Save Main Keys
-            ['examRoomConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList', 'lastUpdated'].forEach(key => {
+            // *** FIX: Added 'examStreamsConfig' here too ***
+            ['examRoomConfig', 'examStreamsConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList', 'lastUpdated'].forEach(key => {
                 if (mainData[key]) localStorage.setItem(key, mainData[key]);
             });
 
@@ -386,7 +387,8 @@ async function syncDataToCloud() {
     
     // 1. Prepare MAIN Data (Small Settings)
     const mainData = { lastUpdated: new Date().toISOString() };
-    const mainKeys = ['examRoomConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList'];
+    // *** FIX: Added 'examStreamsConfig' so stream settings sync to everyone ***
+    const mainKeys = ['examRoomConfig', 'examStreamsConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList'];
     
     mainKeys.forEach(key => {
         const val = localStorage.getItem(key);
