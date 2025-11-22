@@ -7189,9 +7189,8 @@ function setUnsavedChanges(status) {
         editDataStatus.textContent = 'All changes saved.'; // Give clear feedback
     }
 }
-
 // ==========================================
-// ⚡ BULK COURSE UPDATE LOGIC (V2: Safe Edit & Pickers)
+// ⚡ BULK COURSE UPDATE LOGIC (V3: Course Edit Added)
 // ==========================================
 
 // 1. Elements
@@ -7199,6 +7198,9 @@ const bulkUpdateContainer = document.getElementById('bulk-course-update-containe
 const bulkInputsWrapper = document.getElementById('bulk-inputs-wrapper');
 const bulkEditModeBtn = document.getElementById('btn-bulk-edit-mode');
 const bulkTargetCourseName = document.getElementById('bulk-target-course-name');
+
+// Inputs
+const bulkNewCourseInput = document.getElementById('bulk-new-course'); // <--- NEW
 const bulkNewDateInput = document.getElementById('bulk-new-date');
 const bulkNewTimeInput = document.getElementById('bulk-new-time');
 const bulkNewStreamSelect = document.getElementById('bulk-new-stream');
@@ -7234,12 +7236,15 @@ if (editCourseSelect) {
             if(bulkInputsWrapper) {
                 bulkInputsWrapper.classList.add('opacity-50', 'pointer-events-none');
             }
-            [bulkNewDateInput, bulkNewTimeInput, bulkNewStreamSelect, btnBulkApply].forEach(el => {
+            
+            // Lock all inputs including the new Course Input
+            [bulkNewCourseInput, bulkNewDateInput, bulkNewTimeInput, bulkNewStreamSelect, btnBulkApply].forEach(el => {
                 if(el) {
                     el.disabled = true;
                     if(el.tagName !== 'BUTTON') el.classList.add('bg-gray-50');
                 }
             });
+
             if(bulkEditModeBtn) {
                 bulkEditModeBtn.classList.remove('hidden');
                 bulkEditModeBtn.innerHTML = `
@@ -7249,12 +7254,15 @@ if (editCourseSelect) {
                 `;
             }
 
-            // Pre-fill with current session data (Converted to Input Format)
+            // Pre-fill Inputs
             if (editSessionSelect.value) {
                 const [currDate, currTime] = editSessionSelect.value.split(' | ');
                 if(bulkNewDateInput) bulkNewDateInput.value = bulkDateToInput(currDate);
                 if(bulkNewTimeInput) bulkNewTimeInput.value = bulkTimeToInput(currTime);
             }
+            
+            // Pre-fill Course Name
+            if(bulkNewCourseInput) bulkNewCourseInput.value = editCourseSelect.value;
             
             // Populate Stream Dropdown
             if (bulkNewStreamSelect) {
@@ -7274,12 +7282,14 @@ if (bulkEditModeBtn) {
         // Check current state (if date input is disabled, we are currently Locked)
         const isLocked = bulkNewDateInput.disabled;
 
+        const inputsToToggle = [bulkNewCourseInput, bulkNewDateInput, bulkNewTimeInput, bulkNewStreamSelect, btnBulkApply];
+
         if (isLocked) {
             // --- ACTION: UNLOCK ---
             if(bulkInputsWrapper) {
                 bulkInputsWrapper.classList.remove('opacity-50', 'pointer-events-none');
             }
-            [bulkNewDateInput, bulkNewTimeInput, bulkNewStreamSelect, btnBulkApply].forEach(el => {
+            inputsToToggle.forEach(el => {
                 if(el) {
                     el.disabled = false;
                     el.classList.remove('bg-gray-50');
@@ -7299,7 +7309,7 @@ if (bulkEditModeBtn) {
             if(bulkInputsWrapper) {
                 bulkInputsWrapper.classList.add('opacity-50', 'pointer-events-none');
             }
-            [bulkNewDateInput, bulkNewTimeInput, bulkNewStreamSelect, btnBulkApply].forEach(el => {
+            inputsToToggle.forEach(el => {
                 if(el) {
                     el.disabled = true;
                     el.classList.add('bg-gray-50');
@@ -7323,20 +7333,20 @@ if (btnBulkApply) {
         const rawDate = bulkNewDateInput.value; // YYYY-MM-DD
         const rawTime = bulkNewTimeInput.value; // HH:MM
         const newStream = bulkNewStreamSelect.value;
+        const newCourseName = bulkNewCourseInput.value.trim(); // <--- NEW
+        
         const targetCourse = editCourseSelect.value;
         const [oldDate, oldTime] = editSessionSelect.value.split(' | ');
 
-        if (!rawDate || !rawTime) {
-            alert("Please select both a valid Date and Time.");
+        if (!rawDate || !rawTime || !newCourseName) {
+            alert("Please ensure Date, Time, and Course Name are valid.");
             return;
         }
 
         // --- CONVERT BACK TO CSV FORMAT ---
-        // 1. Date: YYYY-MM-DD -> DD.MM.YYYY
         const [y, m, d] = rawDate.split('-');
         const newDate = `${d}.${m}.${y}`;
 
-        // 2. Time: HH:MM -> HH:MM AM/PM
         const [h, min] = rawTime.split(':');
         let hours = parseInt(h);
         const ampm = hours >= 12 ? 'PM' : 'AM';
@@ -7363,11 +7373,13 @@ if (btnBulkApply) {
 Target Course: ${targetCourse}
 Students Affected: ${recordsToUpdate.length}
 
-OLD: ${oldDate} | ${oldTime}
-NEW: ${newDate} | ${newTime}
+--- NEW DETAILS ---
+Course: ${newCourseName}
+Date:   ${newDate}
+Time:   ${newTime}
 Stream: ${newStream}
 
-Are you sure you want to move these students?
+Are you sure you want to update these records?
         `;
 
         if (confirm(confirmMsg)) {
@@ -7378,18 +7390,20 @@ Are you sure you want to move these students?
                     student.Date = newDate;
                     student.Time = newTime;
                     student.Stream = newStream;
+                    student.Course = newCourseName; // <--- APPLY NEW NAME
                     updateCount++;
                 }
             });
 
             localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-            alert(`Successfully moved ${updateCount} students.\nThe page will now reload.`);
+            alert(`Successfully updated ${updateCount} students.\nThe page will now reload to refresh the data.`);
             
             if (typeof syncDataToCloud === 'function') await syncDataToCloud();
             window.location.reload();
         }
     });
 }
+
 
 // --- Event listener for Invigilator Report (Stream-Wise V2) ---
 generateInvigilatorReportButton.addEventListener('click', async () => {
