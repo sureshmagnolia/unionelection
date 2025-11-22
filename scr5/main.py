@@ -15,10 +15,7 @@ from datetime import datetime
 def clean_text(text):
     """Removes newlines and extra spaces."""
     if not text: return ""
-    text = str(text).replace('\n', ' ').strip()
-    # Remove broken start chars
-    text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
-    return text
+    return str(text).replace('\n', ' ').strip()
 
 def find_date_in_text(text):
     """Scans text for Date patterns (DD.MM.YYYY or DD-MM-YYYY)"""
@@ -39,45 +36,61 @@ def find_time_in_text(text):
 
 def find_course_name(text):
     """
-    Scans text for Course Name by stripping away known headers.
+    Scans text for Course Name by actively removing known header garbage.
     """
-    # 1. Normalize whitespace
+    # 1. Flatten text
     text = re.sub(r'\s+', ' ', text.replace('\n', ' ')).strip()
     
-    # 2. Define Garbage Headers to Strip
+    # 2. Define Headers/Garbage to Remove (Regex)
+    # We split the text by these patterns and keep the relevant part (usually after)
     garbage_patterns = [
-        r"College\s*:\s*[\w\s,]*?PALAKKAD", 
+        r"College\s*:\s*[\w\s,]*?PALAKKAD",  # Removes "College : ... PALAKKAD"
         r"Nominal\s*Roll",
-        r"Examination\s*[\w\s]*?\d{4}",
+        r"Examination\s*[\w\s]*?\d{4}",      # Removes "Examination ... 2025"
         r"Semester\s*FYUG",
+        r"UNIVERSITY\s*OF\s*CALICUT",
+        r"Details\s*of\s*candidates",
         r"Course\s*Code\s*:",
-        r"\bCourse\s*[:-]?",
-        r"Paper\s*Details\s*[:-]?"
+        r"\bCourse\s*[:-]?",                 # The word "Course" itself
+        r"Paper\s*Details\s*[:-]?",
+        r"Slot\s*[:\-]?\s*[\w\s\-]*?Core\s*\d+", # Removes "Slot : Single Major - Core 1"
+        r"Slot\s*[:\-]?\s*[\w\s\-]*?MDC\s*\d+",
+        r"Slot\s*[:\-]?\s*[\w\s\-]*?AEC\s*\d+"
     ]
 
-    # 3. Strip Garbage
+    # 3. Destructive Cleaning
     for pattern in garbage_patterns:
+        # Split by the garbage and take the LAST significant chunk.
+        # This assumes the Course Name appears AFTER the headers.
         parts = re.split(pattern, text, flags=re.IGNORECASE)
         if len(parts) > 1:
+            # Take the part that is likely the course name (usually the last part before metadata)
             text = parts[-1].strip()
 
-    # 4. Clean up punctuation
-    text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
-
-    # 5. Stop at Metadata
+    # 4. Stop at Metadata (The text AFTER the course name)
     stop_markers = r'(?=\s*(?:Exam\s*Date|Date\s*of|Slot|Session|Time|Register|Reg\.|Reg\s*No|Page|Maximum|Marks|$))'
+    
     match = re.search(r'(.*?)' + stop_markers, text)
     if match:
-        candidate = match.group(1).strip()
-        if len(candidate) > 3:
-            return candidate
+        text = match.group(1).strip()
 
-    return text if len(text) > 3 else "Unknown"
+    # 5. Final Cleanup of leading punctuation (Fixes "] - English" or ") Course")
+    text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
+
+    # 6. Validation: If we cut too much and have nothing, try specific capture
+    if len(text) < 4:
+        # Fallback: Look for Syllabus Tag
+        syl_match = re.search(r'([A-Z0-9].*?\[[^\]]*?Syllabus\])', clean_text(text), re.IGNORECASE)
+        if syl_match: return syl_match.group(1)
+        return "Unknown"
+
+    return text
 
 def detect_columns(header_row):
     """Analyzes a header row to find indices for RegNo and Name."""
     reg_idx = -1
     name_idx = -1
+    
     row_lower = [str(cell).lower().strip() if cell else "" for cell in header_row]
     
     for i, col in enumerate(row_lower):
@@ -85,13 +98,14 @@ def detect_columns(header_row):
             reg_idx = i
         elif "name" in col or "candidate" in col or "student" in col:
             name_idx = i
+            
     return reg_idx, name_idx
 
 # ==========================================
 # 🚀 MAIN PROCESSING LOGIC
 # ==========================================
 
-async def process_file(file, filename):
+async def process_file(file):
     try:
         array_buffer = await file.arrayBuffer()
         file_bytes = array_buffer.to_bytes()
@@ -99,28 +113,43 @@ async def process_file(file, filename):
         extracted_data = []
 
         with pdfplumber.open(pdf_file) as pdf:
+            
+            # 1. Global Header Scan (First Page Only)
             first_page_text = ""
             if len(pdf.pages) > 0:
+                # Use layout=True to keep words apart, helps with "Thinking [Computer" issue
                 first_page_text = pdf.pages[0].extract_text() or ""
             
             global_date = find_date_in_text(first_page_text)
             global_time = find_time_in_text(first_page_text)
             global_course = find_course_name(first_page_text)
 
+            # 2. Iterate Pages
             for page in pdf.pages:
-                tables = page.extract_tables({"vertical_strategy": "lines", "horizontal_strategy": "lines"})
+                tables = page.extract_tables({
+                    "vertical_strategy": "lines", 
+                    "horizontal_strategy": "lines"
+                })
                 if not tables:
-                    tables = page.extract_tables({"vertical_strategy": "text", "horizontal_strategy": "text"})
+                    tables = page.extract_tables({
+                        "vertical_strategy": "text", 
+                        "horizontal_strategy": "text"
+                    })
+
                 if not tables: continue
 
+                # 3. Iterate Tables
                 for table in tables:
                     reg_idx, name_idx = -1, -1
+                    
+                    # A. Detect Headers
                     for row in table:
                         r_idx, n_idx = detect_columns(row)
                         if r_idx != -1 and n_idx != -1:
                             reg_idx, name_idx = r_idx, n_idx
                             break
                     
+                    # B. Fallback Detection
                     if reg_idx == -1: 
                         sample_row = table[0] if table else []
                         if len(sample_row) >= 5:
@@ -131,12 +160,15 @@ async def process_file(file, filename):
                                 if len(clean) > 4 and re.search(r'[A-Z]+\d+', clean[4]):
                                     reg_idx = 4; name_idx = 5; break
 
+                    # C. Extraction
                     if reg_idx != -1 and name_idx != -1:
                         for row in table:
                             clean_row = [str(cell).strip() if cell else "" for cell in row]
                             if len(clean_row) <= max(reg_idx, name_idx): continue
+
                             row_str = " ".join(clean_row).lower()
-                            if "register" in row_str or "name" in row_str: continue
+                            if "register" in row_str or "name" in row_str or "reg.no" in row_str:
+                                continue
 
                             val_reg = clean_text(clean_row[reg_idx])
                             val_name = clean_text(clean_row[name_idx])
@@ -149,13 +181,13 @@ async def process_file(file, filename):
                                 "Time": global_time,
                                 "Course": global_course,
                                 "Register Number": val_reg,
-                                "Name": val_name,
-                                "Source File": filename  # <--- NEW: Tag with Filename
+                                "Name": val_name
                             })
+
         return extracted_data
 
     except Exception as e:
-        js.console.error(f"Python Error in {filename}: {e}")
+        js.console.error(f"Python Error: {e}")
         return []
 
 async def start_extraction(event):
@@ -184,8 +216,7 @@ async def start_extraction(event):
             file = file_list.item(i)
             status_div.innerText = f"Processing file {i+1}/{file_list.length}: {file.name}..."
             
-            # Pass filename to process_file
-            data = await process_file(file, file.name)
+            data = await process_file(file)
             all_exam_rows.extend(data)
             
         status_div.innerText = "Sorting data..."
@@ -214,4 +245,5 @@ async def start_extraction(event):
         spinner.classList.add("hidden")
         button_text.innerText = "Run Batch Extraction"
 
+# Expose function to HTML
 window.start_extraction = start_extraction
