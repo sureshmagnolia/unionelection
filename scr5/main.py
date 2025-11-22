@@ -39,80 +39,56 @@ def find_time_in_text(text):
 
 def find_course_name(text):
     """
-    Scans text for Course Name.
-    FIX 8 (PG Format Extraction):
-    - Prioritizes direct extraction for the "NAME--(CODE)/YEAR" format.
-    - Fallback logic handles all previous UG and general noise cases.
+    Scans text for Course Name using a construction/destruction strategy.
+    Prioritizes specific PG/Distance formats.
     """
-    # 1. Flatten the text immediately (Fixes line breaks)
+    # 1. Normalize whitespace
     text = str(text).replace('\n', ' ')
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # 2. PRIORITY EXTRACTION: PG Paper Details Format (NAME--(CODE)/YEAR)
-    # Matches Paper Details: followed by (Name)--(Code in parentheses)/Year
-    pg_match = re.search(r"Paper\s*Details\s*[:\-]\s*(.*?)\s*--\s*\((.*?)\)\s*\/\d{4}", text, flags=re.IGNORECASE)
-
-    if pg_match:
-        # Reconstruct as "NAME (CODE)" and return immediately
-        course_name = pg_match.group(1).strip()
-        course_code = pg_match.group(2).strip()
-        candidate = f"{course_name} ({course_code})"
-        
-        # Clean up any trailing punctuation
-        candidate = re.sub(r'[\s\-\)\]\.:,]+$', '', candidate).strip()
-
-        if len(candidate) > 3:
-            return candidate
-
-    # 3. FALLBACK EXTRACTION: Generic Cleaning (Used for all other file types)
+    # --- STRATEGY 1: PG/Distance Explicit Label Capture (Greedy Anchor) ---
+    # Captures everything after 'Paper Details:' until 'Exam Date' is seen.
+    pg_match = re.search(r'Paper\s*Details\s*[:\s]*(.*?)Exam\s*Date', text, flags=re.IGNORECASE)
     
-    patterns_to_remove = [
-        r".*?University\s*of\s*Calicut", 
-        
-        # --- UNIVERSAL COLLEGE REMOVER ---
-        r"College\s*[:\-].*?(?=\s*[A-Z]{2,}\d)", 
-        
-        # --- ORDINAL NUMBER REMOVER ---
-        r"\b(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Twelfth)\b\s*?(?=\s*[A-Z]{2,}\d)",
-        
+    if pg_match:
+        candidate = pg_match.group(1).strip()
+        # The result includes the code/year, which is the desired output.
+        return clean_text(candidate)
+
+    # --- STRATEGY 2: Destructive Header Removal (FYUG Format) ---
+
+    garbage_patterns = [
+        r"College\s*:\s*[\w\s,]*?PALAKKAD",  
         r"Nominal\s*Roll",
         r"Examination\s*[\w\s]*?\d{4}",
-        r"Semester\s*[A-Za-z0-9]+",      
-        r"\bFirst\b", 
-        r"Page\s*\d+\s*of\s*\d+",
-        r"Course\s*Code\s*[:\-]?",   
-        r"Paper\s*Details\s*[:\-]?", 
-        r"Name\s*of\s*Course\s*[:\-]?",
-        r"\bCourse\b"
+        r"Semester\s*FYUG",
+        r"Course\s*Code\s*:",
+        r"\bCourse\s*[:-]?",
+        r"Paper\s*Details\s*[:-]?"
     ]
-    
-    for pattern in patterns_to_remove:
-        text = re.sub(pattern, ' ', text, flags=re.IGNORECASE)
 
-    # 4. Clean up the start
-    text = text.strip()
-    text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
+    # Use the original text (cleaned) for destruction
+    original_text_copy = str(text)
 
-    # 5. Stop at Metadata (The end of the course name)
+    # Strip Garbage
+    for pattern in garbage_patterns:
+        parts = re.split(pattern, original_text_copy, flags=re.IGNORECASE)
+        if len(parts) > 1:
+            original_text_copy = parts[-1].strip()
+
+    # Stop at Metadata (The end of the course name)
     stop_markers = [
-        r"Slot",  
-        r"Session",
-        r"Exam\s*Date",
-        r"Date\s*of\s*Exam",
-        r"Time\s*:",
-        r"\d{2}[./-]\d{2}[./-]\d{4}",
-        r"Register\s*No",
-        r"Reg\.\s*No",
-        r"Maximum\s*Marks"
+        r"Slot",  r"Session", r"Exam\s*Date", r"Date\s*of\s*Exam", 
+        r"Time\s*:", r"\d{2}[./-]\d{2}[./-]\d{4}", r"Register\s*No",
+        r"Reg\.\s*No", r"Maximum\s*Marks"
     ]
     
     for marker in stop_markers:
-        parts = re.split(marker, text, flags=re.IGNORECASE)
+        parts = re.split(marker, original_text_copy, flags=re.IGNORECASE)
         if len(parts) > 0:
-            text = parts[0].strip()
+            original_text_copy = parts[0].strip()
 
-    # 6. Final Cleanup (If both priority and fallback cleaning succeeded)
-    return text if len(text) > 3 else "Unknown"
+    return clean_text(original_text_copy) if len(clean_text(original_text_copy)) > 3 else "Unknown"
 
 def detect_columns(header_row):
     """Analyzes a header row to find indices for RegNo and Name."""
@@ -121,10 +97,8 @@ def detect_columns(header_row):
     row_lower = [str(cell).lower().strip() if cell else "" for cell in header_row]
     
     for i, col in enumerate(row_lower):
-        if "reg" in col or "register" in col or "roll" in col:
-            reg_idx = i
-        elif "name" in col or "candidate" in col or "student" in col:
-            name_idx = i
+        if "reg" in col or "register" in col or "roll" in col: reg_idx = i
+        elif "name" in col or "candidate" in col or "student" in col: name_idx = i
     return reg_idx, name_idx
 
 # ==========================================
@@ -139,6 +113,7 @@ async def process_file(file, filename):
         extracted_data = []
 
         with pdfplumber.open(pdf_file) as pdf:
+            
             first_page_text = ""
             if len(pdf.pages) > 0:
                 first_page_text = pdf.pages[0].extract_text() or ""
@@ -148,9 +123,16 @@ async def process_file(file, filename):
             global_course = find_course_name(first_page_text)
 
             for page in pdf.pages:
-                tables = page.extract_tables({"vertical_strategy": "lines", "horizontal_strategy": "lines"})
+                tables = page.extract_tables({
+                    "vertical_strategy": "lines", 
+                    "horizontal_strategy": "lines"
+                })
                 if not tables:
-                    tables = page.extract_tables({"vertical_strategy": "text", "horizontal_strategy": "text"})
+                    tables = page.extract_tables({
+                        "vertical_strategy": "text", 
+                        "horizontal_strategy": "text"
+                    })
+
                 if not tables: continue
 
                 for table in tables:
@@ -175,6 +157,7 @@ async def process_file(file, filename):
                         for row in table:
                             clean_row = [str(cell).strip() if cell else "" for cell in row]
                             if len(clean_row) <= max(reg_idx, name_idx): continue
+
                             row_str = " ".join(clean_row).lower()
                             if "register" in row_str or "name" in row_str: continue
 
@@ -192,6 +175,7 @@ async def process_file(file, filename):
                                 "Name": val_name,
                                 "Source File": filename
                             })
+
         return extracted_data
 
     except Exception as e:
@@ -224,7 +208,6 @@ async def start_extraction(event):
             file = file_list.item(i)
             status_div.innerText = f"Processing file {i+1}/{file_list.length}: {file.name}..."
             
-            # Pass filename to process_file
             data = await process_file(file, file.name)
             all_exam_rows.extend(data)
             
@@ -254,4 +237,5 @@ async def start_extraction(event):
         spinner.classList.add("hidden")
         button_text.innerText = "Run Batch Extraction"
 
+# Expose function to HTML
 window.start_extraction = start_extraction
