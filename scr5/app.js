@@ -1019,7 +1019,6 @@ function chunkString(str, size) {
 }
 
 // --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
-// --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
 function updateDashboard() {
     const dashContainer = document.getElementById('data-snapshot');
     const dashStudent = document.getElementById('dash-student-count');
@@ -1045,10 +1044,8 @@ function updateDashboard() {
     const totalStudents = allStudentData.length;
     const uniqueCourses = new Set(allStudentData.map(s => s.Course)).size;
     
-    // Get all unique dates and sort them
     const uniqueDaysSet = new Set(allStudentData.map(s => s.Date));
     const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
-        // Parse DD.MM.YYYY
         const d1 = a.split('.').reverse().join('');
         const d2 = b.split('.').reverse().join('');
         return d1.localeCompare(d2);
@@ -1079,7 +1076,6 @@ function updateDashboard() {
 
     // 3. POPULATE SMART DATE DROPDOWN
     if (dateSelect && specificDateGrid) {
-        // Only repopulate if empty or data changed
         dateSelect.innerHTML = '<option value="">-- Select a Date --</option>';
         
         uniqueDays.forEach(dateStr => {
@@ -1089,7 +1085,6 @@ function updateDashboard() {
             dateSelect.appendChild(option);
         });
 
-        // Auto-select Tomorrow (or next available date)
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = formatDateToCSV(tomorrow);
@@ -1099,23 +1094,20 @@ function updateDashboard() {
             updateSpecificDateGrid(tomorrowStr, specificDateGrid);
         }
 
-        // Listener
         dateSelect.onchange = (e) => {
             updateSpecificDateGrid(e.target.value, specificDateGrid);
         };
     }
 
-    // 4. UPDATE DATA LOADING TAB STATUS (Moved outside the listener so it runs immediately)
+    // 4. UPDATE DATA LOADING TAB STATUS (Fixed Placement)
     const dataTabStatusText = document.getElementById('data-tab-status-text');
     const btnDownloadCurrentCsv = document.getElementById('btn-download-current-csv');
 
     if (dataTabStatusText && btnDownloadCurrentCsv) {
         if (allStudentData && allStudentData.length > 0) {
-            // Determine source context
             dataTabStatusText.textContent = `Data of ${allStudentData.length} Students Loaded (Cloud/Local)`;
             btnDownloadCurrentCsv.classList.remove('hidden');
             
-            // Attach one-time listener
             btnDownloadCurrentCsv.onclick = () => {
                 if (!allStudentData || allStudentData.length === 0) {
                     alert("No data available to download.");
@@ -1137,7 +1129,7 @@ function updateDashboard() {
         }
     }
 
-    // 5. REFRESH CALENDAR (If present)
+    // 5. REFRESH CALENDAR
     if (typeof renderCalendar === 'function') renderCalendar();
 }
 
