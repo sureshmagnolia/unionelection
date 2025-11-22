@@ -40,17 +40,19 @@ def find_time_in_text(text):
 def find_course_name(text):
     """
     Scans text for Course Name.
-    FIX 9 (Multi-line Course Name Protection):
-    - Updated 'College Remover' to stop at 'Course' or 'Paper' keywords.
-    - Prevents cutting off the first half of a 2-line course name.
+    INCLUDES FIXES FOR:
+    1. Line Breaks (College remover stops early)
+    2. 'Name:' appearing before course
+    3. 'Exam Name' leakage (Relaxed regex + Garbage removal)
+    4. Spaces in Year format (e.g. / 2019)
     """
     # 1. Flatten the text immediately (Fixes line breaks)
     text = str(text).replace('\n', ' ')
     text = re.sub(r'\s+', ' ', text).strip()
     
     # 2. PRIORITY EXTRACTION: PG Paper Details Format (NAME--(CODE)/YEAR)
-    # Matches Paper Details: followed by (Name)--(Code in parentheses)/Year
-    pg_match = re.search(r"Paper\s*Details\s*[:\-]\s*(.*?)\s*--\s*\((.*?)\)\s*\/\d{4}", text, flags=re.IGNORECASE)
+    # FIX: Added \s* around the slash to handle "/ 2019" vs "/2019"
+    pg_match = re.search(r"Paper\s*Details\s*[:\-]\s*(.*?)\s*--\s*\((.*?)\)\s*\/\s*\d{4}", text, flags=re.IGNORECASE)
 
     if pg_match:
         # Reconstruct as "NAME (CODE)" and return immediately
@@ -69,13 +71,15 @@ def find_course_name(text):
     patterns_to_remove = [
         r".*?University\s*of\s*Calicut", 
         
-        # --- 🔴 UPDATED UNIVERSAL COLLEGE REMOVER (FIXED) 🔴 ---
-        # Stops deleting if it sees "Course", "Paper", "Slot", etc.
-        r"College\s*[:\-].*?(?=\s*(?:Course|Paper|Name|Slot|Session|[A-Z]{2,}\d))", 
+        # --- 🔴 UPDATED UNIVERSAL COLLEGE REMOVER 🔴 ---
+        # Stops deleting if it sees "Course", "Paper", "Slot", "Exam Name" or "Name"
+        # This prevents it from eating the first line of a multi-line course name.
+        r"College\s*[:\-].*?(?=\s*(?:Course|Paper|Name|Slot|Session|Exam\s*Name|[A-Z]{2,}\d))", 
         
         # --- ORDINAL NUMBER REMOVER ---
         r"\b(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Twelfth)\b\s*?(?=\s*[A-Z]{2,}\d)",
         
+        # --- GARBAGE REMOVERS ---
         r"Nominal\s*Roll",
         r"Examination\s*[\w\s]*?\d{4}",
         r"Semester\s*[A-Za-z0-9]+",       
@@ -84,7 +88,12 @@ def find_course_name(text):
         r"Course\s*Code\s*[:\-]?",    
         r"Paper\s*Details\s*[:\-]?", 
         r"Name\s*of\s*Course\s*[:\-]?",
-        r"\bCourse\b"
+        r"\bCourse\b",
+        
+        # FIX: Explicitly remove "Exam Name" and "Name:" labels to prevent leakage
+        r"Exam\s*Name\s*[:\-].*?(?=\s*Paper)", # Aggressively remove Exam Name line if followed by Paper
+        r"Exam\s*Name\s*[:\-]?",
+        r"Name\s*[:\-]?"
     ]
     
     for pattern in patterns_to_remove:
