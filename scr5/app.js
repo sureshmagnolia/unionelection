@@ -289,7 +289,6 @@ async function createNewCollege(user) {
 }
 
 // DOWNLOAD
-
 // 4. CLOUD UPLOAD FUNCTION (Universal Smart Merge)
 async function syncDataToCloud() {
     if (!currentUser || !currentCollegeId) return;
@@ -425,70 +424,7 @@ async function syncDataToCloud() {
     }
 }
 
-// 4. CLOUD UPLOAD FUNCTION (Chunked Strategy)
-async function syncDataToCloud() {
-    if (!currentUser || !currentCollegeId) return;
-    if (isSyncing) return;
-    
-    isSyncing = true;
-    updateSyncStatus("Saving...", "neutral");
 
-    const { db, doc, writeBatch } = window.firebase; 
-    
-    // 1. Prepare MAIN Data (Small Settings)
-    const mainData = { lastUpdated: new Date().toISOString() };
-    // *** FIX: Added 'examStreamsConfig' so stream settings sync to everyone ***
-    const mainKeys = ['examRoomConfig', 'examStreamsConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList'];
-    
-    mainKeys.forEach(key => {
-        const val = localStorage.getItem(key);
-        if(val) mainData[key] = val;
-    });
-
-    // 2. Prepare BULK Data (Students & Allotments)
-    const bulkDataObj = {};
-    const bulkKeys = ['examBaseData', 'examRoomAllotment'];
-    bulkKeys.forEach(key => {
-        const val = localStorage.getItem(key);
-        if(val) bulkDataObj[key] = val;
-    });
-    
-    // Convert large data to string and split into 800KB chunks
-    const bulkString = JSON.stringify(bulkDataObj);
-    const chunks = chunkString(bulkString, 800000); 
-
-    try {
-        const batch = writeBatch(db);
-        
-        // A. Update Main Doc
-        const mainRef = doc(db, "colleges", currentCollegeId);
-        batch.update(mainRef, mainData);
-
-        // B. Save Chunks to Sub-collection 'data'
-        chunks.forEach((chunkStr, index) => {
-            const chunkRef = doc(db, "colleges", currentCollegeId, "data", `chunk_${index}`);
-            batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
-        });
-        
-        await batch.commit();
-        
-        console.log(`Data synced! Split into ${chunks.length} chunk(s).`);
-        updateSyncStatus("Saved", "success");
-    } catch (e) {
-        console.error("Sync Up Error:", e);
-        // Fallback if doc doesn't exist
-        if (e.code === 'not-found') {
-             try {
-                 await window.firebase.setDoc(window.firebase.doc(db, "colleges", currentCollegeId), mainData);
-                 updateSyncStatus("Retry Save", "error");
-             } catch (retryErr) { console.error(retryErr); }
-        } else {
-            updateSyncStatus("Save Fail", "error");
-        }
-    } finally {
-        isSyncing = false;
-    }
-}
 // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
 
 adminBtn.addEventListener('click', () => {
