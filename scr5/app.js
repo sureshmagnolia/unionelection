@@ -1426,7 +1426,7 @@ function initCalendar() {
     }
 }
 
-// --- Calendar Render Logic (V2: Scribe Aware) ---
+// --- Calendar Render Logic (V3: Circles & Light Red) ---
 function renderCalendar() {
     const grid = document.getElementById('calendar-days-grid');
     const title = document.getElementById('cal-month-display');
@@ -1469,7 +1469,6 @@ function renderCalendar() {
                 const stats = monthData[dayKey][sessionKey];
                 stats.students++;
                 
-                // Separate Scribes from Regular Halls
                 if (scribeRegNos.has(s['Register Number'])) {
                     stats.scribeCount++;
                 } else {
@@ -1481,66 +1480,68 @@ function renderCalendar() {
     }
 
     let html = "";
+    // Empty cells for days before start of month
     for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 min-h-[90px] border-r border-b border-gray-100"></div>`;
 
     for (let day = 1; day <= daysInMonth; day++) {
         const data = monthData[day];
         const isToday = (day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear());
         
-        const baseClass = "min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col relative hover:bg-blue-50 transition group";
-        const dayNumClass = isToday 
-            ? "bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-md text-xs" 
-            : "text-gray-700 text-sm";
+        // Base Cell Style: Centered Content
+        const baseClass = "min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col items-center justify-center relative hover:bg-blue-50 transition group";
+        
+        // Today's Circle Style (Blue)
+        const todayClass = isToday 
+            ? "bg-blue-600 text-white shadow-md" 
+            : "";
 
-        let topClass = "bg-transparent";
-        let botClass = "bg-transparent";
-        let topLabel = "";
-        let botLabel = "";
+        let circleClass = "bg-transparent text-gray-700";
+        let badgesHtml = "";
         let tooltipHtml = "";
-        const activeColor = "bg-[#D32F2F] text-white"; 
+        
+        // Exam Day Circle Style (Light Red)
+        const activeColor = "bg-red-100 text-red-900 border border-red-200"; 
 
         if (data) {
-            // FN (Morning)
-            if (data.am.students > 0) {
-                topClass = activeColor;
-                topLabel = `<span class="absolute top-1 right-1 text-[9px] font-bold opacity-80 tracking-wider">FN</span>`;
+            const hasFN = data.am.students > 0;
+            const hasAN = data.pm.students > 0;
+            
+            if (hasFN || hasAN) {
+                circleClass = activeColor; // Apply Light Red Circle
+            }
+
+            // FN Badge (Top Right)
+            if (hasFN) {
+                badgesHtml += `<span class="absolute -top-1 -right-2 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">FN</span>`;
                 
+                // Tooltip Logic
                 const regHalls = Math.ceil(data.am.regCount / 30);
                 const othHalls = Math.ceil(data.am.othCount / 30);
                 let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
-                
-                if (data.am.scribeCount > 0) {
-                    const scrHalls = Math.ceil(data.am.scribeCount / 5);
-                    details += ` | <span class="text-orange-300 font-bold">Scribe: ${scrHalls}</span>`;
-                }
+                if (data.am.scribeCount > 0) details += ` | Scribe: ${Math.ceil(data.am.scribeCount / 5)}`;
 
                 tooltipHtml += `
                     <div class='mb-2 pb-2 border-b border-gray-600'>
                         <strong class='text-red-300 uppercase text-[10px]'>Morning (FN)</strong><br>
-                        <span class='text-white'>${data.am.students} Candidates</span><br>
-                        <span class='text-gray-300 text-[10px]'>${details} Halls</span>
+                        <span class='text-white'>${data.am.students} Students</span><br>
+                        <span class='text-gray-300 text-[10px]'>${details}</span>
                     </div>`;
             }
 
-            // AN (Afternoon)
-            if (data.pm.students > 0) {
-                botClass = activeColor;
-                botLabel = `<span class="absolute bottom-1 right-1 text-[9px] font-bold opacity-80 tracking-wider">AN</span>`;
+            // AN Badge (Bottom Right)
+            if (hasAN) {
+                badgesHtml += `<span class="absolute -bottom-1 -right-2 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">AN</span>`;
                 
                 const regHalls = Math.ceil(data.pm.regCount / 30);
                 const othHalls = Math.ceil(data.pm.othCount / 30);
                 let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
-
-                if (data.pm.scribeCount > 0) {
-                    const scrHalls = Math.ceil(data.pm.scribeCount / 5);
-                    details += ` | <span class="text-orange-300 font-bold">Scribe: ${scrHalls}</span>`;
-                }
+                if (data.pm.scribeCount > 0) details += ` | Scribe: ${Math.ceil(data.pm.scribeCount / 5)}`;
 
                 tooltipHtml += `
                     <div>
                         <strong class='text-red-300 uppercase text-[10px]'>Afternoon (AN)</strong><br>
-                        <span class='text-white'>${data.pm.students} Candidates</span><br>
-                        <span class='text-gray-300 text-[10px]'>${details} Halls</span>
+                        <span class='text-white'>${data.pm.students} Students</span><br>
+                        <span class='text-gray-300 text-[10px]'>${details}</span>
                     </div>`;
             }
         }
@@ -1552,14 +1553,14 @@ function renderCalendar() {
             </div>
         ` : "";
 
+        // Combine Classes: Today > Exam > Normal
+        let finalCircleClass = `w-10 h-10 rounded-full flex items-center justify-center relative font-bold ${todayClass || circleClass}`;
+
         html += `
             <div class="${baseClass}">
-                <div class="h-1/2 w-full ${topClass} p-1 border-b-2 border-white relative">
-                    <span class="font-bold ${dayNumClass} relative z-10">${day}</span>
-                    ${topLabel}
-                </div>
-                <div class="h-1/2 w-full ${botClass} relative">
-                    ${botLabel}
+                <div class="${finalCircleClass}">
+                    ${day}
+                    ${badgesHtml}
                 </div>
                 ${tooltip}
             </div>
