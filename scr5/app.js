@@ -807,7 +807,7 @@ function getNumericSortKey(key) {
     return `${parts[0]}_${parts[1]}_${String(roomNumber).padStart(4, '0')}`;
 }
 
-// --- Helper function to create a new room row HTML (with Capacity Tags) ---
+// --- Helper function to create a new room row HTML (Updated Placeholder) ---
 function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocked = true) {
     const disabledAttr = isLocked ? 'disabled' : '';
     const bgClass = isLocked ? 'bg-gray-50 text-gray-500' : 'bg-white';
@@ -825,7 +825,7 @@ function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocke
         `<button class="remove-room-button ml-2 text-sm text-red-600 hover:text-red-800 font-medium">&times; Remove</button>` : 
         `<div class="w-[70px]"></div>`;
 
-    // --- NEW: Capacity Tag Logic ---
+    // Capacity Tag Logic
     let capBadge = "";
     const capNum = parseInt(capacity) || 0;
     if (capNum > 30) {
@@ -833,7 +833,6 @@ function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocke
     } else if (capNum < 30) {
         capBadge = `<span class="ml-2 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200" title="Below Standard">▼ ${capNum}</span>`;
     }
-    // -------------------------------
     
     return `
         <div class="room-row flex items-center gap-2 p-2 border-b border-gray-200" data-room-name="${roomName}">
@@ -846,7 +845,7 @@ function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocke
             </div>
             
             <input type="text" class="room-location-input block flex-grow p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass}" 
-                   value="${location}" placeholder="e.g., Commerce Block" ${disabledAttr}>
+                   value="${location}" placeholder="e.g., 101 - Commerce Block" ${disabledAttr}>
             
             ${editBtnHtml}
             ${removeButtonHtml}
