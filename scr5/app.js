@@ -8857,6 +8857,163 @@ window.real_disable_all_report_buttons = function(disabled) {
     const btn = document.getElementById('generate-room-summary-button');
     if(btn) btn.disabled = disabled;
 };
+
+// ==========================================
+// ☢️ NUKE & SETTINGS MANAGER
+// ==========================================
+
+const nukeBtn = document.getElementById('nuke-it-all-btn');
+const backupSettingsBtn = document.getElementById('backup-settings-btn');
+const restoreSettingsBtn = document.getElementById('restore-settings-btn');
+const restoreSettingsInput = document.getElementById('restore-settings-input');
+
+// 1. NUKE IT ALL (Reset Student Data)
+if (nukeBtn) {
+    nukeBtn.addEventListener('click', async () => {
+        // Confirmation 1
+        if (!confirm("WARNING: You are about to wipe ALL Student Data, Allotments, and Exam Sessions.\n\nThis will delete data from the Cloud and this Browser.\n\nAre you sure you want to proceed?")) {
+            return;
+        }
+
+        // Confirmation 2 (Funny)
+        const code = prompt("⚠ NUCLEAR LAUNCH DETECTED ⚠\n\nTo confirm this destruction, please type 'DELETE' in the box below.\n\n(P.S. Hope you have a backup!)");
+        
+        if (code === 'DELETE') {
+            nukeBtn.textContent = "💥 NUKING...";
+            nukeBtn.disabled = true;
+
+            try {
+                // 1. Clear specific keys (Keep Settings)
+                const keysToRemove = [
+                    BASE_DATA_KEY,       // Students
+                    ROOM_ALLOTMENT_KEY,  // Regular Rooms
+                    SCRIBE_ALLOTMENT_KEY,// Scribe Rooms
+                    ABSENTEE_LIST_KEY,   // Absentees
+                    QP_CODE_LIST_KEY     // QP Codes
+                ];
+                
+                keysToRemove.forEach(key => localStorage.removeItem(key));
+                
+                // 2. Reset Global Variables
+                allStudentData = [];
+                currentSessionAllotment = [];
+                
+                // 3. Force Sync to Cloud (Pushing empty data effectively wipes the cloud)
+                if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud();
+                }
+
+                alert("💥 KABOOM! 💥\n\nAll student data has been vaporized.\nSettings and Global Scribe List were saved in the bunker.");
+                window.location.reload();
+
+            } catch (e) {
+                console.error("Nuke failed:", e);
+                alert("Nuke failed due to an error: " + e.message);
+                nukeBtn.textContent = "☢️ NUKE IT ALL (MASTER RESET) ☢️";
+                nukeBtn.disabled = false;
+            }
+        } else {
+            alert("Launch aborted. Incorrect confirmation code.");
+        }
+    });
+}
+
+// 2. BACKUP SETTINGS ONLY
+if (backupSettingsBtn) {
+    backupSettingsBtn.addEventListener('click', () => {
+        const settingsData = {};
+        const settingsKeys = [
+            ROOM_CONFIG_KEY,     // Room Settings
+            STREAM_CONFIG_KEY,   // Stream Settings
+            COLLEGE_NAME_KEY,    // College Name
+            SCRIBE_LIST_KEY      // Global Scribe List
+        ];
+
+        settingsKeys.forEach(key => {
+            const val = localStorage.getItem(key);
+            if (val) settingsData[key] = val;
+        });
+
+        const jsonString = JSON.stringify(settingsData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ExamFlow_Settings_Backup_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+}
+
+// 3. RESTORE SETTINGS ONLY
+if (restoreSettingsBtn && restoreSettingsInput) {
+    restoreSettingsBtn.addEventListener('click', () => {
+        const file = restoreSettingsInput.files[0];
+        if (!file) {
+            alert("Please select a Settings JSON file first.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const settingsData = JSON.parse(e.target.result);
+                let loadedCount = 0;
+
+                // Keys we accept for settings restore
+                const validKeys = [ROOM_CONFIG_KEY, STREAM_CONFIG_KEY, COLLEGE_NAME_KEY, SCRIBE_LIST_KEY];
+
+                validKeys.forEach(key => {
+                    if (settingsData[key]) {
+                        localStorage.setItem(key, settingsData[key]);
+                        loadedCount++;
+                    }
+                });
+
+                if (loadedCount > 0) {
+                    alert(`Successfully restored ${loadedCount} settings configurations.\n\nSyncing to cloud...`);
+                    
+                    // Update Runtime Variables
+                    loadRoomConfig();
+                    loadStreamConfig();
+                    if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+
+                    // Sync
+                    if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                    
+                    alert("Settings updated and synced!");
+                } else {
+                    alert("No valid settings found in this file.");
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Error parsing settings file: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+    });
+}
+
+// 4. RESTORE FULL DATA (Legacy Button Support)
+// You have an existing listener for 'restore-data-button', but if we hid it 
+// or changed the ID in HTML, ensure this connects:
+const triggerFullRestore = document.getElementById('restore-file-input');
+if (triggerFullRestore) {
+    triggerFullRestore.addEventListener('change', () => {
+         // If user selects a file via the new "Restore Full Backup" text link/button logic
+         // You might need to manually trigger the old restore logic or copy it here.
+         // For simplicity, I kept the old logic in the HTML structure above 
+         // by linking `onclick` to the hidden input, but we need the `change` event to fire the actual restore.
+         
+         // Reuse your existing restore logic:
+         const restoreBtn = document.getElementById('restore-data-button');
+         if(restoreBtn) restoreBtn.click();
+    });
+}
+    
 // --- Run on initial page load ---
 loadInitialData();
     // --- NEW: Restore Last Active Tab ---
