@@ -4327,41 +4327,34 @@ if (generateQpDistributionReportButton) {
     });
 }
 
-// *** NEW: Helper for Absentee Report (V10.1 FIX) ***
+// *** NEW: Helper for Absentee Report (Text-Based / No Gaps) ***
 function formatRegNoList(regNos) {
-    if (!regNos || regNos.length === 0) return '<em>None</em>';
+    if (!regNos || regNos.length === 0) return 'None'; // Changed from <em>None</em> to plain text
     
-    const outputHtml = [];
-    // Regex to split letters from numbers (e.g., "VPAYSZO" and "007")
+    const outputStrings = [];
     const regEx = /^([A-Z]+)(\d+)$/; 
 
     regNos.sort(); 
     
     let currentPrefix = "";
-    let numberGroup = []; // To hold numbers for the current prefix
+    let numberGroup = [];
 
-    // Helper function to commit a completed group of numbers
     function commitGroup() {
         if (numberGroup.length > 0) {
             let groupString = "";
             if (currentPrefix) {
-                // This is a standard prefix group (e.g., VPAYSZO)
-                // The first item in numberGroup is the full regNo, the rest are just numbers
-                const firstNum = numberGroup.shift(); // e.g., "VPAYSZO006"
-                groupString = firstNum; // "VPAYSZO006"
+                const firstNum = numberGroup.shift(); 
+                groupString = firstNum; 
                 if (numberGroup.length > 0) {
-                     // Add the rest, e.g., "011", "025"
                     groupString += ", " + numberGroup.join(", ");
                 }
             } else {
-                // This is a group of non-matching (fallback) numbers
                 groupString = numberGroup.join(", ");
             }
-            
-            // Push this whole string as one single span
-            outputHtml.push(`<span>${groupString}</span>`);
+            // FIX 1: Push plain text, NO <span> tags
+            outputStrings.push(groupString);
         }
-        numberGroup = []; // Reset the group
+        numberGroup = []; 
     }
 
     regNos.forEach((regNo) => {
@@ -4372,34 +4365,24 @@ function formatRegNoList(regNos) {
             const number = match[2];
             
             if (prefix === currentPrefix) {
-                // Same prefix, just add the number
                 numberGroup.push(number);
             } else {
-                // New prefix!
-                // 1. Commit the previous group
                 commitGroup();
-                // 2. Start a new group
                 currentPrefix = prefix;
-                numberGroup.push(regNo); // Push the full regNo as the first item
+                numberGroup.push(regNo); 
             }
         } else {
-            // Fallback for non-matching regNo
-            // 1. Commit any existing prefix group
             commitGroup();
-            // 2. Reset prefix and start a "non-match" group
             currentPrefix = ""; 
             numberGroup.push(regNo);
-            // 3. Commit this non-match group immediately
             commitGroup(); 
         }
     });
     
-    // Commit any remaining group after the loop
     commitGroup();
     
-    // Join the spans with a line break. The CSS flex-gap will now be
-    // between the entire groups, not the individual numbers.
-    return outputHtml.join('<br>');
+    // FIX 2: Join with a simple New Line character (\n)
+    return outputStrings.join('\n'); 
 }
         
 // --- Event listener for "Generate Absentee Statement" (V3: Stream-wise Split) ---
@@ -4493,8 +4476,9 @@ if (generateAbsenteeReportButton) {
                 
                 for (const courseName of sortedCourses) {
                     const courseData = data.courses[courseName];
-                    const presentListHtml = formatRegNoList(courseData.present); 
-                    const absentListHtml = formatRegNoList(courseData.absent);   
+                    // Note: We use 'Text' suffix now to indicate plain text with \n
+                    const presentListText = formatRegNoList(courseData.present); 
+                    const absentListText = formatRegNoList(courseData.absent);   
                     
                     tableRowsHtml += `
                         <tr style="background-color: #f3f4f6;">
@@ -4504,17 +4488,13 @@ if (generateAbsenteeReportButton) {
                             <td style="vertical-align: top; width: 20%; padding: 8px; border: 1px solid #ccc;">
                                 <strong>Present (${courseData.present.length})</strong>
                             </td>
-                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight};">
-                                ${presentListHtml}
-                            </td>
+                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; white-space: pre-wrap;">${presentListText}</td>
                         </tr>
                         <tr>
                             <td style="vertical-align: top; padding: 8px; border: 1px solid #ccc;">
                                 <strong>Absent (${courseData.absent.length})</strong>
                             </td>
-                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; color: red;">
-                                ${absentListHtml}
-                            </td>
+                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; color: red; white-space: pre-wrap;">${absentListText}</td>
                         </tr>
                     `;
                 }
@@ -4534,9 +4514,11 @@ if (generateAbsenteeReportButton) {
                 allPagesHtml += `
                     <div class="print-page">
                         <div class="print-header-group" style="position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
+                            
                             <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 2px solid #000; padding: 4px 10px; background: #fff;">
                                 ${data.stream}
                             </div>
+                            
                             <h1>${currentCollegeName}</h1>
                             ${examNameHtml} <h2>Statement of Answer Scripts</h2>
                             <h3>${date} &nbsp;|&nbsp; ${time}</h3>
