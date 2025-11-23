@@ -9511,7 +9511,79 @@ if (triggerFullRestore) {
 }
     
 // --- Run on initial page load ---
-loadInitialData();
+// --- V65: Initial Data Load on Startup (With Funny Loader) ---
+function loadInitialData() {
+    // 1. Funny Message Logic
+    const messages = [
+        "Summoning the Exam Spirits... 👻",
+        "Convincing the server to cooperate... 🤖",
+        "Counting the students... (again) 🧐",
+        "Finding the missing QP Codes... 🔍",
+        "Waking up the Chief Superintendent... ☕",
+        "Aligning the planets for seating... 🪐",
+        "Loading faster than campus Wi-Fi... 🚀"
+    ];
+    
+    const msgElement = document.getElementById('loader-message');
+    let msgIndex = 0;
+    
+    // Cycle messages every 800ms
+    const msgInterval = setInterval(() => {
+        if(msgElement) {
+            msgIndex = (msgIndex + 1) % messages.length;
+            msgElement.textContent = messages[msgIndex];
+        }
+    }, 800);
+
+    // 2. Load configurations
+    loadRoomConfig(); 
+    loadStreamConfig(); 
+    initCalendar();
+
+    // 3. Check for base student data persistence
+    const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
+    if (savedDataJson) {
+        try {
+            const savedData = JSON.parse(savedDataJson);
+            if (savedData && savedData.length > 0) {
+                jsonDataStore.innerHTML = JSON.stringify(savedData);
+                
+                // Enable UI
+                disable_absentee_tab(false);
+                disable_qpcode_tab(false);
+                disable_room_allotment_tab(false);
+                disable_scribe_settings_tab(false);
+                disable_edit_data_tab(false);
+                disable_all_report_buttons(false); 
+                
+                populate_session_dropdown();
+                populate_qp_code_session_dropdown();
+                populate_room_allotment_session_dropdown();
+                loadGlobalScribeList();
+                updateDashboard();
+                renderExamNameSettings();
+
+                console.log(`Successfully loaded ${savedData.length} records.`);
+                document.getElementById("status-log").innerHTML = `<p class="mb-1 text-green-700">&gt; Data loaded from memory.</p>`;
+            }
+        } catch(e) {
+            console.error("Failed to load saved data", e);
+        }
+    }
+
+    // 4. DISMISS LOADER (Smooth Fade Out)
+    setTimeout(() => {
+        clearInterval(msgInterval); // Stop cycling messages
+        const loader = document.getElementById('initial-app-loader');
+        if (loader) {
+            loader.style.opacity = '0'; // Fade out
+            setTimeout(() => {
+                loader.remove(); // Remove from DOM
+            }, 500); // Wait for fade transition
+        }
+    }, 1500); // Keep visible for at least 1.5s so users see the cool animation
+}
+
     // --- NEW: Restore Last Active Tab ---
     function restoreActiveTab() {
         const savedViewId = localStorage.getItem('lastActiveViewId');
