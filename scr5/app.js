@@ -381,9 +381,15 @@ async function createNewCollege(user) {
     // Prepare initial data from local storage
     const initialData = {};
     const keysToSync = [
-        'examRoomConfig', 'examCollegeName', 'examAbsenteeList', 
-        'examQPCodes', 'examBaseData', 'examRoomAllotment', 
-        'examScribeList', 'examScribeAllotment'
+        'examRoomConfig', 
+        'examCollegeName', 
+        'examAbsenteeList', 
+        'examQPCodes', 
+        'examBaseData', 
+        'examRoomAllotment', 
+        'examScribeList', 
+        'examScribeAllotment',
+        'examRulesConfig' // <--- ADD THIS LINE
     ];
     keysToSync.forEach(key => {
         const val = localStorage.getItem(key);
@@ -591,7 +597,8 @@ async function syncDataToCloud() {
             'examScribeList', 
             'examScribeAllotment', 
             'examAbsenteeList',
-            'examSessionNames'
+            'examSessionNames',
+            'examRulesConfig' // <--- ADD THIS LINE (To save to Cloud)
         ];
 
         const finalMainData = { lastUpdated: timestamp };
@@ -743,6 +750,7 @@ const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
 // *** NEW SCRIBE KEYS ***
 const SCRIBE_LIST_KEY = 'examScribeList';
 const SCRIBE_ALLOTMENT_KEY = 'examScribeAllotment';
+const EXAM_RULES_KEY = 'examRulesConfig'; // <--- Ensure this is defined
 // ***********************
 // *** NEW: All keys for backup/restore ***
 const ALL_DATA_KEYS = [
@@ -754,7 +762,8 @@ const ALL_DATA_KEYS = [
     BASE_DATA_KEY,
     ROOM_ALLOTMENT_KEY,
     SCRIBE_LIST_KEY,
-    SCRIBE_ALLOTMENT_KEY
+    SCRIBE_ALLOTMENT_KEY,
+    EXAM_RULES_KEY // <--- ADD THIS LINE (To include in Backup/Restore)
 ];
 // **********************************
 // --- Global var to hold data from the last *report run* ---
