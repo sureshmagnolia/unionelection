@@ -738,6 +738,10 @@ const ABSENTEE_LIST_KEY = 'examAbsenteeList';
 const QP_CODE_LIST_KEY = 'examQPCodes';
 const BASE_DATA_KEY = 'examBaseData';
 const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
+
+const EXAM_RULES_KEY = 'examRulesConfig'; // <--- NEW KEY
+let currentExamRules = []; // Global variable for rules    
+
 // *** NEW SCRIBE KEYS ***
 const SCRIBE_LIST_KEY = 'examScribeList';
 const SCRIBE_ALLOTMENT_KEY = 'examScribeAllotment';
@@ -998,269 +1002,254 @@ if (toggleButton && sidebar) {
 const EXAM_NAMES_KEY = 'examSessionNames';
 let currentExamNames = {}; 
 
-// Helper to get Exam Name (Date-Specific)
-function getExamName(date, time, stream) {
-    // Key is unique per session: "DD.MM.YYYY|HH:MM AM|Stream"
-    const key = `${date}|${time}|${stream}`;
-    return currentExamNames[key] || "";
+// ==========================================
+// 🗓️ EXAM SCHEDULER (DATABASE MODE)
+// ==========================================
+
+// 1. NEW GLOBAL VARIABLES (Add these if missing at top, or keep here)
+const EXAM_RULES_KEY = 'examRulesConfig'; 
+let currentExamRules = []; 
+
+// Helper to determine if a time string is FN or AN
+function getSessionType(timeStr) {
+    if (!timeStr) return "FN"; // Default
+    const t = timeStr.toUpperCase();
+    // Logic: If PM or 12:xx, it's AN. Else FN.
+    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) return "AN";
+    return "FN";
 }
 
-// Helper to render the settings grid (Optimized: Bulk Auto-Name Tool)
+// Helper to convert Date+Session to a comparable number
+// Returns timestamp + 0 (FN) or + 43200000 (AN - 12 hours)
+function getSessionValue(dateStr, sessionType) {
+    // dateStr format: "YYYY-MM-DD" (from input) OR "DD.MM.YYYY" (from csv)
+    let d;
+    if (dateStr.includes('-')) {
+        d = new Date(dateStr); // YYYY-MM-DD
+    } else {
+        const [dd, mm, yyyy] = dateStr.split('.');
+        d = new Date(`${yyyy}-${mm}-${dd}`); // Convert to ISO
+    }
+    // Set to noon to avoid timezone edge cases
+    d.setHours(12, 0, 0, 0); 
+    
+    let val = d.getTime();
+    // If AN, add 1 "tick" (we just need it to be > FN)
+    if (sessionType === "AN") val += 1; 
+    return val;
+}
+
+// --- CORE: Get Exam Name by checking Rules Database ---
+function getExamName(date, time, stream) {
+    // 1. Load Rules if empty (Safety)
+    if (!currentExamRules || currentExamRules.length === 0) {
+        const saved = localStorage.getItem(EXAM_RULES_KEY);
+        if (saved) currentExamRules = JSON.parse(saved);
+    }
+
+    if (currentExamRules.length === 0) return "";
+
+    // 2. Calculate Value for Current Student Record
+    const currentSession = getSessionType(time);
+    const currentValue = getSessionValue(date, currentSession);
+    const currentStream = stream || "Regular";
+
+    // 3. Find Matching Rule
+    // We iterate in reverse to let newer rules (added last) take priority if overlaps exist
+    for (let i = currentExamRules.length - 1; i >= 0; i--) {
+        const rule = currentExamRules[i];
+        
+        // Stream Check
+        if (rule.stream !== "All Streams" && rule.stream !== currentStream) continue;
+
+        // Date/Session Range Check
+        const startVal = getSessionValue(rule.startDate, rule.startSession);
+        const endVal = getSessionValue(rule.endDate, rule.endSession);
+
+        if (currentValue >= startVal && currentValue <= endVal) {
+            return rule.examName;
+        }
+    }
+
+    return ""; // No match found
+}
+
+// --- UI: Render the Scheduler Interface ---
 function renderExamNameSettings() {
     const container = document.getElementById('exam-names-grid');
     const section = document.getElementById('exam-names-section');
+    
+    // Load Rules
+    const saved = localStorage.getItem(EXAM_RULES_KEY);
+    currentExamRules = saved ? JSON.parse(saved) : [];
+
     if (!container || !section) return;
 
-    if (!allStudentData || allStudentData.length === 0) {
-        section.classList.add('hidden');
-        return;
-    }
-
+    // Always show section now
     section.classList.remove('hidden');
     container.innerHTML = '';
 
-    // --- 1. BULK AUTO-NAME TOOL (New) ---
-    // This tool allows users to set names for a range of dates (Time Table style)
-    const bulkToolHtml = `
-        <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-200 mb-6 shadow-sm">
-            <h4 class="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
-                Bulk Auto-Name (Time Table Mode)
-            </h4>
-            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                <div class="md:col-span-2">
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">From Date</label>
-                    <input type="date" id="bulk-exam-start" class="block w-full p-1.5 border border-gray-300 rounded text-sm focus:border-indigo-500 cursor-pointer" onclick="this.showPicker()">
+    // --- 1. ADD NEW ENTRY FORM ---
+    // Ensure currentStreamConfig is loaded, default to Regular if missing
+    const streams = (typeof currentStreamConfig !== 'undefined') ? currentStreamConfig : ["Regular"];
+    const streamOptions = streams.map(s => `<option value="${s}">${s}</option>`).join('');
+    
+    const formHtml = `
+        <div class="bg-white p-5 rounded-lg border border-gray-200 shadow-sm mb-6">
+            <h3 class="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-indigo-600"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                Schedule New Exam
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                <div class="md:col-span-4">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Exam Name</label>
+                    <input type="text" id="rule-name" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="e.g. 5th Semester B.Sc">
                 </div>
+
                 <div class="md:col-span-2">
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">To Date</label>
-                    <input type="date" id="bulk-exam-end" class="block w-full p-1.5 border border-gray-300 rounded text-sm focus:border-indigo-500 cursor-pointer" onclick="this.showPicker()">
-                </div>
-                <div class="md:col-span-2">
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Session</label>
-                    <select id="bulk-exam-session" class="block w-full p-1.5 border border-gray-300 rounded text-sm focus:border-indigo-500">
-                        <option value="FN">Forenoon (FN)</option>
-                        <option value="AN">Afternoon (AN)</option>
-                        <option value="BOTH">Both Sessions</option>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Stream</label>
+                    <select id="rule-stream" class="block w-full p-2 border border-gray-300 rounded text-sm bg-white">
+                        <option value="All Streams">All Streams</option>
+                        ${streamOptions}
                     </select>
                 </div>
-                <div class="md:col-span-2">
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Stream</label>
-                    <select id="bulk-exam-stream" class="block w-full p-1.5 border border-gray-300 rounded text-sm focus:border-indigo-500">
+
+                <div class="md:col-span-3 bg-gray-50 p-2 rounded border border-gray-200">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">From</label>
+                    <div class="flex gap-1">
+                        <input type="date" id="rule-start-date" class="w-full p-1.5 border border-gray-300 rounded text-xs cursor-pointer" onclick="this.showPicker()">
+                        <select id="rule-start-session" class="w-16 p-1.5 border border-gray-300 rounded text-xs">
+                            <option value="FN">FN</option>
+                            <option value="AN">AN</option>
                         </select>
+                    </div>
                 </div>
-                <div class="md:col-span-3">
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Exam Name</label>
-                    <input type="text" id="bulk-exam-name" class="block w-full p-1.5 border border-gray-300 rounded text-sm focus:border-indigo-500" placeholder="e.g. 5th Sem B.Sc">
+
+                <div class="md:col-span-3 bg-gray-50 p-2 rounded border border-gray-200">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">To</label>
+                    <div class="flex gap-1">
+                        <input type="date" id="rule-end-date" class="w-full p-1.5 border border-gray-300 rounded text-xs cursor-pointer" onclick="this.showPicker()">
+                        <select id="rule-end-session" class="w-16 p-1.5 border border-gray-300 rounded text-xs">
+                            <option value="AN" selected>AN</option>
+                            <option value="FN">FN</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="md:col-span-1">
-                    <button id="bulk-exam-apply-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-1.5 rounded text-sm font-medium transition shadow-sm">Apply</button>
+
+                <div class="md:col-span-12 flex justify-end mt-2">
+                    <button id="add-rule-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded text-sm font-medium shadow-sm transition">
+                        + Add to Schedule
+                    </button>
                 </div>
             </div>
-            <p class="text-[10px] text-indigo-500 mt-2 italic">* This will apply the name to all matching exams within the date range.</p>
-        </div>
-        
-        <div id="exam-names-toggle-container" class="mb-4 flex items-center justify-end">
-            <label class="inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="show-past-exams-toggle" class="sr-only peer">
-                <div class="relative w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                <span class="ms-2 text-sm font-medium text-gray-600">Show Past Exams</span>
-            </label>
         </div>
     `;
-    
-    // Insert tool *before* the grid container (handled by parent structure usually, 
-    // but here we inject into container for simplicity, or we can prepend)
-    // Let's clear container and just append elements.
-    // Ideally, we want the tool to stay at the top.
-    const toolWrapper = document.createElement('div');
-    toolWrapper.innerHTML = bulkToolHtml;
-    container.appendChild(toolWrapper);
 
-    // --- 2. POPULATE & LOGIC FOR BULK TOOL ---
-    const bulkStreamSelect = document.getElementById('bulk-exam-stream');
-    if (currentStreamConfig) {
-        bulkStreamSelect.innerHTML = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
-    }
-    
-    // Handle "Apply" Click
-    document.getElementById('bulk-exam-apply-btn').addEventListener('click', () => {
-        const startVal = document.getElementById('bulk-exam-start').value;
-        const endVal = document.getElementById('bulk-exam-end').value;
-        const targetSession = document.getElementById('bulk-exam-session').value;
-        const targetStream = document.getElementById('bulk-exam-stream').value;
-        const newName = document.getElementById('bulk-exam-name').value.trim();
-
-        if (!startVal || !endVal || !newName) {
-            alert("Please select Start Date, End Date, and enter an Exam Name.");
-            return;
-        }
-
-        const startDate = new Date(startVal); startDate.setHours(0,0,0,0);
-        const endDate = new Date(endVal); endDate.setHours(0,0,0,0);
-
-        if (startDate > endDate) { alert("Start Date cannot be after End Date."); return; }
-
-        let updateCount = 0;
-        const uniqueSessions = new Set(); // To refresh list
-        
-        // Find all matching keys in current data
-        allStudentData.forEach(s => {
-            const sDateStr = s.Date; // DD.MM.YYYY
-            const [dd, mm, yyyy] = sDateStr.split('.');
-            const sDateObj = new Date(yyyy, mm - 1, dd);
-            
-            // Date Range Check
-            if (sDateObj >= startDate && sDateObj <= endDate) {
-                // Stream Check
-                const sStream = s.Stream || "Regular";
-                if (sStream === targetStream) {
-                    // Session Check
-                    const tUpper = s.Time.toUpperCase();
-                    const isAN = tUpper.includes("PM") || tUpper.startsWith("12");
-                    const sSession = isAN ? "AN" : "FN";
-
-                    if (targetSession === "BOTH" || targetSession === sSession) {
-                        // MATCH FOUND! Update key.
-                        const key = `${s.Date}|${s.Time}|${sStream}`;
-                        if (currentExamNames[key] !== newName) {
-                            currentExamNames[key] = newName;
-                            updateCount++;
-                        }
-                    }
-                }
-            }
-            // Also collect for rendering list below
-            uniqueSessions.add(`${s.Date}|${s.Time}|${s.Stream || "Regular"}`);
+    // --- 2. LIST EXISTING RULES (Database View) ---
+    let listHtml = '';
+    if (currentExamRules.length > 0) {
+        // Sort by Start Date
+        const sortedRules = [...currentExamRules].sort((a, b) => {
+            return new Date(a.startDate) - new Date(b.startDate);
         });
 
-        if (updateCount > 0) {
-            localStorage.setItem(EXAM_NAMES_KEY, JSON.stringify(currentExamNames));
-            alert(`Successfully named ${updateCount} exam sessions as "${newName}"!`);
-            renderExamNameSettings(); // Re-render to show changes
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
-        } else {
-            alert("No matching exam sessions found in this date range.");
-        }
-    });
-    
-    // Handle Toggle Click
-    const toggle = document.getElementById('show-past-exams-toggle');
-    toggle.addEventListener('change', renderExamNameSettings);
-    // Restore state from previous render (if any) by checking DOM, or let it reset to unchecked
-    
-    // --- 3. RENDER INDIVIDUAL LIST ITEMS (Existing Optimized Logic) ---
-    const showPast = toggle.checked;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); 
+        let rows = '';
+        sortedRules.forEach((rule, idx) => {
+            // Format Dates for display (YYYY-MM-DD -> DD/MM)
+            const fmt = (d) => d.split('-').reverse().slice(0, 2).join('/');
+            
+            rows += `
+                <tr class="hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                    <td class="px-4 py-3 text-sm font-bold text-gray-800">${rule.examName}</td>
+                    <td class="px-4 py-3 text-xs text-gray-600">
+                        <span class="bg-gray-100 px-2 py-1 rounded border border-gray-200">${rule.stream}</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        ${fmt(rule.startDate)} <span class="text-xs font-bold text-orange-600">${rule.startSession}</span>
+                        <span class="text-gray-400 mx-2">➝</span>
+                        ${fmt(rule.endDate)} <span class="text-xs font-bold text-indigo-600">${rule.endSession}</span>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        <button class="text-red-500 hover:text-red-700 p-1" onclick="deleteExamRule('${rule.id}')" title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
 
-    // Collect Unique Sessions (Re-run to ensure fresh data)
-    const uniqueSessionSet = new Set();
-    allStudentData.forEach(s => {
-        uniqueSessionSet.add(`${s.Date}|${s.Time}|${s.Stream || "Regular"}`);
-    });
-
-    const sortedSessions = Array.from(uniqueSessionSet).map(key => {
-        const [date, time, stream] = key.split('|');
-        const [d, m, y] = date.split('.');
-        const dateObj = new Date(y, m - 1, d);
-        return { date, time, stream, key, dateObj };
-    }).sort((a, b) => {
-        if (a.dateObj - b.dateObj !== 0) return a.dateObj - b.dateObj;
-        const timeA = a.time.includes("AM") ? 0 : 1;
-        const timeB = b.time.includes("AM") ? 0 : 1;
-        if (timeA !== timeB) return timeA - timeB;
-        return a.stream.localeCompare(b.stream);
-    });
-
-    // Generate Rows
-    let visibleCount = 0;
-    const listContainer = document.createElement('div');
-    listContainer.className = "bg-white border border-gray-200 rounded-lg shadow-sm";
-
-    sortedSessions.forEach(item => {
-        const { date, time, stream, key, dateObj } = item;
-        
-        if (!showPast && dateObj < today) return;
-
-        visibleCount++;
-        const savedName = currentExamNames[key] || "";
-        
-        const isAN = time.toUpperCase().includes("PM") || time.startsWith("12");
-        const sessionBadge = isAN 
-            ? `<span class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 rounded">AN</span>`
-            : `<span class="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-100 px-1.5 rounded">FN</span>`;
-
-        const row = document.createElement('div');
-        row.className = "flex items-center gap-3 p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors last:border-0";
-        
-        const isLocked = savedName.length > 0;
-        const btnIcon = isLocked 
-            ? `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>` 
-            : `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>`;
-        const btnClass = isLocked ? "text-gray-400 hover:text-blue-600" : "text-green-600 hover:text-green-800";
-
-        row.innerHTML = `
-            <div class="w-24 shrink-0 text-sm text-gray-700 font-medium flex flex-col">
-                <span>${date}</span>
-                <span class="text-xs text-gray-400 font-normal">${time}</span>
-            </div>
-            <div class="w-20 shrink-0 flex flex-col items-start gap-1">
-                ${sessionBadge}
-                <span class="text-[9px] uppercase font-bold text-gray-500 tracking-wider bg-gray-100 px-1 rounded">${stream}</span>
-            </div>
-            <div class="flex-grow flex gap-2 items-center">
-                <input type="text" 
-                       class="exam-name-input block w-full p-1.5 border rounded text-sm transition-all ${isLocked ? 'bg-gray-50 text-gray-500 border-transparent' : 'bg-white text-gray-900 border-blue-300 ring-1 ring-blue-100'}" 
-                       value="${savedName}" 
-                       placeholder="Name..." 
-                       maxlength="49" 
-                       ${isLocked ? 'disabled' : ''}>
-                
-                <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition ${btnClass}" title="${isLocked ? 'Edit' : 'Save'}">
-                    ${btnIcon}
-                </button>
+        listHtml = `
+            <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                            <th class="px-4 py-2 text-xs font-bold text-gray-500 uppercase">Exam Name</th>
+                            <th class="px-4 py-2 text-xs font-bold text-gray-500 uppercase">Stream</th>
+                            <th class="px-4 py-2 text-xs font-bold text-gray-500 uppercase">Schedule Range</th>
+                            <th class="px-4 py-2 text-xs font-bold text-gray-500 uppercase text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
             </div>
         `;
+    } else {
+        listHtml = `<div class="text-center text-gray-400 italic py-4 bg-white border border-dashed border-gray-300 rounded-lg">No exams scheduled yet. Add one above.</div>`;
+    }
 
-        // Event Listener (Individual Row)
-        const input = row.querySelector('input');
-        const btn = row.querySelector('button');
+    container.innerHTML = formHtml + listHtml;
 
-        btn.onclick = () => {
-            if (input.disabled) {
-                // UNLOCK
-                input.disabled = false;
-                input.classList.remove('bg-gray-50', 'text-gray-500', 'border-transparent');
-                input.classList.add('bg-white', 'text-gray-900', 'border-blue-300', 'ring-1', 'ring-blue-100');
-                input.focus();
-                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>`;
-                btn.className = "w-8 h-8 flex items-center justify-center rounded-full hover:bg-green-50 transition text-green-600";
-            } else {
-                // LOCK & SAVE
-                const val = input.value.trim();
-                currentExamNames[key] = val;
-                localStorage.setItem(EXAM_NAMES_KEY, JSON.stringify(currentExamNames));
-                
-                input.disabled = true;
-                input.classList.add('bg-gray-50', 'text-gray-500', 'border-transparent');
-                input.classList.remove('bg-white', 'text-gray-900', 'border-blue-300', 'ring-1', 'ring-blue-100');
-                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>`;
-                btn.className = "w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-400 hover:text-blue-600";
-                
-                if (typeof syncDataToCloud === 'function') syncDataToCloud();
+    // --- ATTACH LISTENER TO ADD BUTTON ---
+    const addBtn = document.getElementById('add-rule-btn');
+    if(addBtn) {
+        addBtn.addEventListener('click', () => {
+            const name = document.getElementById('rule-name').value.trim();
+            const stream = document.getElementById('rule-stream').value;
+            const sDate = document.getElementById('rule-start-date').value;
+            const sSess = document.getElementById('rule-start-session').value;
+            const eDate = document.getElementById('rule-end-date').value;
+            const eSess = document.getElementById('rule-end-session').value;
+
+            if (!name || !sDate || !eDate) {
+                alert("Please fill in Name, Start Date, and End Date.");
+                return;
             }
-        };
 
-        listContainer.appendChild(row);
-    });
+            if (new Date(sDate) > new Date(eDate)) {
+                alert("Start Date cannot be after End Date.");
+                return;
+            }
 
-    container.appendChild(listContainer);
+            // Create Rule Object
+            const newRule = {
+                id: Date.now().toString(), // Simple Unique ID
+                examName: name,
+                stream: stream,
+                startDate: sDate,
+                startSession: sSess,
+                endDate: eDate,
+                endSession: eSess
+            };
 
-    if (visibleCount === 0) {
-        container.innerHTML += `<p class="text-center text-gray-400 italic py-4">No upcoming exams found. <br>Toggle "Show Past Exams" to see history.</p>`;
+            currentExamRules.push(newRule);
+            localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
+            
+            renderExamNameSettings(); // Refresh UI
+            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+        });
     }
 }
+
+// Global Delete Function for Rules
+window.deleteExamRule = function(id) {
+    if(confirm("Remove this exam schedule?")) {
+        currentExamRules = currentExamRules.filter(r => r.id !== id);
+        localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
+        renderExamNameSettings();
+        if (typeof syncDataToCloud === 'function') syncDataToCloud();
+    }
+};
     
 // *** NEW: Universal Base64 key generator ***
 function getBase64CourseKey(courseName) {
