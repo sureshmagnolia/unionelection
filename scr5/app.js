@@ -10072,14 +10072,20 @@ if (triggerFullRestore) {
 }
     
 // --- V65: Initial Data Load on Startup (Clean Version) ---
+
+// --- V65: Initial Data Load on Startup (Clean Version) ---
 function loadInitialData() {
     try {
         console.log("Loading Local Data...");
 
-        // 1. Load configurations
+        // 1. Load configurations (ALWAYS RUN THESE)
         if (typeof loadRoomConfig === 'function') loadRoomConfig(); 
         if (typeof loadStreamConfig === 'function') loadStreamConfig(); 
         if (typeof initCalendar === 'function') initCalendar();
+        
+        // *** MOVED HERE: Always render Exam Settings, even if no student data exists ***
+        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+        // ******************************************************************************
 
         // 2. Check for base student data persistence
         const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
@@ -10102,7 +10108,8 @@ function loadInitialData() {
                     if(typeof populate_room_allotment_session_dropdown === 'function') populate_room_allotment_session_dropdown();
                     if(typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
                     if(typeof updateDashboard === 'function') updateDashboard();
-                    if(typeof renderExamNameSettings === 'function') renderExamNameSettings();
+                    
+                    // NOTE: renderExamNameSettings was removed from here because it's now in Step 1
 
                     console.log(`Successfully loaded ${savedData.length} records.`);
                     const statusLog = document.getElementById("status-log");
@@ -10114,13 +10121,9 @@ function loadInitialData() {
         }
     } catch (criticalError) {
         console.error("CRITICAL APP STARTUP ERROR:", criticalError);
-        // Even on error, we try to finalize so the user isn't stuck
         if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
     }
-    // NOTE: We DO NOT dismiss the loader here anymore. 
-    // 'finalizeAppLoad' will be called by the Cloud Sync logic or Auth logic when ready.
 }
-
 
     // --- NEW: Restore Last Active Tab ---
     function restoreActiveTab() {
