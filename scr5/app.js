@@ -1491,7 +1491,7 @@ function initCalendar() {
     }
 }
 
-// --- Calendar Render Logic (V5: Big Circles + Fixed Tooltip Colors) ---
+// --- Calendar Render Logic (Optimized: Slices for FN/AN) ---
 function renderCalendar() {
     const grid = document.getElementById('calendar-days-grid');
     const title = document.getElementById('cal-month-display');
@@ -1554,36 +1554,74 @@ function renderCalendar() {
         // Base Cell Style
         const baseClass = "min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col items-center justify-center relative hover:bg-blue-50 transition group";
         
-        // Today's Circle Style
-        const todayClass = isToday 
-            ? "bg-blue-600 text-white shadow-md" 
-            : "";
-
-        let circleClass = "bg-transparent text-gray-700";
-        let badgesHtml = "";
+        // Default Circle Style (Gray Text, Transparent)
+        let circleClass = "w-20 h-20 text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-gray-700 bg-transparent border border-transparent overflow-hidden";
+        let circleStyle = "";
+        let innerContent = `<span class="z-10">${day}</span>`;
         let tooltipHtml = "";
-        
-        // Exam Day Circle Style (Light Red)
-        const activeColor = "bg-red-100 text-red-900 border border-red-200"; 
+
+        if (isToday) {
+            circleClass = "w-20 h-20 text-3xl rounded-full flex flex-col items-center justify-center relative font-bold bg-blue-600 text-white shadow-md overflow-hidden";
+        }
 
         if (data) {
             const hasFN = data.am.students > 0;
             const hasAN = data.pm.students > 0;
             
             if (hasFN || hasAN) {
-                circleClass = activeColor;
+                // Base Active Color (Light Red)
+                circleClass = "w-20 h-20 text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-red-900 border border-red-200 overflow-hidden shadow-sm";
+                
+                // Gradient Colors
+                const cLight = "#fee2e2"; // bg-red-100
+                const cDark = "#fca5a5";  // bg-red-300 (Darker slice)
+
+                // Slice Logic
+                if (hasFN && hasAN) {
+                    // Both: Top Dark, Middle Light, Bottom Dark
+                    circleStyle = `background: linear-gradient(to bottom, ${cDark} 0%, ${cDark} 35%, ${cLight} 35%, ${cLight} 65%, ${cDark} 65%, ${cDark} 100%);`;
+                    innerContent = `
+                        <span class="absolute top-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">FN</span>
+                        <span class="z-10">${day}</span>
+                        <span class="absolute bottom-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">AN</span>
+                    `;
+                } else if (hasFN) {
+                    // FN Only: Top Dark, Rest Light
+                    circleStyle = `background: linear-gradient(to bottom, ${cDark} 0%, ${cDark} 35%, ${cLight} 35%, ${cLight} 100%);`;
+                    innerContent = `
+                        <span class="absolute top-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">FN</span>
+                        <span class="z-10 mt-1">${day}</span>
+                    `;
+                } else if (hasAN) {
+                    // AN Only: Bottom Dark, Rest Light
+                    circleStyle = `background: linear-gradient(to bottom, ${cLight} 0%, ${cLight} 65%, ${cDark} 65%, ${cDark} 100%);`;
+                    innerContent = `
+                        <span class="z-10 mb-1">${day}</span>
+                        <span class="absolute bottom-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">AN</span>
+                    `;
+                } else {
+                    // Fallback (shouldn't happen if hasFN || hasAN)
+                    circleStyle = `background-color: ${cLight};`;
+                }
+                
+                // Overwrite if Today (Keep today blue, but maybe show small indicator dots? 
+                // User preference usually prioritizes "Today" highlight over Exam highlight, 
+                // but let's keep the Exam Slice logic dominant for layout, just change colors to Blue/DarkBlue if desired.
+                // For now, we adhere to user request: "Dates with Exam is turning Light Red".
+                // If it is TODAY and has EXAM, we usually let the "Today" blue win, or mix them.
+                // Current code lets Blue win fully (in 'isToday' block above).
+                // Let's allow Exam Slices to override Today color but add a blue border to indicate "Today".
+                if (isToday) {
+                     circleClass += " ring-4 ring-blue-400 ring-opacity-50";
+                }
             }
 
-            // FN Badge (Top Right)
+            // Tooltip Generation (Same as before)
             if (hasFN) {
-                badgesHtml += `<span class="absolute -top-1 -right-1 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">FN</span>`;
-                
                 const regHalls = Math.ceil(data.am.regCount / 30);
                 const othHalls = Math.ceil(data.am.othCount / 30);
                 let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
                 if (data.am.scribeCount > 0) details += ` | Scribe: ${Math.ceil(data.am.scribeCount / 5)}`;
-
-                // *** FIX: Updated Text Colors for White Background ***
                 tooltipHtml += `
                     <div class='mb-2 pb-2 border-b border-gray-200'>
                         <strong class='text-red-600 uppercase text-[10px]'>Morning (FN)</strong><br>
@@ -1591,17 +1629,11 @@ function renderCalendar() {
                         <span class='text-gray-500 text-[10px]'>${details}</span>
                     </div>`;
             }
-
-            // AN Badge (Bottom Right)
             if (hasAN) {
-                badgesHtml += `<span class="absolute -bottom-1 -right-1 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">AN</span>`;
-                
                 const regHalls = Math.ceil(data.pm.regCount / 30);
                 const othHalls = Math.ceil(data.pm.othCount / 30);
                 let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
                 if (data.pm.scribeCount > 0) details += ` | Scribe: ${Math.ceil(data.pm.scribeCount / 5)}`;
-
-                // *** FIX: Updated Text Colors for White Background ***
                 tooltipHtml += `
                     <div>
                         <strong class='text-red-600 uppercase text-[10px]'>Afternoon (AN)</strong><br>
@@ -1618,13 +1650,10 @@ function renderCalendar() {
             </div>
         ` : "";
 
-        let finalCircleClass = `w-20 h-20 text-3xl rounded-full flex items-center justify-center relative font-bold ${todayClass || circleClass}`;
-
         html += `
             <div class="${baseClass}">
-                <div class="${finalCircleClass}">
-                    ${day}
-                    ${badgesHtml}
+                <div class="${circleClass}" style="${circleStyle}">
+                    ${innerContent}
                 </div>
                 ${tooltip}
             </div>
