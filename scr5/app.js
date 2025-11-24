@@ -738,9 +738,7 @@ const ABSENTEE_LIST_KEY = 'examAbsenteeList';
 const QP_CODE_LIST_KEY = 'examQPCodes';
 const BASE_DATA_KEY = 'examBaseData';
 const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
-
-const EXAM_RULES_KEY = 'examRulesConfig'; // <--- NEW KEY
-let currentExamRules = []; // Global variable for rules    
+ 
 
 // *** NEW SCRIBE KEYS ***
 const SCRIBE_LIST_KEY = 'examScribeList';
