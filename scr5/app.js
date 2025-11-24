@@ -229,7 +229,41 @@ window.finalizeAppLoad = function() {
         setTimeout(() => { loader.remove(); }, 500); 
     }
 };
+
 // ------------------------------------
+
+// --- Global localStorage Key ---
+const STREAM_CONFIG_KEY = 'examStreamsConfig'; // <-- Add this definition
+const ROOM_CONFIG_KEY = 'examRoomConfig';
+const COLLEGE_NAME_KEY = 'examCollegeName';
+const ABSENTEE_LIST_KEY = 'examAbsenteeList';
+const QP_CODE_LIST_KEY = 'examQPCodes';
+const BASE_DATA_KEY = 'examBaseData';
+const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
+ 
+// *** MOVED HERE TO FIX ERROR ***
+const EXAM_RULES_KEY = 'examRulesConfig'; 
+let currentExamRules = []; 
+// ******************************
+    
+// *** NEW SCRIBE KEYS ***
+const SCRIBE_LIST_KEY = 'examScribeList';
+const SCRIBE_ALLOTMENT_KEY = 'examScribeAllotment';
+// ***********************
+// *** NEW: All keys for backup/restore ***
+const ALL_DATA_KEYS = [
+    ROOM_CONFIG_KEY,
+    STREAM_CONFIG_KEY, // <-- Add this
+    COLLEGE_NAME_KEY,
+    ABSENTEE_LIST_KEY,
+    QP_CODE_LIST_KEY,
+    BASE_DATA_KEY,
+    ROOM_ALLOTMENT_KEY,
+    SCRIBE_LIST_KEY,
+    SCRIBE_ALLOTMENT_KEY,
+    EXAM_RULES_KEY // <--- ADD THIS LINE (To include in Backup/Restore)
+];
+// **********************************
     
 // --- Debounce Helper Function ---
 function debounce(func, delay) {
@@ -740,38 +774,7 @@ function updateSyncStatus(status, type) {
     syncStatusDisplay.textContent = status;
     syncStatusDisplay.className = type === 'success' ? 'text-xs text-green-400' : (type === 'error' ? 'text-xs text-red-400' : 'text-xs text-yellow-400');
 }
-// --- Global localStorage Key ---
-const STREAM_CONFIG_KEY = 'examStreamsConfig'; // <-- Add this definition
-const ROOM_CONFIG_KEY = 'examRoomConfig';
-const COLLEGE_NAME_KEY = 'examCollegeName';
-const ABSENTEE_LIST_KEY = 'examAbsenteeList';
-const QP_CODE_LIST_KEY = 'examQPCodes';
-const BASE_DATA_KEY = 'examBaseData';
-const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
- 
-// *** MOVED HERE TO FIX ERROR ***
-const EXAM_RULES_KEY = 'examRulesConfig'; 
-let currentExamRules = []; 
-// ******************************
-    
-// *** NEW SCRIBE KEYS ***
-const SCRIBE_LIST_KEY = 'examScribeList';
-const SCRIBE_ALLOTMENT_KEY = 'examScribeAllotment';
-// ***********************
-// *** NEW: All keys for backup/restore ***
-const ALL_DATA_KEYS = [
-    ROOM_CONFIG_KEY,
-    STREAM_CONFIG_KEY, // <-- Add this
-    COLLEGE_NAME_KEY,
-    ABSENTEE_LIST_KEY,
-    QP_CODE_LIST_KEY,
-    BASE_DATA_KEY,
-    ROOM_ALLOTMENT_KEY,
-    SCRIBE_LIST_KEY,
-    SCRIBE_ALLOTMENT_KEY,
-    EXAM_RULES_KEY // <--- ADD THIS LINE (To include in Backup/Restore)
-];
-// **********************************
+
 // --- Global var to hold data from the last *report run* ---
 let lastGeneratedRoomData = [];
 let lastGeneratedReportType = "";
