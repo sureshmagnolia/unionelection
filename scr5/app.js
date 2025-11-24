@@ -329,7 +329,9 @@ const closeAdminModal = document.getElementById('close-admin-modal');
 const newUserEmailInput = document.getElementById('new-user-email');
 const addUserBtn = document.getElementById('add-user-btn');
 const userListContainer = document.getElementById('user-list');
-// *** MOVED HERE TO FIX ERROR ***
+const absenteeQpFilter = document.getElementById('absentee-qp-filter');
+    
+    // *** MOVED HERE TO FIX ERROR ***
 const SUPER_ADMIN_EMAIL = "sureshmagnolia@gmail.com"; 
 // ******************************
 
@@ -4779,11 +4781,13 @@ if (generateAbsenteeReportButton) {
             let totalPages = 0;
             
             const sortedKeys = Object.keys(qpStreamGroups).sort();
-            
+            const selectedFilterQP = absenteeQpFilter ? absenteeQpFilter.value : "all";
             for (const key of sortedKeys) {
                 totalPages++;
                 const data = qpStreamGroups[key];
-                
+                if (selectedFilterQP !== "all" && data.qpCode !== selectedFilterQP) {
+        continue;
+    }
                 const examName = getExamName(date, time, data.stream);
                 const examNameHtml = examName ? `<div style="font-size:14pt; font-weight:bold; margin-top:5px; text-transform:uppercase;">${examName}</div>` : "";
 
@@ -5938,6 +5942,46 @@ function loadAbsenteeList(sessionKey) {
     renderAbsenteeList();
 }
 
+// --- NEW: Populate QP Filter Dropdown for Absentee Tab ---
+function populateAbsenteeQpFilter(sessionKey) {
+    if (!absenteeQpFilter) return;
+    
+    absenteeQpFilter.innerHTML = '<option value="all">All QP Codes (Bulk)</option>';
+    
+    if (!sessionKey) {
+        absenteeQpFilter.disabled = true;
+        return;
+    }
+
+    const [date, time] = sessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    loadQPCodes(); // Ensure map is fresh
+    
+    const uniqueQPs = new Set();
+    const sessionQPCodes = qpCodeMap[sessionKey] || {};
+
+    sessionStudents.forEach(student => {
+        const strm = student.Stream || "Regular";
+        const courseKey = getQpKey(student.Course, strm);
+        const code = sessionQPCodes[courseKey];
+        if (code) uniqueQPs.add(code);
+    });
+
+    if (uniqueQPs.size > 0) {
+        const sortedQPs = Array.from(uniqueQPs).sort();
+        sortedQPs.forEach(qp => {
+            const opt = document.createElement('option');
+            opt.value = qp;
+            opt.textContent = qp;
+            absenteeQpFilter.appendChild(opt);
+        });
+        absenteeQpFilter.disabled = false;
+    } else {
+        absenteeQpFilter.innerHTML = '<option value="all">No QP Codes Found</option>';
+        absenteeQpFilter.disabled = true;
+    }
+}
+
 function saveAbsenteeList(sessionKey) {
     const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
     allAbsentees[sessionKey] = currentAbsenteeList;
@@ -6969,6 +7013,7 @@ for (const student of sessionStudentRecords) {
 // Event Listeners for Room Allotment
 allotmentSessionSelect.addEventListener('change', () => {
     const sessionKey = allotmentSessionSelect.value;
+    populateAbsenteeQpFilter(sessionKey);
     if (sessionKey) {
         loadRoomAllotment(sessionKey);
         loadScribeAllotment(sessionKey); // <-- ADDED: Load scribe data at the same time
