@@ -1532,7 +1532,7 @@ function initCalendar() {
     }
 }
 
-// --- Calendar Render Logic (Optimized: Slices + Blue Center for Today) ---
+// --- Calendar Render Logic (Optimized: Slices + Blue Center + Smart Tooltip) ---
 function renderCalendar() {
     const grid = document.getElementById('calendar-days-grid');
     const title = document.getElementById('cal-month-display');
@@ -1592,6 +1592,11 @@ function renderCalendar() {
         const data = monthData[day];
         const isToday = (day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear());
         
+        // --- NEW: Calculate Row Index to flip tooltip ---
+        const cellIndex = firstDayIndex + day - 1;
+        const rowIndex = Math.floor(cellIndex / 7);
+        const isTopRow = rowIndex === 0; // Check if first row
+
         // Base Cell Style
         const baseClass = "min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col items-center justify-center relative hover:bg-blue-50 transition group";
         
@@ -1600,34 +1605,25 @@ function renderCalendar() {
         let circleStyle = "";
         let tooltipHtml = "";
 
-        // --- 1. DATE NUMBER STYLING ---
-        // If Today: Blue Circle with White Text in the Center
-        // If Not Today: Standard Text
+        // 1. DATE NUMBER STYLING
         let dateNumberHtml = `<span class="z-10">${day}</span>`;
-        
         if (isToday) {
             dateNumberHtml = `<span class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 text-white shadow-md z-20 text-2xl">${day}</span>`;
-            // Note: We remove the default blue bg from circleClass below if data exists, 
-            // relying on this inner span for the "Today" indicator.
         }
 
-        // --- 2. CIRCLE BACKGROUND LOGIC ---
+        // 2. CIRCLE BACKGROUND LOGIC
         if (data) {
             const hasFN = data.am.students > 0;
             const hasAN = data.pm.students > 0;
             
             if (hasFN || hasAN) {
-                // Base Active Color (Light Red background for the container)
+                // Base Active Color (Light Red)
                 circleClass = "w-20 h-20 text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-red-900 border border-red-200 overflow-hidden shadow-sm";
-                
-                // Gradient Colors for Slices
-                const cLight = "#fee2e2"; // bg-red-100
-                const cDark = "#fca5a5";  // bg-red-300 (Darker slice)
+                const cLight = "#fee2e2"; 
+                const cDark = "#fca5a5"; 
 
-                // Logic: Slices are background gradients
                 if (hasFN && hasAN) {
                     circleStyle = `background: linear-gradient(to bottom, ${cDark} 0%, ${cDark} 35%, ${cLight} 35%, ${cLight} 65%, ${cDark} 65%, ${cDark} 100%);`;
-                    // Combine Slices + Centered Date Number
                     dateNumberHtml = `
                         <span class="absolute top-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">FN</span>
                         ${dateNumberHtml}
@@ -1676,15 +1672,21 @@ function renderCalendar() {
                     </div>`;
             }
         } else if (isToday) {
-            // Today BUT No Exam: Simple Blue Circle
             circleClass = "w-20 h-20 text-3xl rounded-full flex flex-col items-center justify-center relative font-bold bg-blue-600 text-white shadow-md overflow-hidden";
             dateNumberHtml = `<span class="z-10">${day}</span>`;
         }
 
+        // --- NEW: Smart Tooltip Positioning ---
+        // If Top Row: Tooltip Below (top-full) with Arrow Pointing Up (border-b-white)
+        // Else: Tooltip Above (bottom-full) with Arrow Pointing Down (border-t-white)
+        
+        const posClass = isTopRow ? "top-full mt-2" : "bottom-full mb-2";
+        const arrowClass = isTopRow ? "bottom-full border-b-white" : "top-full border-t-white";
+
         const tooltip = tooltipHtml ? `
-            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-white text-gray-800 text-xs rounded-lg p-2 shadow-xl z-50 hidden group-hover:block pointer-events-none text-center border border-red-200 ring-1 ring-red-100">
+            <div class="absolute ${posClass} left-1/2 transform -translate-x-1/2 w-48 bg-white text-gray-800 text-xs rounded-lg p-2 shadow-xl z-50 hidden group-hover:block pointer-events-none text-center border border-red-200 ring-1 ring-red-100">
                 ${tooltipHtml}
-                <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white"></div>
+                <div class="absolute ${arrowClass} left-1/2 transform -translate-x-1/2 border-4 border-transparent"></div>
             </div>
         ` : "";
 
