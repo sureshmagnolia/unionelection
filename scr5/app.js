@@ -9051,7 +9051,6 @@ function loadStudentData(dataArray) {
     // This prevents the "Option 2" button from being overwritten with total data.
 } 
 
-
 // ==========================================
 // 🐍 PYTHON INTEGRATION (Connects PDF to Merge Logic)
 // ==========================================
@@ -9076,10 +9075,9 @@ window.handlePythonExtraction = function(jsonString) {
             return;
         }
 
-        // --- NEW: Generate Download Button for JUST this extraction ---
+        // --- Generate Download Button for JUST this extraction ---
         const downloadContainer = document.getElementById('csv-download-container');
         if (downloadContainer) {
-            // convertToCSV is your existing helper
             const csvContent = convertToCSV(parsedData); 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -9092,7 +9090,14 @@ window.handlePythonExtraction = function(jsonString) {
                 </a>
             `;
         }
-        // -------------------------------------------------------------
+        
+        // --- CONFIRMATION STEP (New) ---
+        // Allows you to stop here (e.g., just to download CSV) without modifying system data
+        const confirmMsg = `✅ Extraction Complete!\n\nFound ${parsedData.length} records for "${selectedStream}" stream.\n\nClick OK to proceed with merging/loading this data into the system.\nClick Cancel to stop (you can still download the CSV).`;
+        
+        if (!confirm(confirmMsg)) {
+            return;
+        }
 
         // 1. Assign to temp variable
         tempNewData = parsedData;
@@ -9100,7 +9105,6 @@ window.handlePythonExtraction = function(jsonString) {
         // 2. Check against existing data
         if (!allStudentData || allStudentData.length === 0) {
             loadStudentData(tempNewData);
-            alert(`Success! Extracted ${tempNewData.length} records from PDF for stream: ${selectedStream}`);
         } else {
             const existingKeys = new Set(allStudentData.map(getRecordKey));
             
@@ -9135,6 +9139,7 @@ window.handlePythonExtraction = function(jsonString) {
         alert("An error occurred while processing the extracted data.");
     }
 };
+
 
 // ==========================================
     // 🌊 STREAM MANAGEMENT LOGIC (Chunk 1)
