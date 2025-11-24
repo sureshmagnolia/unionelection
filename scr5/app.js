@@ -190,6 +190,47 @@ function finalizeAppLoad() {
 // --- MAIN APP LOGIC ---
 document.addEventListener('DOMContentLoaded', () => {
 
+// --- LOADER ANIMATION LOGIC (New) ---
+const loaderMessages = [
+    "Summoning the Exam Spirits... 👻",
+    "Convincing the server to cooperate... 🤖",
+    "Counting the students... (again) 🧐",
+    "Finding the missing QP Codes... 🔍",
+    "Waking up the Chief Superintendent... ☕",
+    "Aligning the planets for seating... 🪐",
+    "Loading faster than campus Wi-Fi... 🚀"
+];
+
+// Start the cycle immediately and save ID to window
+const loaderMsgElement = document.getElementById('loader-message');
+let loaderMsgIndex = 0;
+
+if (loaderMsgElement) {
+    window.loaderMessageInterval = setInterval(() => {
+        loaderMsgIndex = (loaderMsgIndex + 1) % loaderMessages.length;
+        loaderMsgElement.textContent = loaderMessages[loaderMsgIndex];
+    }, 800); // Change message every 800ms
+}
+
+// Ensure this function exists to stop it later
+window.finalizeAppLoad = function() {
+    // 1. Run UI Updates
+    if (typeof updateDashboard === 'function') updateDashboard(); 
+    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+    if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList(); 
+    if (typeof restoreActiveTab === 'function') restoreActiveTab();
+
+    // 2. Stop Animation & Remove Loader
+    if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
+    
+    const loader = document.getElementById('initial-app-loader');
+    if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => { loader.remove(); }, 500); 
+    }
+};
+// ------------------------------------
+    
 // --- Debounce Helper Function ---
 function debounce(func, delay) {
     let timeout;
@@ -6104,44 +6145,6 @@ filterAllRadio.addEventListener('change', () => {
 
 
 
-// --- V65: Initial Data Load on Startup ---
-function loadInitialData() {
-    // 1. Load configurations
-    loadRoomConfig(); 
-    loadStreamConfig(); // <--- ADD THIS LINE (Fixes the Empty Dropdown)
-    initCalendar();
-    // 2. Check for base student data persistence
-    const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
-    if (savedDataJson) {
-        try {
-            const savedData = JSON.parse(savedDataJson);
-            if (savedData && savedData.length > 0) {
-                // Update Stores
-                jsonDataStore.innerHTML = JSON.stringify(savedData);
-                
-                // Enable UI
-                disable_absentee_tab(false);
-                disable_qpcode_tab(false);
-                disable_room_allotment_tab(false);
-                disable_scribe_settings_tab(false);
-                disable_edit_data_tab(false);
-                disable_all_report_buttons(false); // Enable report buttons
-                
-                populate_session_dropdown();
-                populate_qp_code_session_dropdown();
-                populate_room_allotment_session_dropdown();
-                loadGlobalScribeList();
-                updateDashboard();
-                renderExamNameSettings();
-
-                console.log(`Successfully loaded ${savedData.length} records.`);
-                document.getElementById("status-log").innerHTML = `<p class="mb-1 text-green-700">&gt; Data loaded from memory.</p>`;
-            }
-        } catch(e) {
-            console.error("Failed to load saved data", e);
-        }
-    }
-}
 // --- ROOM ALLOTMENT FUNCTIONALITY ---
 
 // *** FIX: This is the REAL implementation of the function Python calls ***
@@ -9651,39 +9654,17 @@ if (triggerFullRestore) {
     });
 }
     
-// --- V65: Initial Data Load on Startup (Robust Version) ---
+// --- V65: Initial Data Load on Startup (Clean Version) ---
 function loadInitialData() {
-    // 1. Funny Message Logic
-    const messages = [
-        "Summoning the Exam Spirits... 👻",
-        "Convincing the server to cooperate... 🤖",
-        "Counting the students... (again) 🧐",
-        "Finding the missing QP Codes... 🔍",
-        "Waking up the Chief Superintendent... ☕",
-        "Aligning the planets for seating... 🪐",
-        "Loading faster than campus Wi-Fi... 🚀"
-    ];
-    
-    const msgElement = document.getElementById('loader-message');
-    let msgIndex = 0;
-    
-    const msgInterval = setInterval(() => {
-        if(msgElement) {
-            msgIndex = (msgIndex + 1) % messages.length;
-            msgElement.textContent = messages[msgIndex];
-        }
-    }, 800);
-
-    // --- SAFETY BLOCK START ---
     try {
-        console.log("Starting App Initialization...");
+        console.log("Loading Local Data...");
 
-        // 2. Load configurations
+        // 1. Load configurations
         if (typeof loadRoomConfig === 'function') loadRoomConfig(); 
         if (typeof loadStreamConfig === 'function') loadStreamConfig(); 
         if (typeof initCalendar === 'function') initCalendar();
 
-        // 3. Check for base student data persistence
+        // 2. Check for base student data persistence
         const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
         if (savedDataJson) {
             try {
@@ -9712,26 +9693,15 @@ function loadInitialData() {
                 }
             } catch(e) {
                 console.error("Failed to parse saved student data:", e);
-                // Don't block app load for bad data
             }
         }
     } catch (criticalError) {
         console.error("CRITICAL APP STARTUP ERROR:", criticalError);
-        alert("⚠️ App loaded with errors: " + criticalError.message + "\n\nCheck the console (F12) for details.");
-    } finally {
-        // 4. FORCE DISMISS LOADER (Always runs, even on error)
-        setTimeout(() => {
-            clearInterval(msgInterval); 
-            const loader = document.getElementById('initial-app-loader');
-            if (loader) {
-                loader.style.opacity = '0'; 
-                setTimeout(() => {
-                    loader.remove(); 
-                }, 500); 
-            }
-        }, 1500); 
+        // Even on error, we try to finalize so the user isn't stuck
+        if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
     }
-    // --- SAFETY BLOCK END ---
+    // NOTE: We DO NOT dismiss the loader here anymore. 
+    // 'finalizeAppLoad' will be called by the Cloud Sync logic or Auth logic when ready.
 }
 
 
