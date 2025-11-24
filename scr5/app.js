@@ -998,22 +998,14 @@ if (toggleButton && sidebar) {
 const EXAM_NAMES_KEY = 'examSessionNames';
 let currentExamNames = {}; 
 
-// Helper to get Exam Name (Now based only on Session Type & Stream)
+// Helper to get Exam Name (Date-Specific)
 function getExamName(date, time, stream) {
-    // Logic: FN vs AN
-    const t = time ? time.toUpperCase() : "";
-    let sessionType = "FN";
-    // Simple detection: PM or 12:xx is AN. Everything else is FN.
-    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) {
-        sessionType = "AN";
-    }
-    
-    // Key is now just "FN|Regular" or "AN|Distance"
-    const key = `${sessionType}|${stream}`;
+    // Key is unique per session: "DD.MM.YYYY|HH:MM AM|Stream"
+    const key = `${date}|${time}|${stream}`;
     return currentExamNames[key] || "";
 }
 
-// Helper to render the settings grid (Grouped by Session Type)
+// Helper to render the settings grid (Specific Sessions)
 function renderExamNameSettings() {
     const container = document.getElementById('exam-names-grid');
     const section = document.getElementById('exam-names-section');
@@ -1027,31 +1019,25 @@ function renderExamNameSettings() {
     section.classList.remove('hidden');
     container.innerHTML = '';
 
-    // 1. Find Unique Combinations of (SessionType + Stream)
-    const combos = new Set();
+    // 1. Find Unique Combinations of (Date + Time + Stream)
+    const uniqueSessions = new Set();
+    
     allStudentData.forEach(s => {
-        const strm = s.Stream || "Regular";
-        const t = s.Time ? s.Time.toUpperCase() : "";
-        let sessionType = "FN";
-        if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) {
-            sessionType = "AN";
-        }
-        combos.add(`${sessionType}|${strm}`);
+        const date = s.Date;
+        const time = s.Time;
+        const stream = s.Stream || "Regular";
+        const key = `${date}|${time}|${stream}`;
+        uniqueSessions.add(key);
     });
 
-    // 2. Sort: FN first, then AN. Inside that, Regular first.
-    const sortedCombos = Array.from(combos).sort((a, b) => {
-        const [ses1, str1] = a.split('|');
-        const [ses2, str2] = b.split('|');
-        
-        // Session Sort: FN (1) < AN (2)
-        const score = (s) => (s === "FN" ? 1 : 2);
-        if (score(ses1) !== score(ses2)) return score(ses1) - score(ses2);
-        
-        // Stream Sort: Regular first
-        if (str1 === "Regular") return -1;
-        if (str2 === "Regular") return 1;
-        return str1.localeCompare(str2);
+    // 2. Convert to Array and Sort Chronologically
+    const sortedSessions = Array.from(uniqueSessions).map(key => {
+        const [date, time, stream] = key.split('|');
+        return { date, time, stream, key };
+    }).sort((a, b) => {
+        const tDiff = compareSessionStrings(`${a.date} | ${a.time}`, `${b.date} | ${b.time}`);
+        if (tDiff !== 0) return tDiff;
+        return a.stream.localeCompare(b.stream);
     });
 
     // 3. Load Saved Names
@@ -1062,18 +1048,19 @@ function renderExamNameSettings() {
     const iconSave = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>`;
 
     // 4. Generate UI Cards
-    sortedCombos.forEach(key => {
-        const [sessionType, stream] = key.split('|');
+    sortedSessions.forEach(item => {
+        const { date, time, stream, key } = item;
         const savedName = currentExamNames[key] || "";
         
-        // Visual Label
-        const sessionLabel = sessionType === "FN" ? "☀️ FN Session" : "🌙 AN Session";
-        const colorClass = sessionType === "FN" ? "text-orange-600 bg-orange-50" : "text-indigo-600 bg-indigo-50";
+        // Determine Session Label (FN/AN) for visual cue
+        const tUpper = time.toUpperCase();
+        const isAN = tUpper.includes("PM") || tUpper.startsWith("12");
+        const sessionLabel = isAN ? "AN" : "FN";
+        const timeColor = isAN ? "text-indigo-600 bg-indigo-50 border-indigo-100" : "text-orange-600 bg-orange-50 border-orange-100";
 
         const card = document.createElement('div');
         card.className = "bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow";
         
-        // Determine State
         const isLocked = savedName.length > 0;
         const inputStateClass = isLocked ? "bg-gray-50 text-gray-500 border-gray-200" : "bg-white text-gray-900 border-blue-300 ring-1 ring-blue-100";
         const btnHtml = isLocked ? iconEdit : iconSave;
@@ -1081,10 +1068,12 @@ function renderExamNameSettings() {
 
         card.innerHTML = `
             <div class="flex justify-between items-center mb-2">
-                <div class="text-xs font-bold ${colorClass} px-2 py-1 rounded border border-gray-200">
-                    ${sessionLabel}
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-800 text-sm">${date}</span>
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${timeColor}">${sessionLabel}</span>
+                    <span class="text-xs text-gray-500">(${time})</span>
                 </div>
-                <div class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                <div class="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200 uppercase">
                     ${stream}
                 </div>
             </div>
@@ -1092,7 +1081,7 @@ function renderExamNameSettings() {
                 <input type="text" 
                        class="exam-name-input block w-full p-1.5 border rounded text-sm transition-all ${inputStateClass} focus:outline-none" 
                        value="${savedName}" 
-                       placeholder="Name (e.g. S1 BA)" 
+                       placeholder="Exam Name (e.g. S3 B.Com)" 
                        maxlength="49" 
                        ${isLocked ? 'disabled' : ''}
                        data-key="${key}">
@@ -1109,18 +1098,16 @@ function renderExamNameSettings() {
 
         btn.onclick = () => {
             if (input.disabled) {
-                // --- UNLOCK (Edit Mode) ---
+                // UNLOCK
                 input.disabled = false;
                 input.classList.remove('bg-gray-50', 'text-gray-500', 'border-gray-200');
                 input.classList.add('bg-white', 'text-gray-900', 'border-blue-300', 'ring-1', 'ring-blue-100');
                 input.focus();
-                
-                // Update Button to "Save" Style
                 btn.innerHTML = iconSave;
                 btn.className = "w-9 h-9 flex items-center justify-center rounded border transition-all duration-200 text-white bg-green-600 hover:bg-green-700 border-transparent shadow-sm";
                 btn.title = "Save Name";
             } else {
-                // --- LOCK (Save Mode) ---
+                // LOCK
                 const val = input.value.trim();
                 currentExamNames[key] = val;
                 localStorage.setItem(EXAM_NAMES_KEY, JSON.stringify(currentExamNames));
@@ -1128,8 +1115,6 @@ function renderExamNameSettings() {
                 input.disabled = true;
                 input.classList.add('bg-gray-50', 'text-gray-500', 'border-gray-200');
                 input.classList.remove('bg-white', 'text-gray-900', 'border-blue-300', 'ring-1', 'ring-blue-100');
-                
-                // Update Button to "Edit" Style
                 btn.innerHTML = iconEdit;
                 btn.className = "w-9 h-9 flex items-center justify-center rounded border transition-all duration-200 text-gray-500 hover:text-blue-600 hover:bg-blue-50 border-gray-200";
                 btn.title = "Edit Name";
