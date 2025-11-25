@@ -6955,7 +6955,7 @@ window.deleteRoom = function(index) {
     }
 };
 
-// Show room selection modal (Updated with Capacity Tags)
+// Show room selection modal (Updated: Excludes Scribe Rooms)
 function showRoomSelectionModal() {
     getRoomCapacitiesFromStorage();
     roomSelectionList.innerHTML = '';
@@ -6999,9 +6999,17 @@ function showRoomSelectionModal() {
     `;
     roomSelectionList.insertAdjacentHTML('beforeend', streamSelectHtml);
 
-    // 2. List Rooms
-    const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
+    // 2. List Rooms (Updated Logic)
     
+    // A. Regular Allotted Rooms
+    const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
+
+    // B. Scribe Allotted Rooms (NEW CHECK)
+    // We fetch the scribe data to ensure we don't double-book a room used by a scribe
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeMap = allScribeAllotments[currentSessionKey] || {};
+    const scribeRoomNames = Object.values(sessionScribeMap); // Array of rooms used by scribes
+
     const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
@@ -7011,9 +7019,13 @@ function showRoomSelectionModal() {
     sortedRoomNames.forEach(roomName => {
         const room = currentRoomConfig[roomName];
         const location = room.location ? ` (${room.location})` : '';
-        const isAllotted = allottedRoomNames.includes(roomName);
         
-        // --- NEW: Capacity Tag Logic ---
+        // Check Status: Is it used by Regular OR Scribe?
+        const isRegularAllotted = allottedRoomNames.includes(roomName);
+        const isScribeAllotted = scribeRoomNames.includes(roomName);
+        const isUnavailable = isRegularAllotted || isScribeAllotted;
+        
+        // Capacity Badge
         let capBadge = "";
         const capNum = parseInt(room.capacity) || 30;
         if (capNum > 30) {
@@ -7021,21 +7033,28 @@ function showRoomSelectionModal() {
         } else if (capNum < 30) {
             capBadge = `<span class="ml-2 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">▼ ${capNum}</span>`;
         }
-        // -------------------------------
         
         const roomOption = document.createElement('div');
-        roomOption.className = `p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50 mb-2 ${isAllotted ? 'opacity-50 cursor-not-allowed' : ''}`;
+        roomOption.className = `p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50 mb-2 ${isUnavailable ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`;
         
+        // Status Message Logic
+        let statusMsg = "";
+        if (isRegularAllotted) {
+            statusMsg = '<div class="text-xs text-red-600 mt-1 font-bold">Already Allotted</div>';
+        } else if (isScribeAllotted) {
+            statusMsg = '<div class="text-xs text-orange-600 mt-1 font-bold">Occupied by Scribe</div>';
+        }
+
         roomOption.innerHTML = `
             <div class="flex justify-between items-center">
                 <div class="font-medium text-gray-800">${roomName}${location}</div>
                 ${capBadge}
             </div>
             <div class="text-sm text-gray-600 mt-1">Standard Capacity: ${room.capacity}</div>
-            ${isAllotted ? '<div class="text-xs text-red-600 mt-1 font-bold">Already allotted</div>' : ''}
+            ${statusMsg}
         `;
         
-        if (!isAllotted) {
+        if (!isUnavailable) {
             roomOption.onclick = () => {
                 const selectedStream = document.getElementById('allotment-stream-select').value;
                 selectRoomForAllotment(roomName, room.capacity, selectedStream);
@@ -7048,7 +7067,7 @@ function showRoomSelectionModal() {
     roomSelectionModal.classList.remove('hidden');
 }
 
-// Select a room and allot students (Updated for Stream)
+// Select a room and allot students (Fixed: Adds Save Step)
 function selectRoomForAllotment(roomName, capacity, targetStream) {
     const [date, time] = currentSessionKey.split(' | ');
     
@@ -7062,9 +7081,6 @@ function selectRoomForAllotment(roomName, capacity, targetStream) {
     });
 
     // 3. Find unallotted students MATCHING THE TARGET STREAM
-    // Also exclude Scribes (they are handled separately)
-    const scribeRegNos = new Set((JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]')).map(s => s.regNo));
-
     const candidates = [];
     // Sort first to ensure consistent filling (Stream -> Course -> RegNo)
     sessionStudentRecords.sort((a, b) => {
@@ -7072,15 +7088,15 @@ function selectRoomForAllotment(roomName, capacity, targetStream) {
         return a['Register Number'].localeCompare(b['Register Number']);
     });
 
-for (const student of sessionStudentRecords) {
-    const regNo = student['Register Number'];
-    const studentStream = student.Stream || "Regular"; // Default
+    for (const student of sessionStudentRecords) {
+        const regNo = student['Register Number'];
+        const studentStream = student.Stream || "Regular"; // Default
 
-    // Condition: Not Allotted AND Matches Selected Stream (Scribes allowed)
-    if (!allottedRegNos.has(regNo) && studentStream === targetStream) {
-        candidates.push(regNo);
+        // Condition: Not Allotted AND Matches Selected Stream (Scribes allowed)
+        if (!allottedRegNos.has(regNo) && studentStream === targetStream) {
+            candidates.push(regNo);
+        }
     }
-}
     
     // 4. Allot up to capacity
     const newStudentRegNos = candidates.slice(0, capacity);
@@ -7098,11 +7114,16 @@ for (const student of sessionStudentRecords) {
         stream: targetStream // Save the stream tag for this room
     });
     
+    // --- FIX: SAVE TO LOCAL STORAGE IMMEDIATELY ---
+    saveRoomAllotment(); 
+    // ----------------------------------------------
+
     roomSelectionModal.classList.add('hidden');
     updateAllotmentDisplay();
     
     if (typeof syncDataToCloud === 'function') syncDataToCloud();
 }
+
 
 // Event Listeners for Room Allotment
 allotmentSessionSelect.addEventListener('change', () => {
