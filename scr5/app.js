@@ -902,6 +902,9 @@ const navSettings = document.getElementById('nav-settings');
 const navQPCodes = document.getElementById('nav-qpcodes');
 const navReports = document.getElementById('nav-reports');
 const navAbsentees = document.getElementById('nav-absentees');
+const navRemuneration = document.getElementById('nav-remuneration');
+const viewRemuneration = document.getElementById('view-remuneration');
+const btnAutoCalcBill = document.getElementById('btn-auto-calculate-bill');
 const navScribeSettings = document.getElementById('nav-scribe-settings');
 const navRoomAllotment = document.getElementById('nav-room-allotment');
 const viewRoomAllotment = document.getElementById('view-room-allotment');
@@ -934,8 +937,9 @@ const modalCloseSearchResult = document.getElementById('modal-close-search-resul
 // ***************************
 
 const viewEditData = document.getElementById('view-edit-data');
-const allNavButtons = [navHome, navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings];
-const allViews = [viewHome, viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings];
+// Update these two lines to include 'navRemuneration' and 'viewRemuneration'
+const allNavButtons = [navHome, navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings, navRemuneration];
+const allViews = [viewHome, viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings, viewRemuneration];
 
 // --- (V26) Get references to NEW Room Settings elements (Now in Settings Tab) ---
 const collegeNameInput = document.getElementById('college-name-input');
@@ -10431,6 +10435,122 @@ function loadInitialData() {
     }
 }
 
+// ==========================================
+    // 💰 REMUNERATION LOGIC
+    // ==========================================
+
+    // 1. Navigation Listener
+    if (navRemuneration) {
+        navRemuneration.addEventListener('click', () => {
+            showView(viewRemuneration, navRemuneration);
+            // Initialize the separate module (from remuneration.js)
+            if (typeof initRemunerationModule === 'function') {
+                initRemunerationModule();
+            }
+        });
+    }
+
+    // 2. Auto-Calculate Button Logic
+    if (btnAutoCalcBill) {
+        btnAutoCalcBill.addEventListener('click', () => {
+            // Check if data exists
+            if (!allStudentData || allStudentData.length === 0) {
+                alert("No student data loaded. Please load data in the 'Data' tab first.");
+                return;
+            }
+
+            // Group Data by Session (Regular Stream Only)
+            const sessionCounts = {};
+            allStudentData.forEach(s => {
+                const strm = s.Stream || "Regular";
+                if (strm === "Regular") {
+                    const key = `${s.Date} | ${s.Time}`;
+                    sessionCounts[key] = (sessionCounts[key] || 0) + 1;
+                }
+            });
+
+            const sessionArray = Object.keys(sessionCounts).map(key => ({
+                sessionKey: key,
+                studentCount: sessionCounts[key]
+            }));
+
+            if (sessionArray.length === 0) {
+                alert("No 'Regular' stream students found in the loaded data.");
+                return;
+            }
+
+            // Call the Engine in remuneration.js
+            if (typeof calculateRegularRemuneration === 'function') {
+                const bill = calculateRegularRemuneration(sessionArray);
+                renderBillTable(bill);
+            } else {
+                alert("Error: Remuneration module not loaded. Check if remuneration.js is linked.");
+            }
+        });
+    }
+
+    // 3. Helper to Render the Bill Table
+    function renderBillTable(bill) {
+        const output = document.getElementById('remuneration-output');
+        if (!output) return;
+        
+        output.classList.remove('hidden');
+        
+        const rows = bill.details.map(d => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="p-2 font-medium">${d.session}</td>
+                <td class="p-2 text-center">${d.students}</td>
+                <td class="p-2 text-center">
+                    <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">${d.invig_count}</span> 
+                    <span class="text-gray-500 text-xs ml-1">(₹${d.invig_cost})</span>
+                </td>
+                <td class="p-2 text-right">₹${d.clerk_cost}</td>
+                <td class="p-2 text-right">₹${d.sweeper_cost}</td>
+            </tr>
+        `).join('');
+
+        output.innerHTML = `
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800 uppercase tracking-wide">Estimated Bill Summary</h3>
+                <button onclick="window.print()" class="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded border border-gray-300">Print Page</button>
+            </div>
+
+            <div class="overflow-x-auto border rounded-lg mb-6">
+                <table class="w-full text-sm border-collapse">
+                    <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
+                        <tr>
+                            <th class="p-2 text-left">Session</th>
+                            <th class="p-2 text-center">Candidates</th>
+                            <th class="p-2 text-center">Invigilators</th>
+                            <th class="p-2 text-right">Clerk</th>
+                            <th class="p-2 text-right">Sweeper</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-700">${rows}</tbody>
+                    <tfoot class="bg-gray-50 font-bold text-gray-800">
+                        <tr>
+                            <td colspan="4" class="p-2 text-right">Duty Staff Subtotal:</td>
+                            <td class="p-2 text-right">₹${(bill.invigilation + bill.clerical + bill.sweeping).toFixed(2)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+                <div class="flex justify-between text-sm"><span>Supervision Charges:</span> <span class="font-mono font-bold">₹${bill.supervision}</span></div>
+                <div class="flex justify-between text-sm"><span>Contingency:</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
+                <div class="flex justify-between text-sm"><span>Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
+                <div class="flex justify-between text-sm"><span>Accountant:</span> <span class="font-mono font-bold">₹0 (Manual Claim)</span></div>
+                
+                <div class="col-span-1 md:col-span-2 border-t border-indigo-200 mt-2 pt-3 flex justify-between items-center">
+                    <span class="text-base font-bold text-indigo-900">GRAND TOTAL ESTIMATE</span>
+                    <span class="text-2xl font-bold text-indigo-700">₹${bill.grand_total.toFixed(2)}</span>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2 text-center">Calculated based on stored University rates. This is an estimate only.</p>
+        `;
+    }
+    
     // --- NEW: Restore Last Active Tab ---
     function restoreActiveTab() {
         const savedViewId = localStorage.getItem('lastActiveViewId');
