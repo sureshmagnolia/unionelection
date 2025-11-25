@@ -530,6 +530,36 @@ function syncDataFromCloud(collegeId) {
                 if (mainData[key]) localStorage.setItem(key, mainData[key]);
             });
             updateHeaderCollegeName(); // <--- ADD THIS LINE HERE
+
+            // -------------------------------------------------------
+            // 🔄 LEGACY MIGRATION: Auto-Prompt for Missing Name
+            // -------------------------------------------------------
+            // Check if Name is missing OR is the default, AND if user is Admin
+            const currentName = mainData.examCollegeName || "University of Calicut";
+            const isDefault = (currentName === "University of Calicut");
+            const isAdmin = (currentUser && mainData.admins && mainData.admins.includes(currentUser.email));
+
+            if (isDefault && isAdmin) {
+                setTimeout(() => {
+                    const newName = prompt("⚠️ SYSTEM UPDATE ⚠️\n\nYour College Name is not set.\nPlease enter the Official Name of your College to display on the header and reports:");
+                    
+                    if (newName && newName.trim() !== "") {
+                        // 1. Save Locally
+                        localStorage.setItem(COLLEGE_NAME_KEY, newName);
+                        currentCollegeName = newName;
+                        
+                        // 2. Update UI
+                        updateHeaderCollegeName();
+                        if (typeof collegeNameInput !== 'undefined') collegeNameInput.value = newName;
+
+                        // 3. Force Sync to Cloud (Saves it forever)
+                        syncDataToCloud();
+                        alert("✅ Name Updated! It will now appear on all screens.");
+                    }
+                }, 1000); // Small delay to let the UI load first
+            }
+            // -------------------------------------------------------
+            
             // 2. FETCH CHUNKS
             try {
                 const dataColRef = collection(db, "colleges", collegeId, "data");
@@ -7368,6 +7398,12 @@ function renderScribeAllotmentList(sessionKey) {
     
     uniqueSessionScribeStudents.sort((a,b) => a['Register Number'].localeCompare(b['Register Number']));
 
+    // --- NEW: Update Count Header with Badge ---
+    const headerEl = document.getElementById('scribe-session-header');
+    if (headerEl) {
+        headerEl.innerHTML = `Scribe Students for this Session: <span class="ml-2 bg-orange-100 text-orange-800 text-sm font-bold px-2 py-0.5 rounded-full border border-orange-200">${uniqueSessionScribeStudents.length}</span>`;
+    }
+    // -------------------------------------------
     // --- NEW: Get Serial Map (Needed to look up serial number when rendering) ---
     const roomSerialMap = getRoomSerialMap(sessionKey);
     // ---------------------------------------------------------------------------
