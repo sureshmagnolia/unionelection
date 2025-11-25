@@ -1057,29 +1057,42 @@ const restoreFileInput = document.getElementById('restore-file-input');
 const restoreDataButton = document.getElementById('restore-data-button');
 const restoreStatus = document.getElementById('restore-status');
 // *********************************
-// --- NEW: Sidebar Toggle Logic ---
+// --- NEW: Responsive Sidebar Toggle Logic ---
 const toggleButton = document.getElementById('sidebar-toggle');
 const sidebar = document.getElementById('main-nav');
 
 if (toggleButton && sidebar) {
     toggleButton.addEventListener('click', () => {
-        // Toggle sidebar width
-        sidebar.classList.toggle('w-64'); // Full width
-        sidebar.classList.toggle('w-20'); // Collapsed width
+        // Check if we are on Mobile (window width < 768px)
+        const isMobile = window.innerWidth < 768;
 
-        // Toggle padding
-        sidebar.classList.toggle('p-4');
-        sidebar.classList.toggle('p-2'); // Use smaller padding when collapsed
+        if (isMobile) {
+            // On Mobile: Slide the sidebar IN or OUT
+            // We toggle the class that hides it off-screen
+            sidebar.classList.toggle('-translate-x-full');
+            
+            // Optional: Add a click-outside listener to close it
+            if (!sidebar.classList.contains('-translate-x-full')) {
+                // Sidebar is open on mobile, adding a simple close logic could be added here
+            }
+        } else {
+            // On Desktop: Do the existing Collapse/Expand logic
+            sidebar.classList.toggle('w-64'); // Full width
+            sidebar.classList.toggle('w-20'); // Collapsed width
+            
+            sidebar.classList.toggle('p-4');
+            sidebar.classList.toggle('p-2');
 
-        // Toggle visibility of all text spans inside the nav buttons
-        sidebar.querySelectorAll('.nav-button span').forEach(span => {
-            span.classList.toggle('hidden');
-        });
+            // Toggle text visibility
+            sidebar.querySelectorAll('.nav-button span').forEach(span => {
+                span.classList.toggle('hidden');
+            });
 
-        // Toggle centering for the icons
-        sidebar.querySelectorAll('.nav-button').forEach(button => {
-            button.classList.toggle('justify-center');
-        });
+            // Toggle centering icons
+            sidebar.querySelectorAll('.nav-button').forEach(button => {
+                button.classList.toggle('justify-center');
+            });
+        }
     });
 }
 // --- END: Sidebar Toggle Logic ---
