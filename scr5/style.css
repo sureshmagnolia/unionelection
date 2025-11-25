@@ -931,3 +931,39 @@ tr.scribe-row-highlight td.signature-col {
     overflow-x: auto; /* Allows horizontal scrolling */
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iPhone */
 }
+
+/* --- REMUNERATION BILL PRINT STYLES --- */
+@media print {
+    /* When the body has 'printing-bill' class, activate these rules */
+    
+    /* 1. Show the Remuneration View container */
+    body.printing-bill #view-remuneration {
+        display: block !important;
+        visibility: visible !important;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: white;
+    }
+
+    /* 2. Hide everything INSIDE the view... */
+    body.printing-bill #view-remuneration > * {
+        display: none !important;
+    }
+
+    /* 3. ...EXCEPT the Bill Output div */
+    body.printing-bill #remuneration-output {
+        display: block !important;
+        visibility: visible !important;
+        width: 100%;
+    }
+    
+    /* 4. Ensure global nav is hidden */
+    body.printing-bill nav, 
+    body.printing-bill header {
+        display: none !important;
+    }
+}
