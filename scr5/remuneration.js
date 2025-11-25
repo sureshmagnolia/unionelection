@@ -128,8 +128,7 @@ window.toggleRemunerationLock = function() {
     renderRateConfigForm();
 };
 
-// --- 4. CORE ENGINE: CALCULATE BILL ---
-// Generates a bill for a specific set of sessions using a specific rate card
+// --- 4. CORE ENGINE: CALCULATE BILL (Updated with Split Supervision) ---
 function generateBillForSessions(billTitle, sessionData, streamType) {
     const rates = allRates[streamType] || allRates["Regular"];
     
@@ -140,6 +139,11 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         invigilation: 0,
         clerical: 0,
         sweeping: 0,
+        // New Breakdown Object
+        supervision_breakdown: {
+            chief: { count: 0, rate: rates.chief_supdt, total: 0 },
+            office: { count: 0, rate: rates.office_supdt, total: 0 }
+        },
         details: []
     };
 
@@ -167,10 +171,19 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         let sweeperCost = Math.ceil(count / 100) * rates.sweeper_rate;
         if (sweeperCost < rates.sweeper_min) sweeperCost = rates.sweeper_min;
 
-        // 4. Supervision (Fixed per session)
-        const supervisionCost = rates.chief_supdt + rates.office_supdt;
+        // 4. Supervision (Calculated Separately)
+        const chiefCost = rates.chief_supdt;
+        const officeCost = rates.office_supdt;
+        const supervisionCost = chiefCost + officeCost;
 
-        // Accumulate
+        // Update Breakdowns
+        bill.supervision_breakdown.chief.count++;
+        bill.supervision_breakdown.chief.total += chiefCost;
+        
+        bill.supervision_breakdown.office.count++;
+        bill.supervision_breakdown.office.total += officeCost;
+
+        // Accumulate Totals
         bill.supervision += supervisionCost;
         bill.invigilation += invigCost;
         bill.clerical += clerkCost;
