@@ -932,38 +932,41 @@ tr.scribe-row-highlight td.signature-col {
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iPhone */
 }
 
-/* --- REMUNERATION BILL PRINT STYLES --- */
+/* --- REMUNERATION BILL PRINT STYLES (FIXED) --- */
 @media print {
-    /* When the body has 'printing-bill' class, activate these rules */
-    
-    /* 1. Show the Remuneration View container */
-    body.printing-bill #view-remuneration {
+    /* 1. When printing the bill, hide the ENTIRE body content first */
+    body.printing-bill {
+        visibility: hidden;
+        overflow: visible !important;
+        height: auto !important;
+        background: white !important;
+    }
+
+    /* 2. Make the Bill Output (and all its children) visible */
+    body.printing-bill #remuneration-output,
+    body.printing-bill #remuneration-output * {
+        visibility: visible;
+    }
+
+    /* 3. Position the Bill at the very top of the printed page */
+    body.printing-bill #remuneration-output {
         display: block !important;
-        visibility: visible !important;
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
         margin: 0;
         padding: 0;
-        background: white;
+        z-index: 9999; /* Ensure it sits on top of everything */
+        background-color: white;
     }
 
-    /* 2. Hide everything INSIDE the view... */
-    body.printing-bill #view-remuneration > * {
-        display: none !important;
-    }
-
-    /* 3. ...EXCEPT the Bill Output div */
-    body.printing-bill #remuneration-output {
-        display: block !important;
-        visibility: visible !important;
-        width: 100%;
-    }
-    
-    /* 4. Ensure global nav is hidden */
-    body.printing-bill nav, 
-    body.printing-bill header {
-        display: none !important;
+    /* 4. Reset margins/padding on parents to prevent blank space at top */
+    body.printing-bill #view-remuneration, 
+    body.printing-bill main {
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 }
