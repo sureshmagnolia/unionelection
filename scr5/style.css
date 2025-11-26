@@ -932,41 +932,79 @@ tr.scribe-row-highlight td.signature-col {
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iPhone */
 }
 
-/* --- REMUNERATION BILL PRINT STYLES (FIXED) --- */
+/* --- REMUNERATION BILL PRINT STYLES (PAGINATION & FIT FIX) --- */
 @media print {
-    /* 1. When printing the bill, hide the ENTIRE body content first */
+    /* 1. Hide everything by default */
     body.printing-bill {
         visibility: hidden;
-        overflow: visible !important;
-        height: auto !important;
         background: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
 
-    /* 2. Make the Bill Output (and all its children) visible */
+    /* 2. Show only the bill and its children */
     body.printing-bill #remuneration-output,
     body.printing-bill #remuneration-output * {
         visibility: visible;
     }
 
-    /* 3. Position the Bill at the very top of the printed page */
+    /* 3. Position the Bill correctly */
     body.printing-bill #remuneration-output {
         display: block !important;
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
-        margin: 0;
-        padding: 0;
-        z-index: 9999; /* Ensure it sits on top of everything */
+        margin: 0 !important;
+        padding: 5mm !important; /* Small padding for printer margins */
+        z-index: 9999;
         background-color: white;
     }
 
-    /* 4. Reset margins/padding on parents to prevent blank space at top */
-    body.printing-bill #view-remuneration, 
-    body.printing-bill main {
-        margin: 0 !important;
-        padding: 0 !important;
+    /* 4. Container Styles (Remove Borders/Shadows) */
+    body.printing-bill .print-page {
         border: none !important;
         box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    /* 5. Table Pagination & Sizing */
+    body.printing-bill table {
+        font-size: 9pt !important; /* Compact Font */
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+
+    body.printing-bill th, 
+    body.printing-bill td {
+        padding: 4px 2px !important; /* Tight Padding */
+        border: 1px solid #000 !important; /* Clean Black Border */
+    }
+
+    /* Prevent rows from splitting across pages */
+    body.printing-bill tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* Ensure Header repeats on new pages */
+    body.printing-bill thead {
+        display: table-header-group;
+    }
+
+    /* Summary Box Protection */
+    body.printing-bill .summary-box {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border: 1px solid #000 !important; /* Single line border for print */
+        margin-top: 10px !important;
+    }
+    
+    /* Hide screen-only elements */
+    body.printing-bill .no-print {
+        display: none !important;
     }
 }
