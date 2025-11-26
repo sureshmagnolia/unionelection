@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Strict Single-Line) ---
+// --- Event listener for "Generate QP Distribution Report" (Wider Boxes + 2-Word Loc) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4770,7 +4770,7 @@ if (generateQpDistributionReportButton) {
                                         </div>
                                     </div>
                                     
-                                    <div class="grid grid-cols-4 gap-2">
+                                    <div class="grid grid-cols-3 gap-2">
                             `;
                             
                             const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
@@ -4784,13 +4784,17 @@ if (generateQpDistributionReportButton) {
                                 const roomInfo = currentRoomConfig[roomName] || {};
                                 let loc = roomInfo.location || "";
                                 
-                                // Truncate Location Logic
-                                // Reduced length threshold since it's now sharing horizontal space
-                                if (loc.length > 8) loc = loc.substring(0, 6) + "..";
+                                // --- NEW TRUNCATION LOGIC (First 2 Words) ---
+                                if (loc) {
+                                    const words = loc.split(' ');
+                                    if (words.length > 2) {
+                                        loc = words.slice(0, 2).join(' ') + "..";
+                                    }
+                                }
                                 const displayLoc = loc ? `(${loc})` : "";
                                 const serialNo = roomSerialMap[roomName] || '-';
                                 
-                                // --- STRICT SINGLE-LINE BOX LAYOUT ---
+                                // --- BOX LAYOUT ---
                                 html += `
                                     <div class="border border-gray-400 rounded px-1.5 py-0.5 bg-white h-[34px] flex items-center justify-between relative shadow-sm">
                                         
@@ -4831,7 +4835,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (1-Line Layout).`;
+            reportStatus.textContent = `Generated QP Distribution Report (Wide Layout).`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
