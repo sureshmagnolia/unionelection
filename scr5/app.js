@@ -744,17 +744,17 @@ async function syncDataToCloud() {
             batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
         });
         
-       // --- NEW: SECURE PUBLIC SYNC (Names + Courses + Location) ---
+       // --- NEW: SECURE PUBLIC SYNC (Names + Specific Papers) ---
         const publicRef = doc(db, "public_seating", currentCollegeId);
         
         const allotmentData = localStorage.getItem('examRoomAllotment') || '{}';
         const roomConfigData = localStorage.getItem('examRoomConfig') || '{}';
         const collegeName = localStorage.getItem('examCollegeName') || "Exam Centre";
 
-        // 1. Generate Name & Course Maps
+        // 1. Generate Name & Paper Maps
         const baseDataStr = localStorage.getItem('examBaseData');
         let nameMap = {};
-        let courseMap = {}; // <--- New Map for Courses
+        let paperMap = {}; // <--- New Map for Specific Papers
         
         if (baseDataStr) {
              try {
@@ -763,11 +763,18 @@ async function syncDataToCloud() {
                      const r = s['Register Number'];
                      const n = s.Name;
                      const c = s.Course;
+                     const d = s.Date;
+                     const t = s.Time;
                      
                      if (r) {
                          const cleanReg = r.toString().trim().toUpperCase();
                          if (n) nameMap[cleanReg] = n.toString().trim();
-                         if (c) courseMap[cleanReg] = c.toString().trim(); // <--- Store Course
+                         
+                         // Store Paper Name with a Unique Key (RegNo + Date + Time)
+                         if (c && d && t) {
+                             const paperKey = `${cleanReg}_${d}_${t}`;
+                             paperMap[paperKey] = c.toString().trim();
+                         }
                      }
                  });
              } catch (e) { console.error("Error parsing base data for public sync", e); }
@@ -778,7 +785,7 @@ async function syncDataToCloud() {
             seatingData: allotmentData,
             roomData: roomConfigData,
             studentNames: JSON.stringify(nameMap),
-            studentCourses: JSON.stringify(courseMap), // <--- Sending Courses
+            examPapers: JSON.stringify(paperMap), // <--- Sending Specific Papers
             lastUpdated: new Date().toISOString()
         });
         // -------------------------------
