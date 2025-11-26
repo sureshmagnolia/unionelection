@@ -10592,8 +10592,11 @@ function loadInitialData() {
         });
     }
 
-    // 5. Render Function (Updated: Split Sup. Columns)
+    // 5. Render Function (Updated: Line Total & Split Columns)
     function renderBillHTML(bill, container) {
+        // Calculate the Table Total (Sum of all duty costs) to display in footer
+        const totalTableCost = bill.invigilation + bill.clerical + bill.sweeping + bill.supervision;
+
         const rows = bill.details.map(d => {
             let studentDetail = `${d.total_students}`;
             if (d.scribe_students > 0) {
@@ -10604,6 +10607,10 @@ function loadInitialData() {
             if (d.invig_count_scribe > 0) {
                 invigDetail += ` + <span class="text-orange-600 font-bold">${d.invig_count_scribe}</span>`;
             }
+
+            // CALCULATION: Line Total = Invig + Clerk + Sweeper + CS + SAS + OS
+            // (Note: d.supervision_cost is already CS+SAS+OS)
+            const lineTotal = d.invig_cost + d.clerk_cost + d.sweeper_cost + d.supervision_cost;
             
             return `
                 <tr class="border-b hover:bg-gray-50 text-center">
@@ -10621,7 +10628,8 @@ function loadInitialData() {
                     <td class="p-1 border align-middle text-xs text-gray-700">₹${d.cs_cost}</td>
                     <td class="p-1 border align-middle text-xs text-gray-700">₹${d.sas_cost}</td>
                     <td class="p-1 border align-middle text-xs text-gray-700">₹${d.os_cost}</td>
-                    <td class="p-1 border align-middle text-xs font-bold bg-gray-50">₹${d.supervision_cost}</td>
+                    
+                    <td class="p-1 border align-middle text-xs font-bold bg-gray-100">₹${lineTotal}</td>
                 </tr>
             `;
         }).join('');
@@ -10648,7 +10656,7 @@ function loadInitialData() {
                             <th class="p-1 border border-black text-center">CS</th>
                             <th class="p-1 border border-black text-center">SAS</th>
                             <th class="p-1 border border-black text-center">OS</th>
-                            <th class="p-1 border border-black text-center">Total Sup</th>
+                            <th class="p-1 border border-black text-center font-bold">Total</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -10662,7 +10670,8 @@ function loadInitialData() {
                             <td class="p-2 border border-black">₹${bill.supervision_breakdown.chief.total}</td>
                             <td class="p-2 border border-black">₹${bill.supervision_breakdown.senior.total}</td>
                             <td class="p-2 border border-black">₹${bill.supervision_breakdown.office.total}</td>
-                            <td class="p-2 border border-black">₹${bill.supervision}</td>
+                            
+                            <td class="p-2 border border-black text-lg">₹${totalTableCost}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -10681,7 +10690,7 @@ function loadInitialData() {
                         <div class="flex justify-between border-b border-dotted pb-1 font-bold text-gray-700">2. Other Allowances</div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>Contingency (Approx):</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>Accountant:</span> <span class="font-mono font-bold">₹${allRates["Regular"].accountant}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1"><span>Accountant:</span> <span class="font-mono font-bold">₹${allRates[bill.stream].accountant}</span></div>
                     </div>
                 </div>
 
