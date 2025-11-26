@@ -187,6 +187,12 @@ function finalizeAppLoad() {
     dismissLoader(); // Safely remove the loader once all is done
 }
 
+let currentUser = null;
+let currentCollegeId = null; // The shared document ID
+let currentCollegeData = null; // Holds the full data including permissions
+let isSyncing = false;
+let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
+
 // --- MAIN APP LOGIC ---
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -337,11 +343,6 @@ const absenteeQpFilter = document.getElementById('absentee-qp-filter');
 const SUPER_ADMIN_EMAIL = "sureshmagnolia@gmail.com"; 
 // ******************************
 
-let currentUser = null;
-let currentCollegeId = null; // The shared document ID
-let currentCollegeData = null; // Holds the full data including permissions
-let isSyncing = false;
-let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
 
 // [NEW] Network Connectivity Listeners
 window.addEventListener('online', () => {
