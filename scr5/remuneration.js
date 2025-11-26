@@ -36,14 +36,13 @@ const RATE_TEMPLATES = {
 };
 
 const REMUNERATION_CONFIG_KEY = 'examRemunerationConfig';
-const STREAM_CONFIG_KEY = 'examStreamsConfig'; // Read-only here
+const STREAM_CONFIG_KEY = 'examStreamsConfig';
 let allRates = {};
 let isRatesLocked = true;
 
 // --- 2. INITIALIZATION ---
 function initRemunerationModule() {
     loadRates();
-    // Attempt to sync dropdowns if app.js hasn't already
     if (typeof populateRemunerationDropdowns === 'function') {
         populateRemunerationDropdowns();
     }
@@ -51,7 +50,7 @@ function initRemunerationModule() {
 }
 
 function loadRates() {
-    // 1. Get Configured Streams (or default to Regular)
+    // 1. Get Configured Streams
     const streamJson = localStorage.getItem(STREAM_CONFIG_KEY);
     const streams = streamJson ? JSON.parse(streamJson) : ["Regular"];
 
@@ -59,25 +58,34 @@ function loadRates() {
     const savedRatesJson = localStorage.getItem(REMUNERATION_CONFIG_KEY);
     let savedRates = savedRatesJson ? JSON.parse(savedRatesJson) : {};
 
-    // 3. Sync: Ensure every stream has a rate card
     allRates = {};
     
     streams.forEach(streamName => {
+        // Select appropriate template
+        const template = (streamName === "Regular") 
+                         ? RATE_TEMPLATES["Regular"] 
+                         : RATE_TEMPLATES["SDE_Default"];
+
         if (savedRates[streamName]) {
-            // Use saved rates
-            allRates[streamName] = savedRates[streamName];
-        } else {
-            // Create NEW rates based on template
-            if (streamName === "Regular") {
-                allRates[streamName] = JSON.parse(JSON.stringify(RATE_TEMPLATES["Regular"]));
-            } else {
-                // Any other stream gets SDE defaults
-                allRates[streamName] = JSON.parse(JSON.stringify(RATE_TEMPLATES["SDE_Default"]));
+            // *** FIX: SAFE MERGE ***
+            // Merge saved rates OVER the template. 
+            // If saved data is missing a key (like 'invigilator'), the template value is kept.
+            allRates[streamName] = { ...template, ...savedRates[streamName] };
+            
+            // Double check essential numbers aren't NaN strings
+            for (const key in allRates[streamName]) {
+                const val = allRates[streamName][key];
+                if (typeof val === 'string' && !isNaN(val)) {
+                    allRates[streamName][key] = parseFloat(val);
+                }
             }
+        } else {
+            // New stream? Use full template
+            allRates[streamName] = JSON.parse(JSON.stringify(template));
         }
     });
 
-    // Save back to ensure integrity
+    // Save the fixed structure back to storage
     localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
 }
 
@@ -88,24 +96,20 @@ function renderRateConfigForm() {
     
     if (!container || !selector) return;
     
-    // Get value from selector (populated by app.js or init)
     let currentStream = selector.value;
-    
-    // Fallback if selector is empty/loading
     if (!currentStream || !allRates[currentStream]) {
         currentStream = "Regular"; 
-        if(!allRates["Regular"]) loadRates(); // Emergency reload
+        if(!allRates["Regular"]) loadRates(); 
     }
 
     const rates = allRates[currentStream];
-    if (!rates) return; // Safety
+    if (!rates) return;
 
     const disabledAttr = isRatesLocked ? 'disabled' : '';
     const bgClass = isRatesLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-900 border-blue-400 ring-1 ring-blue-200';
 
-    // Render correct form based on Mode
     if (!rates.is_sde_mode) {
-        // --- REGULAR MODE FORM ---
+        // REGULAR FORM
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div class="space-y-3">
@@ -134,7 +138,7 @@ function renderRateConfigForm() {
             </div>
         `;
     } else {
-        // --- SDE / OTHER MODE FORM ---
+        // SDE FORM
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div class="space-y-3">
@@ -172,7 +176,7 @@ function renderRateConfigForm() {
         container.querySelectorAll('.rate-input').forEach(input => {
             input.addEventListener('change', (e) => {
                 const key = e.target.dataset.key;
-                allRates[currentStream][key] = parseFloat(e.target.value);
+                allRates[currentStream][key] = parseFloat(e.target.value) || 0; // Avoid NaN on bad input
             });
         });
     }
@@ -211,13 +215,13 @@ window.toggleRemunerationLock = function() {
     renderRateConfigForm();
 };
 
-// --- 4. CORE ENGINE: CALCULATE BILL ---
+// --- 4. CORE ENGINE: CALCULATE BILL (SAFE MATH) ---
 function generateBillForSessions(billTitle, sessionData, streamType) {
     if (Object.keys(allRates).length === 0) loadRates();
     
     const rates = allRates[streamType];
     if (!rates) {
-        alert(`Error: No rate configuration found for stream '${streamType}'. Please check Settings.`);
+        alert(`Error: No rate configuration found for stream '${streamType}'.`);
         return null;
     }
 
@@ -230,8 +234,11 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         has_peon: rates.has_peon
     };
 
-    // --- LOGIC FOR SDE / OTHER STREAMS ---
+    // Helper to ensure numbers
+    const getNum = (val) => Number(val) || 0;
+
     if (rates.is_sde_mode) {
+        // SDE LOGIC
         const sessionsByDate = {};
         sessionData.forEach(s => {
             const dateKey = s.date;
@@ -246,9 +253,9 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             dailySessions.forEach(session => {
                 const count = session.normalCount + session.scribeCount;
                 
-                // A. Supervision (Daily Rate Split)
-                const chiefRate = isDouble ? rates.chief_supdt_double : rates.chief_supdt_single;
-                const seniorRate = isDouble ? rates.senior_supdt_double : rates.senior_supdt_single;
+                // Supervision
+                const chiefRate = isDouble ? getNum(rates.chief_supdt_double) : getNum(rates.chief_supdt_single);
+                const seniorRate = isDouble ? getNum(rates.senior_supdt_double) : getNum(rates.senior_supdt_single);
                 const chiefCost = chiefRate / dailySessions.length;
                 const seniorCost = seniorRate / dailySessions.length;
                 
@@ -256,25 +263,29 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 bill.supervision_breakdown.senior.total += seniorCost;
                 const supTotal = chiefCost + seniorCost;
 
-                // B. Invigilators
+                // Invigilators
                 let normalInvigs = 0;
+                const invigRatio = getNum(rates.invigilator_ratio) || 30;
                 if (count > 0) {
-                    normalInvigs = Math.floor(count / rates.invigilator_ratio);
-                    if ((count % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
+                    normalInvigs = Math.floor(count / invigRatio);
+                    if ((count % invigRatio) > getNum(rates.invigilator_min_fraction)) normalInvigs++;
                     if (normalInvigs === 0) normalInvigs = 1;
                 }
+                
                 let scribeInvigs = 0;
                 if (session.scribeCount > 0) {
-                    scribeInvigs = Math.ceil(session.scribeCount / rates.scribe_invigilator_ratio);
+                    scribeInvigs = Math.ceil(session.scribeCount / (getNum(rates.scribe_invigilator_ratio) || 1));
                 }
+                
                 const totalInvigs = normalInvigs + scribeInvigs;
-                const invigCost = totalInvigs * rates.invigilator;
+                const invigCost = totalInvigs * getNum(rates.invigilator); // SAFETY CHECK HERE
 
-                // C. Support Staff (Daily Rate Split)
-                const staffCount = Math.ceil(count / rates.clerk_ratio);
-                const clerkRate = isDouble ? rates.clerk_double : rates.clerk_single;
-                const peonRate = isDouble ? rates.peon_double : rates.peon_single;
-                const sweeperRate = isDouble ? rates.sweeper_double : rates.sweeper_single;
+                // Support Staff
+                const staffCount = Math.ceil(count / (getNum(rates.clerk_ratio) || 500));
+                
+                const clerkRate = isDouble ? getNum(rates.clerk_double) : getNum(rates.clerk_single);
+                const peonRate = isDouble ? getNum(rates.peon_double) : getNum(rates.peon_single);
+                const sweeperRate = isDouble ? getNum(rates.sweeper_double) : getNum(rates.sweeper_single);
 
                 const clerkCost = (clerkRate / dailySessions.length) * staffCount;
                 const peonCost = (peonRate / dailySessions.length) * staffCount;
@@ -295,44 +306,56 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 });
             });
         });
-    } 
-    // --- LOGIC FOR REGULAR STREAM ---
-    else {
+    } else {
+        // REGULAR LOGIC
         sessionData.forEach(session => {
             const normalStudents = session.normalCount || 0;
             const scribeStudents = session.scribeCount || 0;
             const totalStudents = normalStudents + scribeStudents;
             
             let normalInvigs = 0;
+            const invigRatio = getNum(rates.invigilator_ratio) || 30;
+            
             if (totalStudents > 0) {
-                normalInvigs = Math.floor(totalStudents / rates.invigilator_ratio);
-                if ((totalStudents % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
+                normalInvigs = Math.floor(totalStudents / invigRatio);
+                if ((totalStudents % invigRatio) > getNum(rates.invigilator_min_fraction)) normalInvigs++;
                 if (normalInvigs === 0) normalInvigs = 1; 
             }
+            
             let scribeInvigs = 0;
-            if (scribeStudents > 0) scribeInvigs = Math.ceil(scribeStudents / rates.scribe_invigilator_ratio);
+            if (scribeStudents > 0) {
+                scribeInvigs = Math.ceil(scribeStudents / (getNum(rates.scribe_invigilator_ratio) || 1));
+            }
             
             const totalInvigs = normalInvigs + scribeInvigs;
-            const invigCost = totalInvigs * rates.invigilator;
+            const invigCost = totalInvigs * getNum(rates.invigilator); // SAFETY CHECK HERE
 
+            // Clerk
             let clerkCost = 0;
             const clerkFullBatches = Math.floor(totalStudents / 100);
             const clerkRemainder = totalStudents % 100;
-            clerkCost += clerkFullBatches * rates.clerk_full_slab;
+            const fullSlab = getNum(rates.clerk_full_slab);
+            
+            clerkCost += clerkFullBatches * fullSlab;
             if (clerkRemainder > 0) {
-                if (clerkRemainder <= 30) clerkCost += rates.clerk_slab_1;
-                else if (clerkRemainder <= 60) clerkCost += rates.clerk_slab_2;
-                else clerkCost += rates.clerk_full_slab;
+                if (clerkRemainder <= 30) clerkCost += getNum(rates.clerk_slab_1);
+                else if (clerkRemainder <= 60) clerkCost += getNum(rates.clerk_slab_2);
+                else clerkCost += fullSlab;
             }
 
-            let sweeperCost = Math.ceil(totalStudents / 100) * rates.sweeper_rate;
-            if (sweeperCost < rates.sweeper_min) sweeperCost = rates.sweeper_min;
+            // Sweeper
+            let sweeperCost = Math.ceil(totalStudents / 100) * getNum(rates.sweeper_rate);
+            if (sweeperCost < getNum(rates.sweeper_min)) sweeperCost = getNum(rates.sweeper_min);
 
-            const supervisionCost = rates.chief_supdt + rates.senior_supdt + rates.office_supdt;
+            // Supervision
+            const chiefCost = getNum(rates.chief_supdt);
+            const seniorCost = getNum(rates.senior_supdt);
+            const officeCost = getNum(rates.office_supdt);
+            const supervisionCost = chiefCost + seniorCost + officeCost;
 
-            bill.supervision_breakdown.chief.total += rates.chief_supdt;
-            bill.supervision_breakdown.senior.total += rates.senior_supdt;
-            bill.supervision_breakdown.office.total += rates.office_supdt;
+            bill.supervision_breakdown.chief.total += chiefCost;
+            bill.supervision_breakdown.senior.total += seniorCost;
+            bill.supervision_breakdown.office.total += officeCost;
 
             bill.supervision += supervisionCost;
             bill.invigilation += invigCost;
@@ -344,14 +367,14 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 total_students: totalStudents, scribe_students: scribeStudents,
                 invig_count_normal: normalInvigs, invig_count_scribe: scribeInvigs,
                 invig_cost: invigCost, clerk_cost: clerkCost, peon_cost: 0, sweeper_cost: sweeperCost,
-                cs_cost: rates.chief_supdt, sas_cost: rates.senior_supdt, os_cost: rates.office_supdt, supervision_cost: supervisionCost
+                cs_cost: chiefCost, sas_cost: seniorCost, os_cost: officeCost, supervision_cost: supervisionCost
             });
         });
     }
 
     const totalRegistered = sessionData.reduce((sum, s) => sum + (s.normalCount + s.scribeCount), 0);
-    bill.contingency = totalRegistered * rates.contingent_charge;
-    bill.data_entry = rates.data_entry_operator || 0;
+    bill.contingency = totalRegistered * getNum(rates.contingent_charge);
+    bill.data_entry = getNum(rates.data_entry_operator);
     
     bill.grand_total = bill.supervision + bill.invigilation + bill.clerical + bill.sweeping + bill.peon + bill.contingency + bill.data_entry;
     
@@ -362,5 +385,4 @@ window.initRemunerationModule = initRemunerationModule;
 window.renderRateConfigForm = renderRateConfigForm;
 window.generateBillForSessions = generateBillForSessions;
 
-// Auto-Init
 loadRates();
