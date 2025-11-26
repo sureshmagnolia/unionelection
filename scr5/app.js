@@ -10592,48 +10592,57 @@ function loadInitialData() {
         });
     }
 
-    // 5. Render Function (Updated: Handles Peon Column)
+    // 5. Render Function (Updated: Hides OS for Non-Regular Streams)
     function renderBillHTML(bill, container) {
-        const hasPeon = bill.has_peon;
+        const isRegular = bill.stream === "Regular";
+
+        // 1. Calculate Totals
+        const totalTableCost = bill.invigilation + bill.clerical + bill.sweeping + bill.supervision;
         
-        // Table Rows
+        // 2. Define Column Widths based on Stream
+        // If Regular: 9 Cols. If Other: 8 Cols (No OS, wider others)
+        const colGroup = isRegular 
+            ? `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`
+            : `<col style="width: 18%;"><col style="width: 14%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;"><col style="width: 12%;"><col style="width: 12%;">`;
+
+        // 3. Generate Rows
         const rows = bill.details.map(d => {
             let studentDetail = `${d.total_students}`;
             if (d.scribe_students > 0) {
                 studentDetail += ` <span class="text-orange-600 font-bold text-[10px]" style="white-space:nowrap;">(Incl ${d.scribe_students} Scr)</span>`;
             }
             
-            // Line Total (Include Peon)
-            const lineTotal = d.invig_cost + d.clerk_cost + d.sweeper_cost + d.peon_cost + d.supervision_cost;
+            let invigDetail = `${d.invig_count_normal}`;
+            if (d.invig_count_scribe > 0) {
+                invigDetail += ` + <span class="text-orange-600 font-bold">${d.invig_count_scribe}</span>`;
+            }
+
+            const lineTotal = d.invig_cost + d.clerk_cost + d.sweeper_cost + d.supervision_cost;
             
-            // Optional Peon Cell
-            const peonCell = hasPeon ? `<td class="p-1 border align-middle text-xs">₹${d.peon_cost}</td>` : '';
+            // Conditionally render OS Cell
+            const osCell = isRegular ? `<td class="p-1 border align-middle text-xs text-gray-700">₹${d.os_cost}</td>` : '';
 
             return `
                 <tr class="border-b hover:bg-gray-50 text-center">
                     <td class="p-1 border text-left align-middle">${d.date} <br><span class="text-[10px] text-gray-500">${d.time}</span></td>
                     <td class="p-1 border align-middle font-bold text-xs">${studentDetail}</td>
-                    <td class="p-1 border align-middle text-xs">${d.invig_count_normal + (d.invig_count_scribe||0)}<br><span class="text-gray-500 text-[10px]">(₹${d.invig_cost})</span></td>
+                    <td class="p-1 border align-middle text-xs">${invigDetail}<br><span class="text-gray-500 text-[10px]">(₹${d.invig_cost})</span></td>
                     <td class="p-1 border align-middle text-xs">₹${d.clerk_cost}</td>
-                    ${peonCell}
                     <td class="p-1 border align-middle text-xs">₹${d.sweeper_cost}</td>
                     <td class="p-1 border align-middle text-xs text-gray-700">₹${d.cs_cost}</td>
                     <td class="p-1 border align-middle text-xs text-gray-700">₹${d.sas_cost}</td>
-                    <td class="p-1 border align-middle text-xs text-gray-700">₹${d.os_cost}</td>
+                    ${osCell}
                     <td class="p-1 border align-middle text-xs font-bold bg-gray-100">₹${lineTotal}</td>
                 </tr>
             `;
         }).join('');
 
-        // Dynamic Columns
-        const peonHeader = hasPeon ? '<th class="p-1 border border-black text-center">Peon</th>' : '';
-        const peonFooter = hasPeon ? `<td class="p-2 border border-black">₹${bill.peon}</td>` : '';
-        const peonSummary = hasPeon ? `<div class="flex justify-between mb-1"><span>Total Peon:</span> <span class="font-mono font-bold">₹${bill.peon}</span></div>` : '';
-        
-        // Column Width Adjustment
-        const colGroup = hasPeon ? 
-            `<col style="width: 14%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">` :
-            `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`;
+        // 4. Generate Headers & Footers (Conditional OS)
+        const osHeader = isRegular ? `<th class="p-1 border border-black text-center">OS</th>` : '';
+        const osFooter = isRegular ? `<td class="p-2 border border-black">₹${bill.supervision_breakdown.office.total}</td>` : '';
+        const osSummaryLine = isRegular 
+            ? `<div class="flex justify-between mb-1"><span>Office Supdt (${bill.supervision_breakdown.office.count} x ${bill.supervision_breakdown.office.rate}):</span> <span class="font-mono font-bold">₹${bill.supervision_breakdown.office.total}</span></div>` 
+            : '';
 
         const html = `
             <div class="bg-white border-2 border-gray-800 shadow-xl p-8 print-page mb-8 relative">
@@ -10652,11 +10661,10 @@ function loadInitialData() {
                             <th class="p-1 border border-black text-center">Candidates</th>
                             <th class="p-1 border border-black text-center">Invig</th>
                             <th class="p-1 border border-black text-center">Clerk</th>
-                            ${peonHeader}
                             <th class="p-1 border border-black text-center">Swpr</th>
                             <th class="p-1 border border-black text-center">CS</th>
                             <th class="p-1 border border-black text-center">SAS</th>
-                            <th class="p-1 border border-black text-center">OS</th>
+                            ${osHeader}
                             <th class="p-1 border border-black text-center font-bold">Total</th>
                         </tr>
                     </thead>
@@ -10666,29 +10674,37 @@ function loadInitialData() {
                             <td colspan="2" class="p-2 border border-black text-right">Subtotals:</td>
                             <td class="p-2 border border-black">₹${bill.invigilation}</td>
                             <td class="p-2 border border-black">₹${bill.clerical}</td>
-                            ${peonFooter}
                             <td class="p-2 border border-black">₹${bill.sweeping}</td>
                             <td class="p-2 border border-black">₹${bill.supervision_breakdown.chief.total}</td>
                             <td class="p-2 border border-black">₹${bill.supervision_breakdown.senior.total}</td>
-                            <td class="p-2 border border-black">₹${bill.supervision_breakdown.office.total}</td>
-                            <td class="p-2 border border-black text-lg">₹${bill.grand_total - bill.contingency - bill.data_entry}</td> 
+                            ${osFooter}
+                            <td class="p-2 border border-black text-lg">₹${totalTableCost}</td>
                         </tr>
                     </tfoot>
                 </table>
 
                 <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid">
+                    
                     <div class="bg-gray-50 p-3 rounded border border-gray-200 print:border-0 print:bg-transparent print:p-0">
-                        <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Consolidated Charges</div>
-                        <div class="flex justify-between mb-1"><span>Total Supervision:</span> <span class="font-mono font-bold">₹${bill.supervision}</span></div>
-                        <div class="flex justify-between mb-1"><span>Total Invigilation:</span> <span class="font-mono font-bold">₹${bill.invigilation}</span></div>
-                        <div class="flex justify-between mb-1"><span>Total Clerk:</span> <span class="font-mono font-bold">₹${bill.clerical}</span></div>
-                        ${peonSummary}
-                        <div class="flex justify-between mb-1"><span>Total Sweeper:</span> <span class="font-mono font-bold">₹${bill.sweeping}</span></div>
+                        <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Supervision Charges</div>
+                        <div class="flex justify-between mb-1">
+                            <span>Chief Supdt (${bill.supervision_breakdown.chief.count} x ${bill.supervision_breakdown.chief.rate}):</span>
+                            <span class="font-mono font-bold">₹${bill.supervision_breakdown.chief.total}</span>
+                        </div>
+                        <div class="flex justify-between mb-1">
+                            <span>Senior Asst Supdt (${bill.supervision_breakdown.senior.count} x ${bill.supervision_breakdown.senior.rate}):</span>
+                            <span class="font-mono font-bold">₹${bill.supervision_breakdown.senior.total}</span>
+                        </div>
+                        ${osSummaryLine}
+                        <div class="flex justify-between border-t border-gray-300 pt-1 mt-1 font-bold text-blue-800">
+                            <span>Total Supervision:</span>
+                            <span class="font-mono">₹${bill.supervision}</span>
+                        </div>
                     </div>
 
                     <div class="space-y-2">
                         <div class="flex justify-between border-b border-dotted pb-1 font-bold text-gray-700">2. Other Allowances</div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>Contingency (@ ${bill.stream === 'Other' ? '2.00' : '0.40'}):</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1"><span>Contingency (@ ${allRates[bill.stream].contingent_charge}/student):</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>Accountant:</span> <span class="font-mono font-bold">₹${allRates[bill.stream].accountant}</span></div>
                     </div>
@@ -10705,6 +10721,7 @@ function loadInitialData() {
                 </div>
             </div>
         `;
+        
         container.insertAdjacentHTML('beforeend', html);
     }
     
