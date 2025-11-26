@@ -4648,8 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Final Ergonomic Tweaks) ---
-// --- Event listener for "Generate QP Distribution Report" (Fixed Layout) ---
+// --- Event listener for "Generate QP Distribution Report" (Strict Single-Line) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4785,29 +4784,29 @@ if (generateQpDistributionReportButton) {
                                 const roomInfo = currentRoomConfig[roomName] || {};
                                 let loc = roomInfo.location || "";
                                 
-                                // Truncate Location
+                                // Truncate Location Logic
+                                // Reduced length threshold since it's now sharing horizontal space
                                 if (loc.length > 8) loc = loc.substring(0, 6) + "..";
-                                const displayLoc = loc ? `<span class='text-[10px] font-bold ml-1 text-gray-700'>(${loc})</span>` : "";
+                                const displayLoc = loc ? `(${loc})` : "";
                                 const serialNo = roomSerialMap[roomName] || '-';
                                 
-                                // --- UPDATED BOX CONTENT ---
+                                // --- STRICT SINGLE-LINE BOX LAYOUT ---
                                 html += `
-                                    <div class="border border-gray-400 rounded p-1 bg-white h-[42px] flex items-center justify-between relative shadow-sm px-2">
+                                    <div class="border border-gray-400 rounded px-1.5 py-0.5 bg-white h-[34px] flex items-center justify-between relative shadow-sm">
                                         
-                                        <div class="flex flex-col justify-center h-full w-full">
-                                            <div class="flex items-baseline justify-between w-full">
-                                                <div class="flex items-baseline">
-                                                    <span class="text-xl font-black text-black leading-none mr-0.5">${count}</span>
-                                                    <span class="text-[9px] font-bold text-gray-500">Nos</span>
-                                                </div>
-                                                
-                                                <span class="w-4 h-4 border-2 border-black bg-white rounded-sm shrink-0"></span>
-                                            </div>
+                                        <div class="flex items-baseline overflow-hidden w-full">
+                                            <span class="text-lg font-black text-black leading-none mr-0.5">${count}</span>
+                                            <span class="text-[9px] font-bold text-gray-500 mr-1.5">Nos</span>
                                             
-                                            <div class="text-sm font-black text-black leading-none mt-0.5 whitespace-nowrap overflow-hidden">
-                                                Room #${serialNo} ${displayLoc}
+                                            <span class="text-gray-300 mr-1.5 text-xs">|</span>
+
+                                            <div class="flex items-baseline min-w-0 truncate">
+                                                <span class="text-sm font-black text-black leading-none whitespace-nowrap mr-1">Room #${serialNo}</span>
+                                                <span class="text-[9px] font-bold text-gray-500 truncate">${displayLoc}</span>
                                             </div>
                                         </div>
+                                        
+                                        <span class="w-3.5 h-3.5 border-2 border-black bg-white rounded-sm shrink-0 ml-1"></span>
                                     </div>
                                 `;
                             });
@@ -4832,7 +4831,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Fixed Syntax).`;
+            reportStatus.textContent = `Generated QP Distribution Report (1-Line Layout).`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
