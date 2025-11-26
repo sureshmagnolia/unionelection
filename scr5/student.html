@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exam Seating Status</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+    </style>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -23,6 +29,10 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
+        // --- CRITICAL FIX: EXPOSE FIREBASE TO WINDOW FOR DEBUGGING ---
+        window.firebase = { db, doc, getDoc }; 
+        // -------------------------------------------------------------
+
         // --- 2. GET COLLEGE ID FROM URL ---
         const urlParams = new URLSearchParams(window.location.search);
         const collegeId = urlParams.get('id');
@@ -30,7 +40,7 @@
         let allAllotments = {};
         let collegeName = "Exam Centre";
 
-       // --- 3. FETCH DATA (SECURE) ---
+        // --- 3. FETCH DATA (SECURE MODE) ---
         async function loadData() {
             const statusEl = document.getElementById('status');
             if (!collegeId) {
@@ -41,7 +51,7 @@
             statusEl.textContent = "Loading Exam Data...";
             
             try {
-                // CHANGED: Now pointing to 'public_seating' collection
+                // Connect to PUBLIC collection
                 const docRef = doc(db, "public_seating", collegeId);
                 const docSnap = await getDoc(docRef);
 
@@ -50,29 +60,30 @@
                     collegeName = data.collegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
                     
-                    // CHANGED: Reading 'seatingData' field
+                    // Get Seating Data
                     const allotmentJson = data.seatingData;
                     
                     if (allotmentJson) {
                         allAllotments = JSON.parse(allotmentJson);
-                        statusEl.textContent = "";
+                        statusEl.textContent = ""; // Clear loading text
                         document.getElementById('search-section').classList.remove('hidden');
 
-                        // Auto-Fill
+                        // --- AUTO-FILL & SEARCH ---
                         const savedRegNo = localStorage.getItem('myExamRegNo');
                         if (savedRegNo) {
                             document.getElementById('reg-input').value = savedRegNo;
+                            // Small delay for UI smoothness
                             setTimeout(() => window.searchStudent(), 300); 
                         }
                     } else {
                         statusEl.textContent = "No seating data available yet.";
                     }
                 } else {
-                    statusEl.textContent = "Seating data not found.";
+                    statusEl.textContent = "Seating data not found. (Check Link ID)";
                 }
             } catch (error) {
-                console.error(error);
-                statusEl.textContent = "Connection failed. Please try again.";
+                console.error("Load Error:", error);
+                statusEl.textContent = "Connection failed. Please refresh.";
             }
         }
 
@@ -95,9 +106,9 @@
             for (const [sessionKey, rooms] of Object.entries(allAllotments)) {
                 const [dateStr, timeStr] = sessionKey.split(' | ');
                 
-                // Check if student is in any room for this session
                 let studentRoom = null;
                 
+                // Find student in rooms
                 for (const room of rooms) {
                     if (room.students.includes(regNo)) {
                         studentRoom = room.roomName;
@@ -108,17 +119,15 @@
                 if (studentRoom) {
                     found = true;
                     
-                    // --- NEW: SAVE TO LOCAL STORAGE ---
+                    // Save for next time
                     localStorage.setItem('myExamRegNo', regNo);
-                    // ----------------------------------
 
-                    // A. Parse Exam Time
+                    // Parse Exam Time
                     const examTime = parseSessionTime(dateStr, timeStr);
-                    
-                    // B. Calculate Unlock Time (45 mins before)
+                    // Calculate Unlock Time (45 mins before)
                     const unlockTime = new Date(examTime.getTime() - (45 * 60 * 1000));
                     
-                    // C. Create Card
+                    // Create Card
                     const card = document.createElement('div');
                     card.className = "bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-4 animate-fade-in";
                     
@@ -129,9 +138,9 @@
                         </div>
                     `;
 
-                    // D. Logic: Show or Hide
+                    // Show/Hide Logic
                     if (now >= unlockTime) {
-                        // SHOW INFO
+                        // UNLOCKED
                         content += `
                             <div class="text-center py-4">
                                 <p class="text-sm text-gray-500 uppercase tracking-wide">Your Seat is in</p>
@@ -140,7 +149,7 @@
                             </div>
                         `;
                     } else {
-                        // SHOW COUNTDOWN
+                        // LOCKED (Countdown)
                         const diffMs = unlockTime - now;
                         const diffMins = Math.ceil(diffMs / (1000 * 60));
                         let timeDisplay = `${diffMins} mins`;
@@ -149,7 +158,7 @@
                             const hours = Math.ceil(diffMins / 60);
                             timeDisplay = `${hours} hours`;
                         }
-                        if (diffMins > 1440) { // > 24 hours
+                        if (diffMins > 1440) { 
                              const days = Math.ceil(diffMins / 1440);
                              timeDisplay = `${days} days`;
                         }
@@ -174,7 +183,6 @@
             if (!found) {
                 resultContainer.innerHTML = `<div class="text-center text-gray-500 mt-4">No exams found for <strong>${regNo}</strong></div>`;
             } else {
-                // Add a "Clear" button if data is found, to allow searching for another student
                 const clearBtn = document.createElement('div');
                 clearBtn.innerHTML = `<button onclick="clearSavedData()" class="text-xs text-gray-400 underline mt-4">Not you? Clear & Search</button>`;
                 clearBtn.className = "text-center";
@@ -182,7 +190,6 @@
             }
         };
 
-        // New Helper: Clear Saved Data
         window.clearSavedData = function() {
             localStorage.removeItem('myExamRegNo');
             document.getElementById('reg-input').value = '';
@@ -190,32 +197,20 @@
             document.getElementById('reg-input').focus();
         };
 
-        // Helper: Parse Date/Time string to JS Date Object
         function parseSessionTime(dateStr, timeStr) {
-            // dateStr: DD.MM.YYYY
-            // timeStr: HH:MM AM/PM
             const [d, m, y] = dateStr.split('.');
-            
             let [time, modifier] = timeStr.split(' ');
             let [hours, minutes] = time.split(':');
-            
             if (hours === '12') hours = '00';
             if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
-            
             return new Date(y, m - 1, d, hours, minutes);
         }
 
-        // Start
         loadData();
 
     </script>
-    <style>
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
-    </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
-
     <div class="w-full max-w-md">
         <div class="text-center mb-8 mt-4">
             <h1 class="text-xl font-bold text-gray-800" id="college-name">Exam Centre</h1>
@@ -240,6 +235,5 @@
         
         <p class="text-center text-xs text-gray-400 mt-10">Powered by ExamFlow</p>
     </div>
-
 </body>
 </html>
