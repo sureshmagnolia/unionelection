@@ -750,11 +750,23 @@ async function syncDataToCloud() {
         const allotmentData = localStorage.getItem('examRoomAllotment') || '{}';
         const roomConfigData = localStorage.getItem('examRoomConfig') || '{}'; // <--- NEW
         const collegeName = localStorage.getItem('examCollegeName') || "Exam Centre";
-        
+        const baseDataStr = localStorage.getItem('examBaseData');
+        let nameMap = {};
+        if (baseDataStr) {
+             try {
+                 const baseData = JSON.parse(baseDataStr);
+                 baseData.forEach(s => {
+                     if (s['Register Number']) {
+                         nameMap[s['Register Number']] = s.Name;
+                     }
+                 });
+             } catch (e) { console.error("Error parsing base data for public sync", e); }
+        }
         batch.set(publicRef, {
             collegeName: collegeName,
             seatingData: allotmentData,
             roomData: roomConfigData, // <--- Sending Location Info
+            studentNames: JSON.stringify(nameMap), // <--- SENDING NAMES
             lastUpdated: new Date().toISOString()
         });
         // -------------------------------
