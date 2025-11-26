@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Boxed Room Layout) ---
+// --- Event listener for "Generate QP Distribution Report" (Compact 2-Line Boxes) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4721,11 +4721,11 @@ if (generateQpDistributionReportButton) {
                 const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
 
                 allPagesHtml += `
-                    <div class="print-page" style="padding: 8mm !important;">
-                        <div class="print-header-group text-center mb-4 border-b-2 border-black pb-2">
-                            <h1 class="text-xl font-bold uppercase">${currentCollegeName}</h1>
-                            <h2 class="text-lg font-semibold">QP Distribution Summary</h2>
-                            <h3 class="text-md">${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
+                    <div class="print-page" style="padding: 5mm !important;">
+                        <div class="print-header-group text-center mb-3 border-b-2 border-black pb-1">
+                            <h1 class="text-lg font-bold uppercase leading-tight">${currentCollegeName}</h1>
+                            <h2 class="text-base font-semibold">QP Distribution Summary</h2>
+                            <h3 class="text-sm">${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
                         </div>
                 `;
                 
@@ -4743,28 +4743,28 @@ if (generateQpDistributionReportButton) {
 
                 for (const paper of paperArray) {
                     const qpBadge = paper.qpCode !== 'N/A' 
-                        ? `<span class="bg-gray-200 px-2 rounded text-sm font-bold border border-gray-400">${paper.qpCode}</span>` 
-                        : `<span class="text-gray-400 text-xs italic">(QP Not Entered)</span>`;
+                        ? `<span class="bg-gray-800 text-white px-1.5 rounded text-xs font-bold border border-black">${paper.qpCode}</span>` 
+                        : `<span class="text-gray-400 text-[10px] italic">(QP Missing)</span>`;
                     
                     const streamBadgeClass = paper.stream === "Regular" ? "text-blue-800 bg-blue-50" : "text-purple-800 bg-purple-50";
-                    const streamBadge = `<span class="${streamBadgeClass} px-1.5 rounded border border-gray-200 text-[10px] font-bold uppercase">${paper.stream}</span>`;
+                    const streamBadge = `<span class="${streamBadgeClass} px-1 rounded border border-gray-200 text-[9px] font-bold uppercase">${paper.stream}</span>`;
 
                     allPagesHtml += `
-                        <div style="margin-top: 10px; border: 2px solid #000; padding: 8px; page-break-inside: avoid; border-radius: 4px;">
-                            <div class="flex justify-between items-start border-b border-gray-300 pb-2 mb-3">
-                                <div class="w-[85%]">
-                                    <div class="font-bold text-sm leading-tight text-gray-900 mb-1">${paper.courseName}</div>
+                        <div style="margin-top: 8px; border: 1px solid #000; padding: 4px; page-break-inside: avoid;">
+                            <div class="flex justify-between items-start border-b border-dotted border-gray-300 pb-1 mb-1.5">
+                                <div class="w-[90%]">
+                                    <div class="font-bold text-xs leading-tight text-gray-900 mb-0.5">${paper.courseName}</div>
                                     <div class="flex items-center gap-2">
                                         ${streamBadge}
-                                        <span class="text-xs font-semibold text-gray-600">QP: ${qpBadge}</span>
+                                        <span class="text-[10px] font-semibold text-gray-600">QP: ${qpBadge}</span>
                                     </div>
                                 </div>
-                                <div class="w-[15%] text-right">
-                                    <span class="text-sm font-black border border-black px-2 py-1 bg-gray-100 block text-center">Total: ${paper.total}</span>
+                                <div class="w-[10%] text-right">
+                                    <span class="text-xs font-black border border-black px-1.5 py-0.5 bg-gray-200 block text-center">${paper.total}</span>
                                 </div>
                             </div>
                             
-                            <div class="grid grid-cols-3 gap-3">
+                            <div class="grid grid-cols-4 gap-2">
                     `;
                     
                     const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
@@ -4778,26 +4778,23 @@ if (generateQpDistributionReportButton) {
                         const roomInfo = currentRoomConfig[roomName] || {};
                         let loc = roomInfo.location || "";
                         
-                        if (loc.length > 15) loc = loc.substring(0, 13) + "..";
-                        const displayLoc = loc ? `<div class='text-gray-500 text-[10px] truncate'>${loc}</div>` : "";
+                        if (loc.length > 8) loc = loc.substring(0, 7) + "..";
+                        const displayLoc = loc ? `<span class='text-gray-500 text-[9px] font-normal'>(${loc})</span>` : "";
                         const serialNo = roomSerialMap[roomName] || '-';
                         
-                        // --- NEW BOX DESIGN ---
+                        // --- ULTRA COMPACT 2-LINE BOX ---
                         allPagesHtml += `
-                            <div class="border border-gray-600 rounded p-2 flex flex-col justify-between relative bg-white">
-                                <div class="mb-1">
-                                   <div class="flex items-center gap-2 mb-1">
-                                       <span class="bg-black text-white font-bold text-[10px] px-1.5 py-0.5 rounded leading-none">#${serialNo}</span>
-                                       <span class="font-bold text-sm leading-none text-gray-800">${roomName}</span>
-                                   </div>
-                                   ${displayLoc}
+                            <div class="border border-gray-400 rounded p-1 flex flex-col justify-between bg-white h-[34px]">
+                                <div class="truncate text-[9px] leading-none mb-0.5">
+                                    <strong class="text-black">${roomName}</strong> ${displayLoc}
                                 </div>
                                 
-                                <div class="flex items-end justify-between mt-1 pt-1 border-t border-gray-100">
-                                    <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Count:</span>
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-xl font-black text-black leading-none">${count}</span>
-                                        <span class="w-5 h-5 border-2 border-black bg-white rounded-sm"></span>
+                                <div class="flex items-end justify-between leading-none">
+                                    <span class="bg-black text-white font-bold text-[10px] px-1 rounded-sm leading-tight">#${serialNo}</span>
+                                    
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-lg font-black text-black leading-none">${count}</span>
+                                        <span class="w-3.5 h-3.5 border border-black bg-white rounded-sm"></span>
                                     </div>
                                 </div>
                             </div>
@@ -4813,7 +4810,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Boxed Layout).`;
+            reportStatus.textContent = `Generated QP Distribution Report (Compact Mode).`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
