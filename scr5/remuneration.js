@@ -10,39 +10,27 @@ const DEFAULT_RATES = {
         // Support
         clerk_full_slab: 113, clerk_slab_1: 38, clerk_slab_2: 75,
         sweeper_rate: 25, sweeper_min: 35,
-        peon_rate: 0, // Not applicable
+        peon_rate: 0, 
         // Fixed
         data_entry_operator: 890, accountant: 1000, contingent_charge: 0.40,
         // Flags
         has_peon: false, has_double_session_rates: false
     },
     "Other": {
-        // SDE / Private Registration Rates (Daily Rates)
-        
-        // Supervision (Single / Double)
+        // SDE Rates
         chief_supdt_single: 500, chief_supdt_double: 800,
         senior_supdt_single: 400, senior_supdt_double: 700,
-        office_supdt: 0, // Not applicable in SDE order
+        office_supdt: 0, 
 
-        // Execution
-        invigilator: 350, // Per Session
+        invigilator: 350, 
         invigilator_ratio: 30, invigilator_min_fraction: 5, scribe_invigilator_ratio: 1,
 
-        // Support (Single / Double)
         clerk_single: 300, clerk_double: 500, clerk_ratio: 500,
         peon_single: 250, peon_double: 400, peon_ratio: 500,
-        sweeper_single: 225, sweeper_double: 350, sweeper_ratio: 100, // Assuming standard ratio if not specified, usually 1 per 100? Order says "Same sweeper posted". Let's stick to fixed cost per session logic or per student? 
-        // Order says: "Sweeper 225/350". It implies 1 sweeper per center usually, or scaled. 
-        // Let's assume 1 per 500 like Clerk for now based on "Same Clerk, Peon and Sweeper" context, OR standard 100. 
-        // *Correction*: Order implies flat rate "225 for single session". Let's assume 1 per 100 candidates to be safe, or 1 per session if count not specified. 
-        // Let's use 1 per 100 as safe default for Sweeper in SDE.
+        sweeper_single: 225, sweeper_double: 350, sweeper_ratio: 100,
 
-        // Fixed
-        data_entry_operator: 0, // Not in SDE order
-        accountant: 0, 
-        contingent_charge: 2.00, // Per Candidate Per Session
+        data_entry_operator: 0, accountant: 0, contingent_charge: 2.00,
 
-        // Flags
         has_peon: true, has_double_session_rates: true
     }
 };
@@ -61,7 +49,6 @@ function loadRates() {
     const saved = localStorage.getItem(REMUNERATION_CONFIG_KEY);
     if (saved) {
         allRates = JSON.parse(saved);
-        // Patch for new "Other" keys if missing
         if (!allRates["Other"] || !allRates["Other"].chief_supdt_double) {
             allRates["Other"] = JSON.parse(JSON.stringify(DEFAULT_RATES["Other"]));
         }
@@ -83,7 +70,6 @@ function renderRateConfigForm() {
     const bgClass = isRatesLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-900 border-blue-400 ring-1 ring-blue-200';
 
     if (currentStream === "Regular") {
-        // --- REGULAR FORM (Existing) ---
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div class="space-y-3">
@@ -112,7 +98,6 @@ function renderRateConfigForm() {
             </div>
         `;
     } else {
-        // --- OTHER / SDE FORM (New Structure) ---
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div class="space-y-3">
@@ -207,7 +192,6 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
 
     // --- LOGIC FOR OTHER (SDE) STREAMS ---
     if (streamType !== "Regular") {
-        // 1. Group by Date to check for Double Sessions
         const sessionsByDate = {};
         sessionData.forEach(s => {
             const dateKey = s.date;
@@ -220,13 +204,11 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             const isDouble = dailySessions.length > 1;
             
             dailySessions.forEach(session => {
-                const count = session.normalCount + session.scribeCount; // Total Candidates
+                const count = session.normalCount + session.scribeCount;
                 
-                // A. Supervision (Chief & Senior) - Split Daily Rate
+                // A. Supervision (Daily Rate Split)
                 const chiefRate = isDouble ? rates.chief_supdt_double : rates.chief_supdt_single;
                 const seniorRate = isDouble ? rates.senior_supdt_double : rates.senior_supdt_single;
-                
-                // Assign cost per session (e.g. 800/2 = 400)
                 const chiefCost = chiefRate / dailySessions.length;
                 const seniorCost = seniorRate / dailySessions.length;
                 
@@ -234,21 +216,24 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 bill.supervision_breakdown.senior.total += seniorCost;
                 const supTotal = chiefCost + seniorCost;
 
-                // B. Invigilators (1 per 30, Min 1)
-                // Note: SDE rule says 1 per 30 (fraction > 5). Same as Reg.
-                let invigs = 0;
+                // B. Invigilators (Updated: Correctly Split Normal vs Scribe)
+                let normalInvigs = 0;
                 if (count > 0) {
-                    invigs = Math.floor(count / rates.invigilator_ratio);
-                    if ((count % rates.invigilator_ratio) > rates.invigilator_min_fraction) invigs++;
-                    if (invigs === 0) invigs = 1;
+                    normalInvigs = Math.floor(count / rates.invigilator_ratio);
+                    if ((count % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
+                    if (normalInvigs === 0) normalInvigs = 1;
                 }
-                // Scribe Extra
-                if (session.scribeCount > 0) invigs += Math.ceil(session.scribeCount / rates.scribe_invigilator_ratio);
-                const invigCost = invigs * rates.invigilator;
+                
+                let scribeInvigs = 0;
+                if (session.scribeCount > 0) {
+                    scribeInvigs = Math.ceil(session.scribeCount / rates.scribe_invigilator_ratio);
+                }
+                
+                const totalInvigs = normalInvigs + scribeInvigs;
+                const invigCost = totalInvigs * rates.invigilator;
 
-                // C. Support Staff (Clerk, Peon, Sweeper) - Split Daily Rate
-                // Rule: 1 per 500 students. 
-                const staffCount = Math.ceil(count / rates.clerk_ratio); // 1 for 1-500, 2 for 501-1000
+                // C. Support Staff (Daily Rate Split)
+                const staffCount = Math.ceil(count / rates.clerk_ratio);
                 
                 const clerkRate = isDouble ? rates.clerk_double : rates.clerk_single;
                 const peonRate = isDouble ? rates.peon_double : rates.peon_single;
@@ -256,7 +241,7 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
 
                 const clerkCost = (clerkRate / dailySessions.length) * staffCount;
                 const peonCost = (peonRate / dailySessions.length) * staffCount;
-                const sweeperCost = (sweeperRate / dailySessions.length) * staffCount; // Assuming sweeper follows same count logic for simplicity or use 1 fixed
+                const sweeperCost = (sweeperRate / dailySessions.length) * staffCount;
 
                 bill.supervision += supTotal;
                 bill.invigilation += invigCost;
@@ -269,27 +254,28 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                     time: session.time,
                     total_students: count,
                     scribe_students: session.scribeCount,
-                    invig_count: invigs,
+                    // FIX: Explicitly set these for the UI
+                    invig_count_normal: normalInvigs,
+                    invig_count_scribe: scribeInvigs,
                     invig_cost: invigCost,
                     clerk_cost: clerkCost,
                     peon_cost: peonCost,
                     sweeper_cost: sweeperCost,
                     cs_cost: chiefCost,
                     sas_cost: seniorCost,
-                    os_cost: 0, // No OS in SDE
+                    os_cost: 0,
                     supervision_cost: supTotal
                 });
             });
         });
     } 
-    // --- LOGIC FOR REGULAR STREAM (Existing) ---
+    // --- LOGIC FOR REGULAR STREAM ---
     else {
         sessionData.forEach(session => {
             const normalStudents = session.normalCount || 0;
             const scribeStudents = session.scribeCount || 0;
             const totalStudents = normalStudents + scribeStudents;
             
-            // Invigilation
             let normalInvigs = 0;
             if (totalStudents > 0) {
                 normalInvigs = Math.floor(totalStudents / rates.invigilator_ratio);
@@ -302,7 +288,6 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             const totalInvigs = normalInvigs + scribeInvigs;
             const invigCost = totalInvigs * rates.invigilator;
 
-            // Clerk (Sliding Scale)
             let clerkCost = 0;
             const clerkFullBatches = Math.floor(totalStudents / 100);
             const clerkRemainder = totalStudents % 100;
@@ -313,11 +298,9 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 else clerkCost += rates.clerk_full_slab;
             }
 
-            // Sweeper
             let sweeperCost = Math.ceil(totalStudents / 100) * rates.sweeper_rate;
             if (sweeperCost < rates.sweeper_min) sweeperCost = rates.sweeper_min;
 
-            // Supervision
             const supervisionCost = rates.chief_supdt + rates.senior_supdt + rates.office_supdt;
 
             bill.supervision_breakdown.chief.total += rates.chief_supdt;
@@ -348,19 +331,9 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         });
     }
 
-    // Contingency & Fixed
     const totalRegistered = sessionData.reduce((sum, s) => sum + (s.normalCount + s.scribeCount), 0);
-    // SDE Contingency is calculated PER SESSION PER STUDENT, Regular is ONE TIME PER STUDENT
-    // NOTE: For SDE, calculating "2.00 per candidate per session" means:
-    // SUM(session_students * 2.00).
-    // The `sessionData` loop is the perfect place, but we can do it here if we assume `totalRegistered` is actually `Sum of Session Candidates`.
-    // In your app.js `billGroups` logic, you sum up attendance per session.
-    // So `totalRegistered` here represents (Students in Session 1 + Students in Session 2...), which is exactly what SDE wants (Candidates * Sessions).
-    // For Regular, it might be slightly off if it's strictly "Per Registered Student" regardless of sessions, but usually it's per appearance.
-    // Let's stick to the rate multiplication.
-    
     bill.contingency = totalRegistered * rates.contingent_charge;
-    bill.data_entry = rates.data_entry_operator || 0; // 0 for SDE
+    bill.data_entry = rates.data_entry_operator || 0;
     
     bill.grand_total = bill.supervision + bill.invigilation + bill.clerical + bill.sweeping + bill.peon + bill.contingency + bill.data_entry;
     
