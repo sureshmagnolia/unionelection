@@ -744,16 +744,17 @@ async function syncDataToCloud() {
             batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
         });
         
-        // --- NEW: SECURE PUBLIC SYNC (Robust Name Mapping) ---
+       // --- NEW: SECURE PUBLIC SYNC (Names + Courses + Location) ---
         const publicRef = doc(db, "public_seating", currentCollegeId);
         
         const allotmentData = localStorage.getItem('examRoomAllotment') || '{}';
         const roomConfigData = localStorage.getItem('examRoomConfig') || '{}';
         const collegeName = localStorage.getItem('examCollegeName') || "Exam Centre";
 
-        // 1. Generate Name Map (Normalized Keys)
+        // 1. Generate Name & Course Maps
         const baseDataStr = localStorage.getItem('examBaseData');
         let nameMap = {};
+        let courseMap = {}; // <--- New Map for Courses
         
         if (baseDataStr) {
              try {
@@ -761,9 +762,12 @@ async function syncDataToCloud() {
                  baseData.forEach(s => {
                      const r = s['Register Number'];
                      const n = s.Name;
-                     if (r && n) {
-                         // Force Uppercase & Trim to ensure matching
-                         nameMap[r.toString().trim().toUpperCase()] = n.toString().trim();
+                     const c = s.Course;
+                     
+                     if (r) {
+                         const cleanReg = r.toString().trim().toUpperCase();
+                         if (n) nameMap[cleanReg] = n.toString().trim();
+                         if (c) courseMap[cleanReg] = c.toString().trim(); // <--- Store Course
                      }
                  });
              } catch (e) { console.error("Error parsing base data for public sync", e); }
@@ -773,7 +777,8 @@ async function syncDataToCloud() {
             collegeName: collegeName,
             seatingData: allotmentData,
             roomData: roomConfigData,
-            studentNames: JSON.stringify(nameMap), // <--- Sending Normalized Names
+            studentNames: JSON.stringify(nameMap),
+            studentCourses: JSON.stringify(courseMap), // <--- Sending Courses
             lastUpdated: new Date().toISOString()
         });
         // -------------------------------
