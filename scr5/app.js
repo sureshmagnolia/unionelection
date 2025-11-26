@@ -9903,7 +9903,7 @@ window.handlePythonExtraction = function(jsonString) {
         });
     }
 
-// Populate Dropdowns (Updated to include Remuneration tabs)
+// Populate Dropdowns (Fixed: Variable Name Typo)
     function populateStreamDropdowns() {
         const streamsToRender = (currentStreamConfig && currentStreamConfig.length > 0) 
                                 ? currentStreamConfig 
@@ -9911,20 +9911,27 @@ window.handlePythonExtraction = function(jsonString) {
 
         const optionsHtml = streamsToRender.map(s => `<option value="${s}">${s}</option>`).join('');
         
+        // Logic: Only show dropdown wrappers if more than 1 stream exists
         const shouldShow = streamsToRender.length > 1;
 
         // 1. CSV Dropdown
         if (csvStreamSelect) {
             csvStreamSelect.innerHTML = optionsHtml;
             const wrapper = document.getElementById('csv-stream-wrapper');
-            if (wrapper) shouldShow ? wrapper.classList.remove('hidden') : wrapper.classList.add('hidden');
+            if (wrapper) {
+                if (shouldShow) wrapper.classList.remove('hidden');
+                else wrapper.classList.add('hidden');
+            }
         }
 
         // 2. PDF Dropdown
         if (pdfStreamSelect) {
             pdfStreamSelect.innerHTML = optionsHtml;
             const wrapper = document.getElementById('pdf-stream-wrapper');
-            if (wrapper) shouldShow ? wrapper.classList.remove('hidden') : wrapper.classList.add('hidden');
+            if (wrapper) {
+                if (shouldShow) wrapper.classList.remove('hidden');
+                else wrapper.classList.add('hidden');
+            }
         }
         
         // 3. Report Filter
@@ -9932,21 +9939,29 @@ window.handlePythonExtraction = function(jsonString) {
         const reportWrapper = document.getElementById('reports-stream-dropdown-container');
         if (reportStreamSelect) {
              reportStreamSelect.innerHTML = `<option value="all">All Streams (Combined)</option>` + optionsHtml;
-             if (reportWrapper) shouldShow ? wrapper.classList.remove('hidden') : wrapper.classList.add('hidden');
+             if (reportWrapper) {
+                 // FIX: Changed 'wrapper' to 'reportWrapper'
+                 if (shouldShow) reportWrapper.classList.remove('hidden');
+                 else reportWrapper.classList.add('hidden');
+             }
         }
 
-        // 4. Remuneration: Bill Stream Select (NEW)
+        // 4. Remuneration: Bill Stream Select
         const billStreamSelect = document.getElementById('bill-stream-select');
         if (billStreamSelect) {
             billStreamSelect.innerHTML = optionsHtml;
         }
 
-        // 5. Remuneration: Rate Card Selector (NEW)
+        // 5. Remuneration: Rate Card Selector
         const rateStreamSelect = document.getElementById('rate-stream-selector');
         if (rateStreamSelect) {
             rateStreamSelect.innerHTML = optionsHtml;
         }
     }
+    
+    // Expose globally
+    window.populateRemunerationDropdowns = populateStreamDropdowns;
+    
     
     // Also expose this function globally if needed by remuneration.js init
     window.populateRemunerationDropdowns = populateStreamDropdowns;
