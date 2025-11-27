@@ -287,6 +287,24 @@
             </div>
         </div>
     </div>
+<div id="inconvenience-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4 transition-all transform scale-100">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <div>
+                    <h3 class="text-lg font-bold text-red-700">Inconvenience Requests</h3>
+                    <p class="text-xs text-gray-500" id="inconvenience-modal-subtitle">Session Details</p>
+                </div>
+                <button onclick="closeModal('inconvenience-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div id="inconvenience-list" class="space-y-3 max-h-96 overflow-y-auto custom-scroll">
+                </div>
+
+            <div class="mt-4 text-right border-t pt-3">
+                <button onclick="closeModal('inconvenience-modal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200 transition">Close</button>
+            </div>
+        </div>
+    </div>
     <script type="module" src="invigilation.js"></script>
 </body>
 </html>
