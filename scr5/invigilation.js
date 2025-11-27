@@ -20,6 +20,7 @@ let invigilationSlots = {};
 let designationsConfig = {};
 let rolesConfig = {};
 let currentCalDate = new Date(); // For Staff Calendar
+let isAdmin = false; // <--- NEW: Track Admin Status
 
 // --- DOM ELEMENTS ---
 const views = { login: document.getElementById('view-login'), admin: document.getElementById('view-admin'), staff: document.getElementById('view-staff') };
@@ -28,6 +29,7 @@ const ui = {
     userName: document.getElementById('user-name'), userRole: document.getElementById('user-role'),
     staffTableBody: document.getElementById('staff-table-body'),
     adminSlotsGrid: document.getElementById('admin-slots-grid'),
+    staffSlotsGrid: document.getElementById('staff-slots-grid'),
     calGrid: document.getElementById('calendar-grid'),
     calTitle: document.getElementById('cal-month-title')
 };
@@ -39,6 +41,7 @@ onAuthStateChanged(auth, async (user) => {
         await handleLogin(user);
     } else {
         currentUser = null;
+        isAdmin = false;
         showView('login');
         document.getElementById('auth-section').classList.add('hidden');
     }
@@ -53,22 +56,25 @@ async function fetchFullCollegeData(collegeId) {
     const mainSnap = await getDoc(mainRef);
     if (!mainSnap.exists()) return null;
     let fullData = mainSnap.data();
-    // For invigilation we don't strictly need chunked student data, the slots summary is enough.
     return fullData;
 }
 
 async function handleLogin(user) {
     document.getElementById('login-btn').innerText = "Verifying...";
+    
     const collegesRef = collection(db, "colleges");
     const q = query(collegesRef, where("allowedUsers", "array-contains", user.email));
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
+        // ADMIN LOGIN
         const docSnap = querySnapshot.docs[0];
         currentCollegeId = docSnap.id;
         collegeData = await fetchFullCollegeData(currentCollegeId);
+        isAdmin = true; // <--- Set Admin Flag
         initAdminDashboard();
     } else {
+        // STAFF LOGIN
         const urlParams = new URLSearchParams(window.location.search);
         const urlId = urlParams.get('id');
         if (urlId) await checkStaffAccess(urlId, user.email);
@@ -86,9 +92,37 @@ async function checkStaffAccess(collegeId, email) {
         if (me) {
             currentCollegeId = collegeId;
             collegeData = data;
+            isAdmin = false; // Staff Mode
             initStaffDashboard(me);
         } else { alert("Email not found."); signOut(auth); }
     } else { alert("Invalid Link."); signOut(auth); }
+}
+
+// --- HEADER BUTTON MANAGER ---
+// Dynamically adds "Switch View" buttons based on role
+function updateHeaderButtons(currentView) {
+    const container = document.getElementById('auth-section');
+    // Remove existing switch button if any
+    const existingBtn = document.getElementById('switch-view-btn');
+    if(existingBtn) existingBtn.remove();
+
+    if (isAdmin) {
+        const btn = document.createElement('button');
+        btn.id = 'switch-view-btn';
+        btn.className = "bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded text-sm font-bold hover:bg-indigo-200 transition";
+        
+        if (currentView === 'admin') {
+            btn.innerHTML = `Switch to My Duties`;
+            btn.onclick = switchToStaffView;
+        } else {
+            btn.innerHTML = `Back to Admin`;
+            btn.onclick = initAdminDashboard;
+        }
+        
+        // Insert before logout button
+        const logoutBtn = document.getElementById('logout-btn');
+        container.insertBefore(btn, logoutBtn);
+    }
 }
 
 // --- ADMIN DASHBOARD ---
@@ -105,6 +139,7 @@ function initAdminDashboard() {
 
     updateAdminUI();
     renderSlotsGridAdmin();
+    updateHeaderButtons('admin'); // <--- Show "Switch to Staff"
     showView('admin');
 }
 
@@ -151,7 +186,7 @@ function renderStaffTable() {
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = me.name;
-    ui.userRole.textContent = "INVIGILATOR";
+    ui.userRole.textContent = isAdmin ? "ADMIN (View as Staff)" : "INVIGILATOR";
     document.getElementById('auth-section').classList.remove('hidden');
     
     document.getElementById('staff-view-name').textContent = me.name;
@@ -161,12 +196,35 @@ function initStaffDashboard(me) {
     invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
     
     renderStaffCalendar(me.email);
+    updateHeaderButtons('staff'); // <--- Show "Back to Admin" if applicable
     showView('staff');
     
     // Bind Calendar Nav Buttons
     document.getElementById('cal-prev').onclick = () => { currentCalDate.setMonth(currentCalDate.getMonth()-1); renderStaffCalendar(me.email); };
     document.getElementById('cal-next').onclick = () => { currentCalDate.setMonth(currentCalDate.getMonth()+1); renderStaffCalendar(me.email); };
 }
+
+// --- NEW: ADMIN SWITCH TO STAFF LOGIC ---
+function switchToStaffView() {
+    // 1. Check if Admin exists in Staff List
+    const myEmail = currentUser.email.toLowerCase();
+    const me = staffData.find(s => s.email.toLowerCase() === myEmail);
+    
+    if (me) {
+        // Found! Switch to Staff View
+        initStaffDashboard(me);
+    } else {
+        // Not found. Prompt to create profile.
+        if(confirm("You are not listed as a staff member yet.\n\nTo manage your own duties, you must create a staff profile for yourself.\n\nDo you want to create one now?")) {
+            openModal('add-staff-modal');
+            // Pre-fill details
+            document.getElementById('stf-email').value = currentUser.email;
+            document.getElementById('stf-name').value = currentUser.displayName || "Admin";
+            document.getElementById('stf-email').disabled = true; // Lock email field
+        }
+    }
+}
+
 
 // *** CORE CALENDAR LOGIC ***
 function renderStaffCalendar(myEmail) {
@@ -178,7 +236,6 @@ function renderStaffCalendar(myEmail) {
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     
-    // Group Slots by Date
     const slotsByDate = {};
     Object.keys(invigilationSlots).forEach(key => {
         const [dStr] = key.split(' | ');
@@ -190,7 +247,6 @@ function renderStaffCalendar(myEmail) {
         }
     });
 
-    // Upcoming Duties List
     const upcomingList = document.getElementById('staff-upcoming-list');
     upcomingList.innerHTML = '';
     let upcomingCount = 0;
@@ -209,7 +265,6 @@ function renderStaffCalendar(myEmail) {
     });
     if(upcomingCount === 0) upcomingList.innerHTML = `<p class="text-gray-400 text-sm italic">No upcoming duties assigned.</p>`;
 
-    // Generate Grid
     let html = "";
     for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 border border-gray-100 h-24"></div>`;
 
@@ -242,12 +297,11 @@ function renderStaffCalendar(myEmail) {
                 bgClass = "bg-green-50 hover:bg-green-100 cursor-pointer";
                 dayContent += `<div class="mx-1 mt-1 text-xs text-green-700 px-1 text-center"><strong>${openCount}</strong> Open Slots</div>`;
             } else {
-                bgClass = "bg-gray-100"; // Full
+                bgClass = "bg-gray-100"; 
                 dayContent += `<div class="mx-1 mt-1 text-xs text-gray-500 text-center">Full</div>`;
             }
         }
 
-        // Click Handler
         const dateStr = `${String(day).padStart(2,'0')}.${String(month+1).padStart(2,'0')}.${year}`;
         const clickAction = slots.length > 0 ? `onclick="openDayModal('${dateStr}', '${myEmail}')"` : "";
 
@@ -284,7 +338,6 @@ window.openDayModal = function(dateStr, email) {
                     Undo "Unavailable"
                 </button>`;
         } else {
-            // Volunteer Button (Only if slots open)
             if (needed > 0) {
                 actionHtml = `
                     <div class="flex gap-2 w-full">
@@ -322,7 +375,6 @@ window.openDayModal = function(dateStr, email) {
     window.openModal('day-detail-modal');
 }
 
-
 // --- DATA SYNC ---
 async function syncSlotsToCloud() {
     const ref = doc(db, "colleges", currentCollegeId);
@@ -341,8 +393,7 @@ async function addUserToWhitelist(email) {
     } catch(e) { console.error(e); }
 }
 
-// --- HELPERS & ACTIONS ---
-
+// --- ACTIONS ---
 window.toggleLock = async function(key) {
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
     await syncSlotsToCloud();
@@ -357,11 +408,10 @@ window.volunteer = async function(key, email) {
     if(me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
     
     await syncSlotsToCloud();
-    await syncStaffToCloud(); // Save assigned stat
+    await syncStaffToCloud(); 
     window.closeModal('day-detail-modal');
     renderStaffCalendar(email);
-    // Refresh header pending count
-    const pending = calculateStaffTarget(me) - (me.dutiesDone || 0); // Note: pending usually excludes assigned future duties, but for now keep simple
+    const pending = calculateStaffTarget(me) - (me.dutiesDone || 0); 
     document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
 }
 
@@ -392,7 +442,6 @@ window.waNotify = function(key) {
 
 window.calculateSlotsFromSchedule = async function() {
     alert("Slots are automatically calculated from the Main App. Go to Main App > Room Allotment > Save to update.");
-    // Refresh data
     const docRef = doc(db, "colleges", currentCollegeId);
     const snap = await getDoc(docRef);
     if(snap.exists()) {
@@ -493,6 +542,7 @@ window.saveNewStaff = async function() {
     const dept = document.getElementById('stf-dept').value;
     const designation = document.getElementById('stf-designation').value;
     const date = document.getElementById('stf-join').value;
+
     if(!name || !email) return alert("Fill all fields");
     
     const days = [];
@@ -503,7 +553,14 @@ window.saveNewStaff = async function() {
     await syncStaffToCloud();
     await addUserToWhitelist(email);
     window.closeModal('add-staff-modal');
-    renderStaffTable();
+    
+    // If in Staff View (Admin self-add), switch automatically
+    if (!isAdmin) {
+        // Reload page to trigger login flow again which will now find the staff record
+        window.location.reload();
+    } else {
+        renderStaffTable();
+    }
 }
 
 window.deleteStaff = async function(index) {
@@ -560,3 +617,7 @@ function showView(viewName) {
     Object.values(views).forEach(el => el.classList.add('hidden'));
     views[viewName].classList.remove('hidden');
 }
+
+// Expose global functions
+window.switchToStaffView = switchToStaffView;
+window.initAdminDashboard = initAdminDashboard;
