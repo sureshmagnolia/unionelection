@@ -50,7 +50,7 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
-// --- NEW FETCH LOGIC ---
+// --- NEW FETCH LOGIC (CHUNKS) ---
 async function fetchFullCollegeData(collegeId) {
     const mainRef = doc(db, "colleges", collegeId);
     const mainSnap = await getDoc(mainRef);
@@ -214,7 +214,7 @@ function switchToStaffView() {
     }
 }
 
-// *** CALENDAR LOGIC ***
+// *** CALENDAR LOGIC (UPDATED: Show Available/Total Slots) ***
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
@@ -244,7 +244,6 @@ function renderStaffCalendar(myEmail) {
     upcomingList.innerHTML = '';
     let upcomingCount = 0;
 
-    // Render Upcoming List (With Cancel Option)
     Object.keys(invigilationSlots).sort().forEach(key => {
         const slot = invigilationSlots[key];
         if(slot.assigned.includes(myEmail)) {
@@ -257,7 +256,7 @@ function renderStaffCalendar(myEmail) {
                 <div class="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500 flex justify-between items-center group">
                     <div>
                         <div class="font-bold text-sm text-gray-800">${key}</div>
-                        <div class="text-xs text-blue-600 font-semibold mt-1">Assigned</div>
+                        <div class="text-xs text-blue-600 font-semibold mt-1">You are assigned</div>
                     </div>
                     <button ${clickAction} class="${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm opacity-0 group-hover:opacity-100">
                         ${btnText}
@@ -268,7 +267,6 @@ function renderStaffCalendar(myEmail) {
     });
     if(upcomingCount === 0) upcomingList.innerHTML = `<p class="text-gray-400 text-sm italic">No upcoming duties assigned.</p>`;
 
-    // Generate Grid
     let html = "";
     for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 border border-gray-100 h-24"></div>`;
 
@@ -285,28 +283,31 @@ function renderStaffCalendar(myEmail) {
 
             slots.forEach(slot => {
                 const filled = slot.assigned.length;
-                const isFull = filled >= slot.required;
+                const needed = slot.required;
+                const available = Math.max(0, needed - filled);
+
+                const isFull = filled >= needed;
                 const isAssigned = slot.assigned.includes(myEmail);
                 const isUnavailable = slot.unavailable.includes(myEmail);
                 
                 let badgeColor = "bg-green-100 text-green-700 border-green-200"; 
-                let statusIcon = "";
+                let statusText = `${available}/${needed}`; // Show Available/Total by default
 
                 if (isAssigned) {
                     badgeColor = "bg-blue-600 text-white border-blue-600";
-                    statusIcon = "✅";
+                    statusText = "Assigned";
                 } else if (isUnavailable) {
                     badgeColor = "bg-red-50 text-red-600 border-red-200";
-                    statusIcon = "⛔";
+                    statusText = "Unavail";
                 } else if (isFull) {
                     badgeColor = "bg-gray-100 text-gray-400 border-gray-200";
-                    statusIcon = "🔒";
+                    statusText = `0/${needed}`;
                 }
 
                 dayContent += `
                     <div class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor} flex justify-between items-center">
                         <span>${slot.sessionType}</span>
-                        <span>${statusIcon}</span>
+                        <span>${statusText}</span>
                     </div>
                 `;
             });
@@ -344,13 +345,11 @@ window.openDayModal = function(dateStr, email) {
         let actionHtml = "";
         
         if (isAssigned) {
-            // --- UPDATED: Interactive Cancel Button ---
             if (isLocked) {
                  actionHtml = `<button onclick="cancelDuty('${key}', '${email}', true)" class="w-full bg-gray-100 text-gray-600 border border-gray-300 text-xs py-2 rounded font-bold cursor-pointer" title="Locked by Admin">🔒 Assigned (Locked)</button>`;
             } else {
                  actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition">✅ Assigned (Click to Cancel)</button>`;
             }
-            // ------------------------------------------
         } else if (isUnavailable) {
              actionHtml = `
                 <button onclick="setAvailability('${key}', '${email}', true)" class="text-xs text-blue-600 hover:underline">
@@ -400,8 +399,6 @@ window.openDayModal = function(dateStr, email) {
 }
 
 // --- HELPERS & ACTIONS ---
-
-// --- NEW: CANCEL DUTY LOGIC ---
 window.cancelDuty = async function(key, email, isLocked) {
     if (isLocked) {
         alert("🚫 SLOT LOCKED 🚫\n\nThe schedule for this session has been locked by the Admin.\n\nYou cannot withdraw directly. Please find a replacement and contact the Chief Superintendent.");
@@ -409,21 +406,17 @@ window.cancelDuty = async function(key, email, isLocked) {
     }
 
     if (confirm("Are you sure you want to cancel your duty for this session?")) {
-        // Remove from assigned
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
         
-        // Update Stats
         const me = staffData.find(s => s.email === email);
         if(me && me.dutiesAssigned > 0) me.dutiesAssigned--;
 
         await syncSlotsToCloud();
         await syncStaffToCloud();
         
-        // Refresh UI
         window.closeModal('day-detail-modal');
         renderStaffCalendar(email);
         
-        // Refresh Header Count
         if(me) {
              const pending = calculateStaffTarget(me) - (me.dutiesDone || 0);
              document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
