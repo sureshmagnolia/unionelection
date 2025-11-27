@@ -648,11 +648,11 @@ window.openDayModal = function(dateStr, email) {
     const container = document.getElementById('modal-sessions-container');
     container.innerHTML = '';
     
-    // Filter sessions for the selected date
+    // 1. Get Sessions for this Date
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
     
     if (sessions.length === 0) {
-        container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4">No sessions scheduled for this date.</p>`;
+        container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4">No sessions scheduled.</p>`;
     }
 
     sessions.forEach(key => {
@@ -660,42 +660,42 @@ window.openDayModal = function(dateStr, email) {
         const filled = slot.assigned.length;
         const needed = slot.required - filled;
         
-        // Status Checks
+        // --- STATUS FLAGS ---
         const isAssigned = slot.assigned.includes(email);
         const isUnavailable = isUserUnavailable(slot, email);
         const isLocked = slot.isLocked;
         const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
         
-        // Find offers from OTHERS (excluding myself)
+        // Filter offers from OTHERS (remove my own requests from the market view)
         const marketOffers = slot.exchangeRequests ? slot.exchangeRequests.filter(e => e !== email) : [];
 
         // Formatting
         const t = key.split(' | ')[1].toUpperCase();
         const sessLabel = (t.includes("PM") || t.startsWith("12")) ? "AFTERNOON (AN)" : "FORENOON (FN)";
 
-        // --- 1. ACTION BUTTONS LOGIC ---
+        // --- 2. ACTION BUTTON LOGIC ---
         let actionHtml = "";
 
         if (isAssigned) {
-            // CASE A: User is ASSIGNED
+            // CASE A: YOU ARE ASSIGNED
             if (isPostedByMe) {
-                // A1: Assigned + Posted (Liable) -> Allow Withdraw
+                // A1: Posted for Exchange (You are liable) -> Show Withdraw
                 actionHtml = `
                     <div class="w-full bg-orange-50 p-2 rounded border border-orange-200">
                         <div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div>
-                        <p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You are still liable until someone accepts.</p>
+                        <p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p>
                         <button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">
-                            ↩️ Withdraw (Keep Duty)
+                            ↩️ Withdraw Request
                         </button>
                     </div>`;
             } else if (isLocked) {
-                // A2: Assigned + Locked -> Post for Exchange
+                // A2: Locked & Assigned -> Show Post for Exchange
                 actionHtml = `
                     <button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm">
                         ♻️ Post for Exchange
                     </button>`;
             } else {
-                // A3: Assigned + Unlocked -> Standard Cancel
+                // A3: Unlocked -> Standard Cancel
                 actionHtml = `
                     <button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition shadow-sm">
                         ✅ Assigned (Click to Cancel)
@@ -703,7 +703,7 @@ window.openDayModal = function(dateStr, email) {
             }
         } 
         else if (marketOffers.length > 0) {
-            // CASE B: MARKET OPEN (Show Specific Choices)
+            // CASE B: MARKET OPEN (Show Specific Offers)
             let offersHtml = marketOffers.map(sellerEmail => {
                 const sellerName = getNameFromEmail(sellerEmail);
                 return `
@@ -721,7 +721,7 @@ window.openDayModal = function(dateStr, email) {
             actionHtml = `
                 <div class="w-full">
                     ${offersHtml}
-                    <button onclick="setAvailability('${key}', '${email}', false)" class="w-full mt-1 bg-white border border-gray-200 text-gray-400 text-[10px] py-1.5 rounded hover:bg-gray-50 hover:text-red-500 hover:border-red-200 transition">
+                    <button onclick="setAvailability('${key}', '${email}', false)" class="w-full mt-1 text-center text-[10px] text-gray-400 hover:text-red-500 py-1">
                         Mark Unavailable
                     </button>
                 </div>`;
@@ -734,11 +734,11 @@ window.openDayModal = function(dateStr, email) {
                 </button>`;
         } 
         else {
-            // CASE D: STANDARD VACANCY (Volunteer)
-            const unavailableBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="flex-1 bg-white border border-red-200 text-red-600 text-xs py-2 rounded font-bold hover:bg-red-50 transition shadow-sm">Unavailable</button>`;
+            // CASE D: STANDARD VACANCY
+            const unavailableBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-3 rounded font-bold hover:bg-red-50 transition shadow-sm">Unavailable</button>`;
             
             if (isLocked) {
-                // Locked (No Volunteer)
+                // Locked
                  actionHtml = `
                     <div class="flex gap-2 w-full">
                         <div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200 cursor-not-allowed flex items-center justify-center gap-1">
@@ -747,7 +747,7 @@ window.openDayModal = function(dateStr, email) {
                         ${unavailableBtn}
                     </div>`;
             } else if (needed <= 0) {
-                // Full (No Volunteer)
+                // Full
                 actionHtml = `
                     <div class="flex gap-2 w-full">
                         <div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200 cursor-default">
@@ -756,7 +756,7 @@ window.openDayModal = function(dateStr, email) {
                         ${unavailableBtn}
                     </div>`;
             } else {
-                // Open for Volunteering
+                // Open to Volunteer
                 actionHtml = `
                     <div class="flex gap-2 w-full">
                         <button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold hover:bg-indigo-700 shadow-sm transition flex items-center justify-center gap-1">
@@ -767,20 +767,21 @@ window.openDayModal = function(dateStr, email) {
             }
         }
 
-        // --- 2. LISTS (Assigned / Unavailable) ---
+        // --- 3. STAFF LIST (With Status Icons) ---
         let staffListHtml = '';
         if (slot.assigned.length > 0) {
             const listItems = slot.assigned.map(staffEmail => {
                 const s = staffData.find(st => st.email === staffEmail);
                 if (!s) return ''; 
-                // Mark if they have also posted for exchange
+                
+                // Icon Logic: Green check vs Orange hourglass
                 const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(staffEmail);
                 const statusIcon = isExchanging ? "⏳" : "✅";
-                const statusClass = isExchanging ? "text-orange-500" : "text-green-600";
+                const statusClass = isExchanging ? "text-orange-600" : "text-gray-700";
                 
                 return `
                     <div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1">
-                        <span class="font-bold text-gray-700">${statusIcon} ${s.name}</span>
+                        <span class="font-bold ${statusClass}">${statusIcon} ${s.name}</span>
                         <a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 font-bold hover:text-green-800">✆</a>
                     </div>`;
             }).join('');
@@ -792,9 +793,9 @@ window.openDayModal = function(dateStr, email) {
                 </div>`;
         }
 
-        // --- 3. ASSEMBLE HTML ---
+        // --- 4. ASSEMBLE HTML ---
         container.innerHTML += `
-            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-sm">
+            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-sm mb-2">
                 <div class="flex justify-between items-center mb-3">
                     <div>
                         <span class="font-bold text-gray-800 block text-sm">${sessLabel}</span>
