@@ -1,4 +1,4 @@
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } 
+imvport { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } 
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, orderBy, onSnapshot } 
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -736,7 +736,173 @@ window.switchAdminTab = function(tabName) {
     document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
     document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
 }
+// --- DAY DETAIL MODAL ---
+function openDayModal(dateStr, email) {
+    document.getElementById('modal-day-title').textContent = dateStr;
+    const container = document.getElementById('modal-sessions-container');
+    container.innerHTML = '';
+    
+    const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
+    
+    sessions.forEach(key => {
+        const slot = invigilationSlots[key];
+        const filled = slot.assigned.length;
+        const needed = slot.required - filled;
+        const isAssigned = slot.assigned.includes(email);
+        const isUnavailable = isUserUnavailable(slot, email);
+        const isLocked = slot.isLocked;
 
+        const t = key.split(' | ')[1].toUpperCase();
+        const sessLabel = (t.includes("PM") || t.startsWith("12")) ? "AFTERNOON (AN)" : "FORENOON (FN)";
+
+        // --- ASSIGNED STAFF LIST ---
+        let staffListHtml = '';
+        if (slot.assigned.length > 0) {
+            const listItems = slot.assigned.map(staffEmail => {
+                const s = staffData.find(st => st.email === staffEmail);
+                if (!s) return ''; 
+                return `
+                    <div class="flex justify-between items-center text-xs bg-white p-2 rounded border border-gray-100 mb-1 shadow-sm">
+                        <div>
+                            <div class="font-bold text-gray-700">${s.name}</div>
+                            <div class="text-[10px] text-gray-500">${s.dept}</div>
+                        </div>
+                        <a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 hover:text-green-800 font-medium flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                            ${s.phone}
+                        </a>
+                    </div>
+                `;
+            }).join('');
+            
+            staffListHtml = `
+                <div class="mt-3 pt-2 border-t border-gray-200">
+                    <div class="text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-wider">Assigned Invigilators</div>
+                    <div class="space-y-1 max-h-32 overflow-y-auto pr-1 custom-scroll">
+                        ${listItems}
+                    </div>
+                </div>
+            `;
+        }
+
+        let actionHtml = "";
+        if (isAssigned) {
+            if (isLocked) actionHtml = `<button onclick="cancelDuty('${key}', '${email}', true)" class="w-full bg-gray-100 text-gray-600 border border-gray-300 text-xs py-2 rounded font-bold cursor-pointer">🔒 Assigned (Locked)</button>`;
+            else actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition">✅ Assigned (Click to Cancel)</button>`;
+        } else if (isUnavailable) {
+             actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="text-xs text-blue-600 hover:underline">Undo "Unavailable"</button>`;
+        } else if (isLocked && !isAssigned) {
+            actionHtml = `<span class="text-gray-400 text-xs font-bold">🔒 Slot Locked</span>`;
+        } else {
+            if (needed > 0) {
+                actionHtml = `
+                    <div class="flex gap-2 w-full">
+                        <button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold hover:bg-indigo-700 shadow-sm">Volunteer</button>
+                        <button onclick="setAvailability('${key}', '${email}', false)" class="flex-1 bg-white border border-red-300 text-red-600 text-xs py-2 rounded font-medium hover:bg-red-50">Unavailable</button>
+                    </div>
+                `;
+            } else {
+                actionHtml = `
+                    <div class="flex justify-between items-center w-full">
+                        <span class="text-xs text-gray-500 italic">Slots Full</span>
+                        <button onclick="setAvailability('${key}', '${email}', false)" class="text-xs text-red-500 hover:underline">Mark Unavailable</button>
+                    </div>
+                `;
+            }
+        }
+
+        container.innerHTML += `
+            <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                <div class="flex justify-between items-center mb-2">
+                    <div>
+                        <span class="font-bold text-gray-800 block text-sm">${sessLabel}</span>
+                        <span class="text-[10px] text-gray-500">${key.split('|')[1]}</span>
+                    </div>
+                    <span class="text-xs bg-white border px-2 py-0.5 rounded ${needed > 0 ? 'text-green-600 border-green-200' : 'text-gray-400'}">${filled}/${slot.required} Filled</span>
+                </div>
+                <div class="flex items-center justify-between mt-2">
+                    ${actionHtml}
+                </div>
+                ${staffListHtml}
+            </div>
+        `;
+    });
+function openManualAllocationModal(key) {
+    const slot = invigilationSlots[key];
+    if (!slot.isLocked) {
+        alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts with volunteers.");
+        return;
+    }
+
+    document.getElementById('manual-session-key').value = key;
+    document.getElementById('manual-modal-title').textContent = key;
+    document.getElementById('manual-modal-req').textContent = slot.required;
+    
+    const rankedStaff = staffData.map(s => ({
+        ...s,
+        pending: calculateStaffTarget(s) - (s.dutiesDone || 0)
+    })).sort((a, b) => b.pending - a.pending);
+
+    const availList = document.getElementById('manual-available-list');
+    availList.innerHTML = '';
+    let selectedCount = 0;
+
+    rankedStaff.forEach(s => {
+        const isAssigned = slot.assigned.includes(s.email);
+        const isUnavailable = isUserUnavailable(slot, s.email);
+        
+        if (isUnavailable) return; 
+        if (isAssigned) selectedCount++;
+
+        const checkState = isAssigned ? 'checked' : '';
+        const rowClass = isAssigned ? 'bg-indigo-50' : 'hover:bg-gray-50';
+
+        availList.innerHTML += `
+            <tr class="${rowClass} border-b last:border-0 transition">
+                <td class="px-3 py-2 text-center">
+                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
+                </td>
+                <td class="px-3 py-2">
+                    <div class="font-bold text-gray-800">${s.name}</div>
+                    <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
+                </td>
+                <td class="px-3 py-2 text-center font-mono font-bold ${s.pending > 0 ? 'text-red-600' : 'text-green-600'}">
+                    ${s.pending}
+                </td>
+            </tr>
+        `;
+    });
+
+    const unavList = document.getElementById('manual-unavailable-list');
+    unavList.innerHTML = '';
+    
+    if (slot.unavailable && slot.unavailable.length > 0) {
+        slot.unavailable.forEach(u => {
+            const email = (typeof u === 'string') ? u : u.email;
+            const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
+            const details = (typeof u === 'object' && u.details) ? u.details : "";
+            const s = staffData.find(st => st.email === email) || { name: email };
+            
+            unavList.innerHTML += `
+                <div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm">
+                    <div class="font-bold text-red-700">${s.name}</div>
+                    <div class="text-gray-600 font-medium mt-0.5">${reason}</div>
+                    <div class="text-gray-400 italic truncate">${details}</div>
+                </div>
+            `;
+        });
+    } else {
+        unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
+    }
+
+    document.getElementById('manual-sel-count').textContent = selectedCount;
+    document.getElementById('manual-req-count').textContent = slot.required;
+
+    window.openModal('manual-allocation-modal');
+}
+    // Show the modal via the window helper
+    window.openModal('day-detail-modal');
+}
 function showView(viewName) {
     Object.values(views).forEach(el => el.classList.add('hidden'));
     views[viewName].classList.remove('hidden');
