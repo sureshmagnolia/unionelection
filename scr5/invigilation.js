@@ -251,31 +251,50 @@ function updateAdminUI() {
     renderStaffTable(); 
 }
 
+// --- RENDER ADMIN SLOTS (Sorted Newest to Oldest) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
     
-    const sortedKeys = Object.keys(invigilationSlots).sort();
+    // 1. Sort Keys: Date Descending (Newest First)
+    const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => {
+        const parseDate = (key) => {
+            try {
+                const [dStr, tStr] = key.split(' | ');
+                const [d, m, y] = dStr.split('.');
+                
+                let [time, mod] = tStr.split(' ');
+                let [h, min] = time.split(':');
+                h = parseInt(h);
+                if (mod === 'PM' && h !== 12) h += 12;
+                if (mod === 'AM' && h === 12) h = 0;
+                
+                return new Date(y, m - 1, d, h, parseInt(min));
+            } catch (e) { return new Date(0); }
+        };
+        // b - a = Descending (Newest to Oldest)
+        // a - b = Ascending (Oldest to Newest)
+        return parseDate(b) - parseDate(a);
+    });
 
     sortedKeys.forEach(key => {
         const slot = invigilationSlots[key];
         const filled = slot.assigned.length;
         
-        // --- UPDATED: Color Logic (Red if Locked) ---
+        // Color Logic
         let statusColor = "";
         let statusIcon = "";
         
         if (slot.isLocked) {
-            statusColor = "border-red-500 bg-red-50"; // Locked = Red
+            statusColor = "border-red-500 bg-red-50"; 
             statusIcon = "🔒";
         } else if (filled >= slot.required) {
-            statusColor = "border-green-400 bg-green-50"; // Full = Green
+            statusColor = "border-green-400 bg-green-50"; 
             statusIcon = "✅";
         } else {
-            statusColor = "border-orange-300 bg-orange-50"; // Open = Orange
+            statusColor = "border-orange-300 bg-orange-50"; 
             statusIcon = "🔓";
         }
-        // --------------------------------------------
 
         // Unavailable Button Logic
         let unavButton = "";
