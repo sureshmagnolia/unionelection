@@ -429,16 +429,18 @@ function renderStaffRankList(myEmail) {
         return `<div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition"><div class="flex items-center gap-2 overflow-hidden"><span class="${rankBadge} w-4 text-center">${i + 1}</span><div class="flex flex-col min-w-0"><span class="truncate ${textClass}">${s.name}</span><span class="text-[9px] text-gray-400 truncate">${s.dept}</span></div></div><span class="font-mono font-bold ${s.pending > 0 ? 'text-red-600' : 'text-green-600'}">${s.pending}</span></div>`;
     }).join('');
 }
-
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    ui.calTitle.textContent = `${monthNames[month]} ${year}`;
+    
+    // Update Title
+    if(ui.calTitle) ui.calTitle.textContent = `${monthNames[month]} ${year}`;
 
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     
+    // Group Slots by Date
     const slotsByDate = {};
     Object.keys(invigilationSlots).forEach(key => {
         const [dStr, tStr] = key.split(' | ');
@@ -454,56 +456,7 @@ function renderStaffCalendar(myEmail) {
         }
     });
 
-    // Update Upcoming List
-    const upcomingList = document.getElementById('staff-upcoming-list');
-    if(upcomingList) {
-        upcomingList.innerHTML = '';
-        let upcomingCount = 0;
-        Object.keys(invigilationSlots).sort().forEach(key => {
-            const slot = invigilationSlots[key];
-            if(slot.assigned.includes(myEmail)) {
-                upcomingCount++;
-                
-                const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
-                const isPosted = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail); // <--- NEW CHECK
-                
-                let statusHtml = "";
-                let borderClass = "border-blue-500";
-                let bgClass = "bg-blue-50";
-
-                if (isCompleted) {
-                    borderClass = "border-green-500"; bgClass = "bg-green-50";
-                    statusHtml = `<div class="text-xs text-green-700 font-bold mt-1">✅ Duty Completed</div>`;
-                } else if (isPosted) { // <--- NEW STATE
-                    borderClass = "border-orange-500"; bgClass = "bg-orange-50";
-                    statusHtml = `
-                        <div class="text-xs text-orange-700 font-bold mt-1">⏳ Posted for Exchange</div>
-                        <button onclick="withdrawExchange('${key}', '${myEmail}')" class="absolute right-2 top-3 bg-white border border-orange-200 text-orange-700 text-[10px] px-2 py-1 rounded hover:bg-orange-100 font-bold">Withdraw</button>
-                    `;
-                } else {
-                    // Standard Assigned State
-                    const btnColor = slot.isLocked ? "bg-gray-100 text-gray-600 cursor-not-allowed" : "bg-white text-red-600 border border-red-200 hover:bg-red-50";
-                    const btnText = slot.isLocked ? "Locked" : "Cancel Duty";
-                    // If locked, button opens modal to allow exchange posting
-                    const clickAction = slot.isLocked ? `onclick="openDayModal('${key.split('|')[0].trim()}', '${myEmail}')"` : `onclick="cancelDuty('${key}', '${myEmail}', ${slot.isLocked})"`;
-                    
-                    statusHtml = `
-                        <div class="text-xs text-blue-600 font-semibold mt-1">Assigned</div>
-                        <button ${clickAction} class="absolute right-2 top-3 ${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm">${btnText}</button>
-                    `;
-                }
-
-                upcomingList.innerHTML += `
-                    <div class="${bgClass} p-3 rounded-md border-l-4 ${borderClass} relative group">
-                        <div class="font-bold text-sm text-gray-800 pr-20">${key}</div>
-                        ${statusHtml}
-                    </div>
-                `;
-            }
-        });
-        if(upcomingCount === 0) upcomingList.innerHTML = `<p class="text-gray-400 text-sm italic">No upcoming duties.</p>`;
-    }
-
+    // Generate Calendar HTML
     let html = "";
     for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 border border-gray-100 h-24"></div>`;
 
@@ -521,13 +474,16 @@ function renderStaffCalendar(myEmail) {
                 const filled = slot.assigned.length;
                 const needed = slot.required;
                 const available = Math.max(0, needed - filled);
-                const isFull = filled >= needed;
-                const isAssigned = slot.assigned.includes(myEmail);
-                const isUnavailable = isUserUnavailable(slot, myEmail);
-                const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
                 
-                // STATUS LOGIC
-              // --- COLOR CODING LOGIC ---
+                // --- DEFINITIONS (CRITICAL FIX) ---
+                const isAssigned = slot.assigned.includes(myEmail);
+                // This line was missing or misplaced in your code:
+                const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
+                const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
+                const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
+                const isUnavailable = isUserUnavailable(slot, myEmail);
+                
+                // --- COLOR CODING LOGIC ---
                 let badgeColor = "";
                 let statusText = "";
 
@@ -538,7 +494,7 @@ function renderStaffCalendar(myEmail) {
                 else if (isPostedByMe) {
                     // ORANGE: Assigned but posted (Liability)
                     badgeColor = "bg-orange-100 text-orange-700 border-orange-300";
-                    statusText = "⏳ Posted"; // <--- CHANGED: Short & Clear
+                    statusText = "⏳ Posted"; 
                 }
                 else if (isAssigned) { 
                     // BLUE: Assigned & Confirmed
@@ -569,14 +525,14 @@ function renderStaffCalendar(myEmail) {
                 }
 
                 dayContent += `
-                    <div class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor} flex justify-between items-center">
+                    <div class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor} flex justify-between items-center truncate">
                         <span>${slot.sessionType}</span>
                         <span>${statusText}</span>
                     </div>`;
             });
             
             dayContent += `</div>`;
-            bgClass = "bg-white hover:bg-gray-50 cursor-pointer";
+            bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
         }
         
         const dateStr = `${String(day).padStart(2,'0')}.${String(month+1).padStart(2,'0')}.${year}`;
@@ -584,7 +540,7 @@ function renderStaffCalendar(myEmail) {
         
         html += `<div class="border h-28 ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
     }
-    ui.calGrid.innerHTML = html;
+    if(ui.calGrid) ui.calGrid.innerHTML = html;
 }
 
 function renderExchangeMarket(myEmail) {
@@ -1904,14 +1860,19 @@ window.postForExchange = async function(key, email) {
     if (!slot.exchangeRequests) slot.exchangeRequests = [];
     
     if (!slot.exchangeRequests.includes(email)) {
+        // 1. Update Local Data
         slot.exchangeRequests.push(email);
+        
+        // 2. Sync to Cloud (Async)
         await syncSlotsToCloud();
         
-        // 1. Refresh Calendar (Updates background to Orange)
+        // 3. Refresh Calendar (Updates background to Orange)
         renderStaffCalendar(email);
+
+        // 4. Refresh Market Widget (Updates sidebar)
         if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
 
-        // 2. Refresh Modal Immediately (Updates button to Withdraw)
+        // 5. Refresh Modal Immediately (Updates button to Withdraw)
         const dateStr = key.split(' | ')[0];
         openDayModal(dateStr, email); 
     }
