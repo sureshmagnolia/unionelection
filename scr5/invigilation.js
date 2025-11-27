@@ -16,7 +16,7 @@ let currentUser = null;
 let currentCollegeId = null;
 let collegeData = null;
 let staffData = [];
-let invigilationSlots = {}; // { "SessionID": { req: 5, assigned: [], ... } }
+let invigilationSlots = {}; 
 let designationsConfig = {};
 let rolesConfig = {};
 
@@ -30,7 +30,7 @@ const ui = {
     staffSlotsGrid: document.getElementById('staff-slots-grid')
 };
 
-// --- AUTH ---
+// --- AUTHENTICATION ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
@@ -45,7 +45,7 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
-// --- CORE LOGIC ---
+// --- CORE LOGIN LOGIC ---
 async function handleLogin(user) {
     document.getElementById('login-btn').innerText = "Verifying...";
     
@@ -59,7 +59,6 @@ async function handleLogin(user) {
         collegeData = docSnap.data();
         initAdminDashboard();
     } else {
-        // Check Staff Access
         const urlParams = new URLSearchParams(window.location.search);
         const urlId = urlParams.get('id');
         if (urlId) await checkStaffAccess(urlId, user.email);
@@ -84,8 +83,7 @@ async function checkStaffAccess(collegeId, email) {
     } else { alert("Invalid Link."); signOut(auth); }
 }
 
-// --- ADMIN FUNCTIONS ---
-
+// --- ADMIN DASHBOARD ---
 function initAdminDashboard() {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = currentUser.displayName;
@@ -108,17 +106,68 @@ function updateAdminUI() {
     document.getElementById('lbl-academic-year').textContent = `AY: ${acYear.label}`;
     
     const desigSelect = document.getElementById('stf-designation');
-    desigSelect.innerHTML = Object.keys(designationsConfig).map(r => `<option value="${r}">${r}</option>`).join('');
+    if(desigSelect) {
+        desigSelect.innerHTML = Object.keys(designationsConfig).map(r => `<option value="${r}">${r}</option>`).join('');
+    }
     
-    renderStaffTable();
+    renderStaffTable(); // This is the function that was missing!
 }
 
-// --- SLOT CALCULATION ---
+// --- RENDER STAFF TABLE (RESTORED) ---
+function renderStaffTable() {
+    if(!ui.staffTableBody) return;
+    ui.staffTableBody.innerHTML = '';
+    const filter = document.getElementById('staff-search').value.toLowerCase();
+
+    staffData.forEach((staff, index) => {
+        if (filter && !staff.name.toLowerCase().includes(filter)) return;
+
+        const target = calculateStaffTarget(staff);
+        const done = staff.dutiesDone || 0; 
+        const pending = target - done;
+        
+        // Active Role Label
+        let activeRoleLabel = "";
+        const today = new Date();
+        if (staff.roleHistory) {
+            const activeRole = staff.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
+            if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1">${activeRole.role}</span>`;
+        }
+
+        const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
+
+        const row = document.createElement('tr');
+        row.className = "hover:bg-gray-50 transition border-b border-gray-100";
+        row.innerHTML = `
+            <td class="px-6 py-3">
+                <div class="flex items-center">
+                    <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3">
+                        ${staff.name.charAt(0)}
+                    </div>
+                    <div>
+                        <div class="text-sm font-bold text-gray-800">${staff.name}</div>
+                        <div class="text-xs text-gray-500">${staff.designation} ${activeRoleLabel}</div>
+                    </div>
+                </div>
+            </td>
+            <td class="px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
+            <td class="px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
+            <td class="px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
+            <td class="px-6 py-3 text-right text-xs font-medium flex justify-end gap-2">
+                <button onclick="openRoleAssignmentModal(${index})" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded">Assign Role</button>
+                <button onclick="deleteStaff(${index})" class="text-red-500 hover:text-red-700">&times;</button>
+            </td>
+        `;
+        ui.staffTableBody.appendChild(row);
+    });
+}
+
+// --- SLOT GENERATION & ALLOCATION ---
 window.calculateSlotsFromSchedule = async function() {
-    if(!confirm("This will recalculate invigilation needs from the current Exam Data. Continue?")) return;
+    if(!confirm("This will recalculate invigilation needs. Continue?")) return;
     
     const students = JSON.parse(collegeData.examBaseData || '[]');
-    if(students.length === 0) return alert("No exam data found to generate slots.");
+    if(students.length === 0) return alert("No exam data found.");
 
     const sessions = {};
     students.forEach(s => {
@@ -127,39 +176,29 @@ window.calculateSlotsFromSchedule = async function() {
         sessions[key]++;
     });
 
-    let newSlots = { ...invigilationSlots }; // Keep existing data
-    
+    let newSlots = { ...invigilationSlots };
     Object.keys(sessions).forEach(key => {
         const count = sessions[key];
-        // Logic: 1 per 30 students + 10% Reserve
         const base = Math.ceil(count / 30);
         const reserve = Math.ceil(base * 0.10);
         const total = base + reserve;
         
         if(!newSlots[key]) {
-            newSlots[key] = {
-                required: total,
-                assigned: [],
-                unavailable: [],
-                isLocked: false
-            };
+            newSlots[key] = { required: total, assigned: [], unavailable: [], isLocked: false };
         } else {
-            newSlots[key].required = total; // Update requirement
+            newSlots[key].required = total;
         }
     });
 
     invigilationSlots = newSlots;
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
-    alert("Slots generated successfully!");
+    alert("Slots generated!");
 }
 
-// --- AUTO ALLOCATION ALGORITHM ---
 window.runAutoAllocation = async function() {
-    if(!confirm("Auto-Assign duties to empty slots based on pending load?")) return;
+    if(!confirm("Auto-Assign duties?")) return;
     
-    // 1. Sort Staff by Pending Duty (High -> Low)
-    // We clone to avoid messing up original array order
     let eligibleStaff = [...staffData].map(s => ({
         ...s,
         pending: calculateStaffTarget(s) - (s.dutiesDone || 0)
@@ -167,7 +206,6 @@ window.runAutoAllocation = async function() {
 
     let assignedCount = 0;
 
-    // 2. Iterate Sessions
     for (const sessionKey in invigilationSlots) {
         const slot = invigilationSlots[sessionKey];
         if(slot.isLocked) continue;
@@ -175,54 +213,37 @@ window.runAutoAllocation = async function() {
         const needed = slot.required - slot.assigned.length;
         if (needed <= 0) continue;
 
-        // Parse Date for checking availability
         const [dateStr] = sessionKey.split(' | ');
         const parts = dateStr.split('.');
         const examDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        const dayOfWeek = examDate.getDay(); // 0=Sun, 1=Mon...
+        const dayOfWeek = examDate.getDay(); 
 
         for (let i = 0; i < needed; i++) {
-            // Find best candidate
             const candidate = eligibleStaff.find(s => {
-                // Check 1: Already assigned this session?
                 if (slot.assigned.includes(s.email)) return false;
-                // Check 2: Marked Unavailable?
                 if (slot.unavailable.includes(s.email)) return false;
-                // Check 3: Guest Availability (Mon-Fri check)
                 if (s.designation === "Guest Lecturer" && s.preferredDays && !s.preferredDays.includes(dayOfWeek)) return false;
-                
                 return true;
             });
 
             if (candidate) {
                 slot.assigned.push(candidate.email);
-                candidate.dutiesDone = (candidate.dutiesDone || 0) + 1; // Temp update for loop logic
-                candidate.pending--; // Reduce priority for next slot
-                
-                // Re-sort eligible list to push this person down
+                candidate.pending--; 
                 eligibleStaff.sort((a, b) => b.pending - a.pending);
-                
                 assignedCount++;
             }
         }
     }
     
-    // 3. Sync Changes
-    // We need to map temp `dutiesDone` back to main `staffData`? 
-    // No, dutiesDone updates when an exam is *completed*. Here we update `dutiesAssigned` conceptually.
-    // For simplicity, we just save the slot assignments.
-    
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
-    alert(`Auto-allocation complete. Assigned ${assignedCount} duties.`);
+    alert(`Assigned ${assignedCount} duties.`);
 }
 
-// --- RENDER ADMIN SLOTS ---
 function renderSlotsGridAdmin() {
+    if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
-    const sortedKeys = Object.keys(invigilationSlots).sort();
-    
-    sortedKeys.forEach(key => {
+    Object.keys(invigilationSlots).sort().forEach(key => {
         const slot = invigilationSlots[key];
         const filled = slot.assigned.length;
         const statusColor = filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50";
@@ -233,11 +254,9 @@ function renderSlotsGridAdmin() {
                     <h4 class="font-bold text-gray-800 text-sm">${key}</h4>
                     <span class="text-xs font-bold px-2 py-1 rounded bg-white border">${filled} / ${slot.required}</span>
                 </div>
-                
                 <div class="text-xs text-gray-600 mb-3">
                     <strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
                 </div>
-
                 <div class="flex gap-2">
                     <button onclick="toggleLock('${key}')" class="flex-1 text-xs border border-gray-300 rounded py-1 hover:bg-gray-50">
                         ${slot.isLocked ? '🔒 Unlock' : '🔓 Lock'}
@@ -252,7 +271,6 @@ function renderSlotsGridAdmin() {
 }
 
 // --- STAFF DASHBOARD ---
-
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = me.name;
@@ -265,31 +283,29 @@ function initStaffDashboard(me) {
     
     invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
     renderStaffSlots(me.email);
-    
     showView('staff');
 }
 
 function renderStaffSlots(myEmail) {
+    if(!ui.staffSlotsGrid) return;
     ui.staffSlotsGrid.innerHTML = '';
-    const sortedKeys = Object.keys(invigilationSlots).sort();
-    
-    sortedKeys.forEach(key => {
+    Object.keys(invigilationSlots).sort().forEach(key => {
         const slot = invigilationSlots[key];
-        if(slot.isLocked) return; // Hide locked slots from staff interaction? Or show as locked.
+        if(slot.isLocked) return;
 
         const isAssigned = slot.assigned.includes(myEmail);
         const isUnavailable = slot.unavailable.includes(myEmail);
         
         let btnAction = "";
         if(isAssigned) {
-            btnAction = `<div class="text-green-700 font-bold text-sm flex items-center gap-1"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> Assigned</div>`;
+            btnAction = `<div class="text-green-700 font-bold text-sm">✅ Assigned</div>`;
         } else if (isUnavailable) {
-            btnAction = `<button onclick="setAvailability('${key}', '${myEmail}', true)" class="text-xs text-blue-600 hover:underline">Undo "Unavailable"</button>`;
+            btnAction = `<button onclick="setAvailability('${key}', '${myEmail}', true)" class="text-xs text-blue-600 underline">Undo Unavailable</button>`;
         } else {
             btnAction = `
                 <div class="flex gap-2 mt-2">
-                    <button onclick="volunteer('${key}', '${myEmail}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded hover:bg-indigo-700">Volunteer</button>
-                    <button onclick="setAvailability('${key}', '${myEmail}', false)" class="flex-1 border border-red-200 text-red-600 text-xs py-2 rounded hover:bg-red-50">Mark Unavailable</button>
+                    <button onclick="volunteer('${key}', '${myEmail}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded">Volunteer</button>
+                    <button onclick="setAvailability('${key}', '${myEmail}', false)" class="flex-1 border border-red-200 text-red-600 text-xs py-2 rounded">Unavailable</button>
                 </div>
             `;
         }
@@ -304,61 +320,7 @@ function renderStaffSlots(myEmail) {
     });
 }
 
-// --- COMMON HELPERS ---
-
-window.toggleLock = async function(key) {
-    invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
-    await syncSlotsToCloud();
-    renderSlotsGridAdmin();
-}
-
-window.volunteer = async function(key, email) {
-    if(!confirm("Confirm duty for this session?")) return;
-    invigilationSlots[key].assigned.push(email);
-    await syncSlotsToCloud();
-    renderStaffSlots(email);
-}
-
-window.setAvailability = async function(key, email, isAvailable) {
-    if(isAvailable) {
-        invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(e => e !== email);
-    } else {
-        const reason = prompt("Reason for unavailability (Optional):");
-        if(reason === null) return;
-        invigilationSlots[key].unavailable.push(email);
-    }
-    await syncSlotsToCloud();
-    renderStaffSlots(email);
-}
-
-window.waNotify = function(key) {
-    const slot = invigilationSlots[key];
-    if(slot.assigned.length === 0) return alert("No staff assigned yet.");
-    
-    // Get phones
-    const phones = slot.assigned.map(email => {
-        const s = staffData.find(st => st.email === email);
-        return s ? s.phone : "";
-    }).filter(p => p);
-    
-    if(phones.length === 0) return alert("No phone numbers found.");
-    
-    const msg = encodeURIComponent(`Exam Duty Reminder: You are assigned for invigilation on ${key}. Please report 30 mins early.`);
-    // Open WA for first person (Bulk API requires business account, loop manual is best for free)
-    // Or list links
-    let links = phones.map(p => `https://wa.me/${p}?text=${msg}`).join('\n');
-    console.log(links);
-    window.open(`https://wa.me/${phones[0]}?text=${msg}`, '_blank');
-}
-
-// --- DATABASE SYNC ---
-
-async function syncSlotsToCloud() {
-    const ref = doc(db, "colleges", currentCollegeId);
-    await updateDoc(ref, { examInvigilationSlots: JSON.stringify(invigilationSlots) });
-}
-
-// --- MATH HELPERS ---
+// --- HELPERS ---
 function getCurrentAcademicYear() {
     const now = new Date();
     const year = now.getFullYear();
@@ -368,15 +330,13 @@ function getCurrentAcademicYear() {
 }
 
 function calculateStaffTarget(staff) {
-    // Simplified for now: Monthly * 5 months per sem approx
     const roleTarget = designationsConfig[staff.designation] || 2;
-    // Check active role override
     if (staff.roleHistory) {
         const today = new Date();
         const active = staff.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
         if(active && rolesConfig[active.role] !== undefined) return rolesConfig[active.role] * 5; 
     }
-    return roleTarget * 5; // Exam season target
+    return roleTarget * 5; 
 }
 
 function getNameFromEmail(email) {
@@ -384,31 +344,141 @@ function getNameFromEmail(email) {
     return s ? s.name.split(' ')[0] : email.split('@')[0];
 }
 
-// --- TAB SWITCHING ---
+async function syncSlotsToCloud() {
+    const ref = doc(db, "colleges", currentCollegeId);
+    await updateDoc(ref, { examInvigilationSlots: JSON.stringify(invigilationSlots) });
+}
+
+async function syncStaffToCloud() {
+    const ref = doc(db, "colleges", currentCollegeId);
+    await updateDoc(ref, { examStaffData: JSON.stringify(staffData) });
+}
+
+async function addUserToWhitelist(email) {
+    try {
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { allowedUsers: arrayUnion(email) });
+    } catch(e) { console.error(e); }
+}
+
+// --- EXPORTED FUNCTIONS ---
+
+window.toggleLock = async function(key) {
+    invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
+    await syncSlotsToCloud();
+    renderSlotsGridAdmin();
+}
+
+window.volunteer = async function(key, email) {
+    if(!confirm("Confirm duty?")) return;
+    invigilationSlots[key].assigned.push(email);
+    await syncSlotsToCloud();
+    renderStaffSlots(email);
+}
+
+window.setAvailability = async function(key, email, isAvailable) {
+    if(isAvailable) {
+        invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(e => e !== email);
+    } else {
+        invigilationSlots[key].unavailable.push(email);
+    }
+    await syncSlotsToCloud();
+    renderStaffSlots(email);
+}
+
+window.waNotify = function(key) {
+    const slot = invigilationSlots[key];
+    if(slot.assigned.length === 0) return alert("No staff assigned.");
+    const phones = slot.assigned.map(email => {
+        const s = staffData.find(st => st.email === email);
+        return s ? s.phone : "";
+    }).filter(p => p);
+    if(phones.length === 0) return alert("No phones found.");
+    const msg = encodeURIComponent(`Exam Duty: You are assigned for ${key}.`);
+    window.open(`https://wa.me/${phones[0]}?text=${msg}`, '_blank');
+}
+
+window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+
+window.saveNewStaff = async function() {
+    const name = document.getElementById('stf-name').value;
+    const email = document.getElementById('stf-email').value;
+    const phone = document.getElementById('stf-phone').value;
+    const dept = document.getElementById('stf-dept').value;
+    const designation = document.getElementById('stf-designation').value;
+    const date = document.getElementById('stf-join').value;
+
+    if(!name || !email) return alert("Fill all fields");
+
+    const newObj = { name, email, phone, dept, designation, joiningDate: date, dutiesDone: 0, roleHistory: [] };
+    staffData.push(newObj);
+    await syncStaffToCloud();
+    await addUserToWhitelist(email);
+    
+    window.closeModal('add-staff-modal');
+    renderStaffTable();
+}
+
+window.deleteStaff = async function(index) {
+    if(confirm("Delete staff?")) {
+        staffData.splice(index, 1);
+        await syncStaffToCloud();
+        renderStaffTable();
+    }
+}
+
+window.openRoleAssignmentModal = function(index) {
+    const staff = staffData[index];
+    const modal = document.getElementById('role-assignment-modal');
+    document.getElementById('role-assign-name').textContent = staff.name;
+    document.getElementById('role-assign-index').value = index;
+    
+    const select = document.getElementById('assign-role-select');
+    select.innerHTML = Object.keys(rolesConfig).map(r => `<option value="${r}">${r}</option>`).join('');
+    
+    const hist = document.getElementById('role-history-list');
+    hist.innerHTML = (staff.roleHistory || []).map((h, i) => 
+        `<div class="flex justify-between text-xs p-1 bg-gray-50 mb-1"><span>${h.role}</span> <button onclick="removeRole(${index},${i})" class="text-red-500">&times;</button></div>`
+    ).join('');
+    
+    modal.classList.remove('hidden');
+}
+
+window.saveRoleAssignment = async function() {
+    const idx = document.getElementById('role-assign-index').value;
+    const role = document.getElementById('assign-role-select').value;
+    const start = document.getElementById('assign-start-date').value;
+    const end = document.getElementById('assign-end-date').value;
+    
+    if(!start) return alert("Dates required");
+    
+    if(!staffData[idx].roleHistory) staffData[idx].roleHistory = [];
+    staffData[idx].roleHistory.push({ role, start, end });
+    
+    await syncStaffToCloud();
+    window.closeModal('role-assignment-modal');
+    renderStaffTable();
+}
+
+window.removeRole = async function(sIdx, rIdx) {
+    staffData[sIdx].roleHistory.splice(rIdx, 1);
+    await syncStaffToCloud();
+    window.closeModal('role-assignment-modal'); // Re-open to refresh ideally, but closing is safer
+    renderStaffTable();
+}
+
+window.filterStaffTable = renderStaffTable;
+
 window.switchAdminTab = function(tabName) {
     document.getElementById('tab-content-staff').classList.add('hidden');
     document.getElementById('tab-content-slots').classList.add('hidden');
     document.getElementById('tab-btn-staff').classList.replace('border-indigo-600', 'border-transparent');
     document.getElementById('tab-btn-slots').classList.replace('border-indigo-600', 'border-transparent');
-    
     document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
     document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
 }
 
-// Expose
-window.calculateSlotsFromSchedule = calculateSlotsFromSchedule;
-window.runAutoAllocation = runAutoAllocation;
-window.toggleLock = toggleLock;
-window.volunteer = volunteer;
-window.setAvailability = setAvailability;
-window.waNotify = waNotify;
-window.saveNewStaff = saveNewStaff;
-window.saveRoleAssignment = saveRoleAssignment;
-window.removeRoleFromStaff = removeRoleFromStaff;
-window.deleteStaff = deleteStaff;
-window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
-window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
-window.filterStaffTable = renderStaffTable;
 function showView(viewName) {
     Object.values(views).forEach(el => el.classList.add('hidden'));
     views[viewName].classList.remove('hidden');
