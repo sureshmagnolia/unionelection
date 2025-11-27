@@ -50,7 +50,7 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
-// --- NEW FETCH LOGIC (CHUNKS) ---
+// --- NEW FETCH LOGIC ---
 async function fetchFullCollegeData(collegeId) {
     const mainRef = doc(db, "colleges", collegeId);
     const mainSnap = await getDoc(mainRef);
@@ -214,7 +214,7 @@ function switchToStaffView() {
     }
 }
 
-// *** CALENDAR LOGIC (SESSION WISE BADGES) ***
+// *** CALENDAR LOGIC ***
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
@@ -224,7 +224,6 @@ function renderStaffCalendar(myEmail) {
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     
-    // Group Slots by Date
     const slotsByDate = {};
     Object.keys(invigilationSlots).forEach(key => {
         const [dStr, tStr] = key.split(' | ');
@@ -233,31 +232,36 @@ function renderStaffCalendar(myEmail) {
             const dayNum = parseInt(dd);
             if (!slotsByDate[dayNum]) slotsByDate[dayNum] = [];
             
-            // Determine Session Type (FN/AN)
             let sessionType = "FN";
             const t = tStr.toUpperCase();
             if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) sessionType = "AN";
 
-            slotsByDate[dayNum].push({ 
-                key, 
-                sessionType, 
-                ...invigilationSlots[key] 
-            });
+            slotsByDate[dayNum].push({ key, sessionType, ...invigilationSlots[key] });
         }
     });
 
-    // Update Upcoming List
     const upcomingList = document.getElementById('staff-upcoming-list');
     upcomingList.innerHTML = '';
     let upcomingCount = 0;
+
+    // Render Upcoming List (With Cancel Option)
     Object.keys(invigilationSlots).sort().forEach(key => {
         const slot = invigilationSlots[key];
         if(slot.assigned.includes(myEmail)) {
             upcomingCount++;
+            const btnColor = slot.isLocked ? "bg-gray-100 text-gray-600" : "bg-white text-red-600 border border-red-200 hover:bg-red-50";
+            const btnText = slot.isLocked ? "Locked" : "Cancel Duty";
+            const clickAction = `onclick="cancelDuty('${key}', '${myEmail}', ${slot.isLocked})"`
+            
             upcomingList.innerHTML += `
-                <div class="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500">
-                    <div class="font-bold text-sm text-gray-800">${key}</div>
-                    <div class="text-xs text-blue-600 font-semibold mt-1">You are assigned</div>
+                <div class="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500 flex justify-between items-center group">
+                    <div>
+                        <div class="font-bold text-sm text-gray-800">${key}</div>
+                        <div class="text-xs text-blue-600 font-semibold mt-1">Assigned</div>
+                    </div>
+                    <button ${clickAction} class="${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm opacity-0 group-hover:opacity-100">
+                        ${btnText}
+                    </button>
                 </div>
             `;
         }
@@ -270,16 +274,13 @@ function renderStaffCalendar(myEmail) {
 
     for (let day = 1; day <= daysInMonth; day++) {
         const slots = slotsByDate[day] || [];
-        
-        // Base Day Content
         let dayContent = `<div class="text-right font-bold text-sm p-1 text-gray-400">${day}</div>`;
         let bgClass = "bg-white"; 
-        
-        // Session Badges
+        let borderClass = "border-gray-200";
+
         if (slots.length > 0) {
             dayContent += `<div class="flex flex-col gap-1 px-1 mt-1">`;
             
-            // Sort FN first
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
 
             slots.forEach(slot => {
@@ -288,7 +289,7 @@ function renderStaffCalendar(myEmail) {
                 const isAssigned = slot.assigned.includes(myEmail);
                 const isUnavailable = slot.unavailable.includes(myEmail);
                 
-                let badgeColor = "bg-green-100 text-green-700 border-green-200"; // Open
+                let badgeColor = "bg-green-100 text-green-700 border-green-200"; 
                 let statusIcon = "";
 
                 if (isAssigned) {
@@ -309,7 +310,6 @@ function renderStaffCalendar(myEmail) {
                     </div>
                 `;
             });
-            
             dayContent += `</div>`;
             bgClass = "bg-white hover:bg-gray-50 cursor-pointer";
         }
@@ -317,7 +317,7 @@ function renderStaffCalendar(myEmail) {
         const dateStr = `${String(day).padStart(2,'0')}.${String(month+1).padStart(2,'0')}.${year}`;
         const clickAction = slots.length > 0 ? `onclick="openDayModal('${dateStr}', '${myEmail}')"` : "";
 
-        html += `<div class="border h-28 border-gray-200 ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
+        html += `<div class="border h-28 ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
     }
     ui.calGrid.innerHTML = html;
 }
@@ -338,24 +338,28 @@ window.openDayModal = function(dateStr, email) {
         const isUnavailable = slot.unavailable.includes(email);
         const isLocked = slot.isLocked;
 
-        // Identify Session Type for label
         const t = key.split(' | ')[1].toUpperCase();
         const sessLabel = (t.includes("PM") || t.startsWith("12")) ? "AFTERNOON (AN)" : "FORENOON (FN)";
 
         let actionHtml = "";
         
         if (isAssigned) {
-            actionHtml = `<span class="text-green-600 font-bold text-sm flex items-center gap-1">✅ Assigned to You</span>`;
-        } else if (isLocked) {
-            actionHtml = `<span class="text-gray-400 text-xs font-bold">🔒 Locked by Admin</span>`;
+            // --- UPDATED: Interactive Cancel Button ---
+            if (isLocked) {
+                 actionHtml = `<button onclick="cancelDuty('${key}', '${email}', true)" class="w-full bg-gray-100 text-gray-600 border border-gray-300 text-xs py-2 rounded font-bold cursor-pointer" title="Locked by Admin">🔒 Assigned (Locked)</button>`;
+            } else {
+                 actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition">✅ Assigned (Click to Cancel)</button>`;
+            }
+            // ------------------------------------------
         } else if (isUnavailable) {
              actionHtml = `
                 <button onclick="setAvailability('${key}', '${email}', true)" class="text-xs text-blue-600 hover:underline">
                     Undo "Unavailable"
                 </button>`;
+        } else if (isLocked && !isAssigned) {
+            actionHtml = `<span class="text-gray-400 text-xs font-bold">🔒 Slot Locked</span>`;
         } else {
             if (needed > 0) {
-                // TRIGGER VOLUNTEER (WITH FUNNY ALERT CHECK)
                 actionHtml = `
                     <div class="flex gap-2 w-full">
                         <button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold hover:bg-indigo-700 shadow-sm transition">
@@ -397,11 +401,38 @@ window.openDayModal = function(dateStr, email) {
 
 // --- HELPERS & ACTIONS ---
 
-// *** FUNNY ALERT LOGIC HERE ***
+// --- NEW: CANCEL DUTY LOGIC ---
+window.cancelDuty = async function(key, email, isLocked) {
+    if (isLocked) {
+        alert("🚫 SLOT LOCKED 🚫\n\nThe schedule for this session has been locked by the Admin.\n\nYou cannot withdraw directly. Please find a replacement and contact the Chief Superintendent.");
+        return;
+    }
+
+    if (confirm("Are you sure you want to cancel your duty for this session?")) {
+        // Remove from assigned
+        invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
+        
+        // Update Stats
+        const me = staffData.find(s => s.email === email);
+        if(me && me.dutiesAssigned > 0) me.dutiesAssigned--;
+
+        await syncSlotsToCloud();
+        await syncStaffToCloud();
+        
+        // Refresh UI
+        window.closeModal('day-detail-modal');
+        renderStaffCalendar(email);
+        
+        // Refresh Header Count
+        if(me) {
+             const pending = calculateStaffTarget(me) - (me.dutiesDone || 0);
+             document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
+        }
+    }
+}
+
 window.volunteer = async function(key, email) {
     const [datePart] = key.split(' | ');
-    
-    // Check if user has ANY other duty on this same date
     const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
     const alreadyAssigned = sameDaySessions.some(k => invigilationSlots[k].assigned.includes(email));
 
@@ -414,7 +445,6 @@ window.volunteer = async function(key, email) {
 
     invigilationSlots[key].assigned.push(email);
     
-    // Update Staff Stats
     const me = staffData.find(s => s.email === email);
     if(me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
     
@@ -442,7 +472,6 @@ window.setAvailability = async function(key, email, isAvailable) {
     renderStaffCalendar(email);
 }
 
-// --- STANDARD HELPERS ---
 window.waNotify = function(key) {
     const slot = invigilationSlots[key];
     if(slot.assigned.length === 0) return alert("No staff assigned.");
@@ -457,7 +486,6 @@ window.waNotify = function(key) {
 
 window.calculateSlotsFromSchedule = async function() {
     alert("Slots are automatically calculated from the Main App. Go to Main App > Room Allotment > Save to update.");
-    // Refresh data
     const docRef = doc(db, "colleges", currentCollegeId);
     const snap = await getDoc(docRef);
     if(snap.exists()) {
@@ -582,7 +610,7 @@ window.saveNewStaff = async function() {
 
     if(!name || !email) return alert("Fill all fields");
 
-    const newObj = { name, email, phone, dept, designation, joiningDate: date, dutiesDone: 0, roleHistory: [] };
+    const newObj = { name, email, phone, dept, designation, joiningDate: date, dutiesDone: 0, roleHistory: [], preferredDays: [1,2,3,4,5] };
     staffData.push(newObj);
     await syncStaffToCloud();
     await addUserToWhitelist(email);
