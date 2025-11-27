@@ -1864,6 +1864,37 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     initStaffDashboard(buyer); // Full Refresh to update counts
 }
 // --- EXCHANGE MARKET FUNCTIONS ---
+window.postForExchange = async function(key, email) {
+    if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
+    
+    const slot = invigilationSlots[key];
+    if (!slot.exchangeRequests) slot.exchangeRequests = [];
+    
+    if (!slot.exchangeRequests.includes(email)) {
+        // 1. Update Local Data
+        slot.exchangeRequests.push(email);
+        
+        // 2. SAFE UI UPDATES (Wrapped in try-catch to prevent freezing)
+        try {
+            // Update Calendar (Turns Orange)
+            renderStaffCalendar(email);
+        } catch(e) { console.error("Cal Error:", e); }
+
+        try {
+            // Update Sidebar Market
+            if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
+        } catch(e) { console.error("Market Error:", e); }
+
+        // 3. CRITICAL: Refresh Modal Immediately (Forces button change)
+        try {
+            const dateStr = key.split('|')[0].trim(); // Safer split
+            openDayModal(dateStr, email); 
+        } catch(e) { console.error("Modal Error:", e); }
+
+        // 4. Save to Cloud (Background)
+        await syncSlotsToCloud();
+    }
+}
 
 window.postForExchange = async function(key, email) {
     if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
@@ -1875,39 +1906,28 @@ window.postForExchange = async function(key, email) {
         // 1. Update Local Data
         slot.exchangeRequests.push(email);
         
-        // 2. INSTANT UI UPDATE (Optimistic)
-        // Update Calendar Color
-        renderStaffCalendar(email);
-        // Update Sidebar Market
-        if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-        // Update Modal Button (Immediate)
-        const dateStr = key.split(' | ')[0];
-        openDayModal(dateStr, email); 
+        // 2. SAFE UI UPDATES (Wrapped in try-catch to prevent freezing)
+        try {
+            // Update Calendar (Turns Orange)
+            renderStaffCalendar(email);
+        } catch(e) { console.error("Cal Error:", e); }
 
-        // 3. Save to Cloud (Happens in background)
+        try {
+            // Update Sidebar Market
+            if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
+        } catch(e) { console.error("Market Error:", e); }
+
+        // 3. CRITICAL: Refresh Modal Immediately (Forces button change)
+        try {
+            const dateStr = key.split('|')[0].trim(); // Safer split
+            openDayModal(dateStr, email); 
+        } catch(e) { console.error("Modal Error:", e); }
+
+        // 4. Save to Cloud (Background)
         await syncSlotsToCloud();
     }
 }
 
-window.withdrawExchange = async function(key, email) {
-    const slot = invigilationSlots[key];
-    if (slot.exchangeRequests) {
-        // 1. Update Local Data
-        slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
-        
-        // 2. INSTANT UI UPDATE
-        alert("✅ Request withdrawn. You have reclaimed this duty.");
-        
-        renderStaffCalendar(email);
-        if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-        
-        const dateStr = key.split(' | ')[0];
-        openDayModal(dateStr, email);
-
-        // 3. Save to Cloud
-        await syncSlotsToCloud();
-    }
-}
 
 // --- EXPORT TO WINDOW (Final Fix) ---
 // This makes functions available to HTML onclick="" events
