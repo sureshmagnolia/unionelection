@@ -746,11 +746,6 @@ function getCurrentAcademicYear() {
 }
 
 
-// 4. Check Unavailability (Needed for slots)
-function isUserUnavailable(slot, email) {
-    if (!slot.unavailable) return false;
-    return slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
-}
 // --- EXPORT TO WINDOW (Final Fix) ---
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
