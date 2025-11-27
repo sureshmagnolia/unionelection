@@ -22,6 +22,7 @@ let rolesConfig = {};
 let currentCalDate = new Date(); 
 let isAdmin = false; 
 let cloudUnsubscribe = null; 
+let globalDutyTarget = 2; // Default
 
 // --- DOM ELEMENTS ---
 const views = { login: document.getElementById('view-login'), admin: document.getElementById('view-admin'), staff: document.getElementById('view-staff') };
@@ -116,6 +117,7 @@ function setupLiveSync(collegeId, mode) {
             collegeData = docSnap.data();
             designationsConfig = JSON.parse(collegeData.invigDesignations || JSON.stringify(DEFAULT_DESIGNATIONS));
             rolesConfig = JSON.parse(collegeData.invigRoles || JSON.stringify(DEFAULT_ROLES));
+            globalDutyTarget = parseInt(collegeData.invigGlobalTarget || 2);
             staffData = JSON.parse(collegeData.examStaffData || '[]');
             invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
             
@@ -162,16 +164,59 @@ function initAdminDashboard() {
     showView('admin');
 }
 function calculateStaffTarget(staff) {
-    const roleTarget = designationsConfig[staff.designation] || 2;
-    if (staff.roleHistory) {
-        const today = new Date();
-        // Check if currently active in a specific role
-        const active = staff.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
-        if(active && rolesConfig[active.role] !== undefined) {
-            return rolesConfig[active.role] * 5; // 5 months per semester approx
+    const acYear = getCurrentAcademicYear();
+    const today = new Date();
+    
+    // 1. Determine Calculation Period
+    // End: Today (or end of Academic Year if today is later)
+    // Start: June 1st (or Joining Date if joined later)
+    const calcEnd = (today < acYear.end) ? today : acYear.end;
+    const joinDate = new Date(staff.joiningDate);
+    const calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
+
+    if (calcStart > calcEnd) return 0; // Joined in future
+
+    let totalTarget = 0;
+    let cursor = new Date(calcStart);
+    
+    // 2. Iterate Month by Month
+    while (cursor <= calcEnd) {
+        const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+        const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+        
+        // Default: Global Target
+        let monthlyRate = globalDutyTarget; 
+        
+        // Override 1: Designation (If you want designations to have defaults)
+        if (designationsConfig[staff.designation] !== undefined) {
+             monthlyRate = designationsConfig[staff.designation];
         }
+
+        // Override 2: Functional Roles (Time-Bound)
+        if (staff.roleHistory && staff.roleHistory.length > 0) {
+            staff.roleHistory.forEach(roleAssign => {
+                const roleStart = new Date(roleAssign.start);
+                const roleEnd = new Date(roleAssign.end);
+                
+                // Check if role is active during this specific month
+                // Logic: Role Start is before Month End AND Role End is after Month Start
+                if (roleStart <= currentMonthEnd && roleEnd >= currentMonthStart) {
+                    if (rolesConfig[roleAssign.role] !== undefined) {
+                        monthlyRate = rolesConfig[roleAssign.role];
+                    }
+                }
+            });
+        }
+
+        totalTarget += monthlyRate;
+        
+        // Move to next month
+        cursor.setMonth(cursor.getMonth() + 1);
+        // Safety break
+        if (cursor.getFullYear() > calcEnd.getFullYear() + 1) break; 
     }
-    return roleTarget * 5; 
+
+    return totalTarget;
 }
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
@@ -1010,7 +1055,72 @@ async function saveManualAllocation() {
         renderSlotsGridAdmin();
     }
 }
+// --- ROLE EDITOR FUNCTIONS ---
 
+window.openRoleConfigModal = function() {
+    document.getElementById('global-duty-target').value = globalDutyTarget;
+    renderRolesList();
+    window.openModal('role-config-modal');
+}
+
+function renderRolesList() {
+    const container = document.getElementById('roles-list-container');
+    container.innerHTML = '';
+    
+    if (Object.keys(rolesConfig).length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-xs text-center py-2">No custom roles defined.</p>';
+        return;
+    }
+
+    Object.entries(rolesConfig).forEach(([role, target]) => {
+        container.innerHTML += `
+            <div class="flex justify-between items-center text-xs bg-white p-2 rounded border mb-1">
+                <span class="font-bold text-gray-700">${role}</span>
+                <div class="flex items-center gap-3">
+                    <span class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono font-bold">${target}/mo</span>
+                    <button onclick="deleteRoleConfig('${role}')" class="text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button>
+                </div>
+            </div>`;
+    });
+}
+
+window.addNewRoleConfig = function() {
+    const name = document.getElementById('new-role-name').value.trim();
+    const target = parseInt(document.getElementById('new-role-target').value);
+    
+    if(!name) return alert("Enter a Role Name");
+    if(isNaN(target)) return alert("Enter a Target Number");
+    
+    rolesConfig[name] = target;
+    renderRolesList();
+    
+    document.getElementById('new-role-name').value = '';
+    document.getElementById('new-role-target').value = '';
+}
+
+window.deleteRoleConfig = function(role) {
+    if(confirm(`Delete role "${role}"? This will affect calculations for staff assigned this role.`)) {
+        delete rolesConfig[role];
+        renderRolesList();
+    }
+}
+
+window.saveRoleConfig = async function() {
+    const newGlobal = parseInt(document.getElementById('global-duty-target').value);
+    if(isNaN(newGlobal)) return alert("Invalid Global Target");
+    
+    globalDutyTarget = newGlobal;
+    
+    // Save to Cloud
+    const ref = doc(db, "colleges", currentCollegeId);
+    await updateDoc(ref, {
+        invigRoles: JSON.stringify(rolesConfig),
+        invigGlobalTarget: globalDutyTarget
+    });
+    
+    window.closeModal('role-config-modal');
+    updateAdminUI(); // Refresh table with new calculations
+}
 // --- EXPORT TO WINDOW (Final Fix) ---
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
@@ -1042,6 +1152,10 @@ window.changeSlotReq = changeSlotReq;
 window.openManualAllocationModal = openManualAllocationModal;
 window.saveManualAllocation = saveManualAllocation;
 window.updateManualCounts = updateManualCounts;
+window.openRoleConfigModal = openRoleConfigModal;
+window.addNewRoleConfig = addNewRoleConfig;
+window.deleteRoleConfig = deleteRoleConfig;
+window.saveRoleConfig = saveRoleConfig;
 window.switchAdminTab = function(tabName) {
     document.getElementById('tab-content-staff').classList.add('hidden');
     document.getElementById('tab-content-slots').classList.add('hidden');
