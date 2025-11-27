@@ -197,18 +197,6 @@ function isUserUnavailable(slot, email) {
     if (!slot.unavailable) return false;
     return slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
 }
-function getCurrentAcademicYear() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); 
-    // Academic Year: June (Month 5) to May (Month 4)
-    let startYear = (month < 5) ? year - 1 : year;
-    return { 
-        label: `${startYear}-${startYear+1}`, 
-        start: new Date(startYear, 5, 1), 
-        end: new Date(startYear+1, 4, 31) 
-    };
-}
 function updateAdminUI() {
     document.getElementById('stat-total-staff').textContent = staffData.length;
     const acYear = getCurrentAcademicYear();
