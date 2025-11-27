@@ -442,35 +442,38 @@ function renderStaffCalendar(myEmail) {
             if(slot.assigned.includes(myEmail)) {
                 upcomingCount++;
                 
-                // Check if attendance is marked
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
+                const isPosted = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail); // <--- NEW CHECK
                 
                 let statusHtml = "";
                 let borderClass = "border-blue-500";
                 let bgClass = "bg-blue-50";
 
                 if (isCompleted) {
-                    borderClass = "border-green-500";
-                    bgClass = "bg-green-50";
+                    borderClass = "border-green-500"; bgClass = "bg-green-50";
+                    statusHtml = `<div class="text-xs text-green-700 font-bold mt-1">✅ Duty Completed</div>`;
+                } else if (isPosted) { // <--- NEW STATE
+                    borderClass = "border-orange-500"; bgClass = "bg-orange-50";
                     statusHtml = `
-                        <div class="text-xs text-green-700 font-bold mt-1">✅ Duty Completed</div>
+                        <div class="text-xs text-orange-700 font-bold mt-1">⏳ Posted for Exchange</div>
+                        <button onclick="withdrawExchange('${key}', '${myEmail}')" class="absolute right-2 top-3 bg-white border border-orange-200 text-orange-700 text-[10px] px-2 py-1 rounded hover:bg-orange-100 font-bold">Withdraw</button>
                     `;
                 } else {
+                    // Standard Assigned State
                     const btnColor = slot.isLocked ? "bg-gray-100 text-gray-600 cursor-not-allowed" : "bg-white text-red-600 border border-red-200 hover:bg-red-50";
                     const btnText = slot.isLocked ? "Locked" : "Cancel Duty";
-                    const clickAction = `onclick="cancelDuty('${key}', '${myEmail}', ${slot.isLocked})"`
+                    // If locked, button opens modal to allow exchange posting
+                    const clickAction = slot.isLocked ? `onclick="openDayModal('${key.split('|')[0].trim()}', '${myEmail}')"` : `onclick="cancelDuty('${key}', '${myEmail}', ${slot.isLocked})"`;
                     
                     statusHtml = `
                         <div class="text-xs text-blue-600 font-semibold mt-1">Assigned</div>
-                        <div class="absolute right-2 top-3">
-                             <button ${clickAction} class="${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm opacity-0 group-hover:opacity-100">${btnText}</button>
-                        </div>
+                        <button ${clickAction} class="absolute right-2 top-3 ${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm">${btnText}</button>
                     `;
                 }
 
                 upcomingList.innerHTML += `
                     <div class="${bgClass} p-3 rounded-md border-l-4 ${borderClass} relative group">
-                        <div class="font-bold text-sm text-gray-800 pr-16">${key}</div>
+                        <div class="font-bold text-sm text-gray-800 pr-20">${key}</div>
                         ${statusHtml}
                     </div>
                 `;
@@ -582,32 +585,53 @@ window.openDayModal = function(dateStr, email) {
 
         // Buttons Logic
         let actionHtml = "";
+        const isPosted = slot.exchangeRequests && slot.exchangeRequests.includes(email);
+        const marketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0;
         
-        if (isCompleted) {
-             actionHtml = `<button disabled class="w-full bg-green-600 text-white border border-green-600 text-xs py-2 rounded font-bold cursor-default">✅ Duty Completed</button>`;
-        } else if (isAssigned) {
-            if (isLocked) {
-                 actionHtml = `<button onclick="cancelDuty('${key}', '${email}', true)" class="w-full bg-gray-100 text-gray-600 border border-gray-300 text-xs py-2 rounded font-bold cursor-pointer">🔒 Assigned (Locked)</button>`;
+        if (isAssigned) {
+            if (isPosted) {
+                actionHtml = `<button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-orange-100 text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-200">⏳ Withdraw Exchange Request</button>`;
+            } else if (isLocked) {
+                 // LOCKED -> Offer Exchange
+                 actionHtml = `<button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition">♻️ Post for Exchange</button>`;
             } else {
+                 // UNLOCKED -> Standard Cancel
                  actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition">✅ Assigned (Click to Cancel)</button>`;
             }
         } else if (isUnavailable) {
              actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="text-xs text-blue-600 hover:underline">Undo "Unavailable"</button>`;
-        } else if (isLocked) {
-            // Locked & Not Assigned
-            actionHtml = `<span class="text-gray-400 text-xs font-bold w-full text-center block bg-gray-100 py-2 rounded border border-gray-200">🔒 Slot Locked</span>`;
         } else {
-            if (needed > 0) {
+            // NOT ASSIGNED
+            const unavailableBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="flex-1 bg-white border border-red-300 text-red-600 text-xs py-2 rounded font-medium hover:bg-red-50">Unavailable</button>`;
+            
+            if (marketAvailable) {
+                // MARKET OPEN -> TAKE DUTY
+                const giverEmail = slot.exchangeRequests[0];
+                const giverName = getNameFromEmail(giverEmail);
+                actionHtml = `
+                    <div class="flex flex-col gap-1 w-full">
+                        <button onclick="volunteer('${key}', '${email}')" class="w-full bg-purple-600 text-white text-xs py-2 rounded font-bold hover:bg-purple-700 shadow-sm transition animate-pulse">
+                            ♻️ Take Duty from ${giverName}
+                        </button>
+                        ${unavailableBtn}
+                    </div>`;
+            } else if (isLocked) {
                 actionHtml = `
                     <div class="flex gap-2 w-full">
-                        <button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold hover:bg-indigo-700 shadow-sm transition">Volunteer</button>
-                        <button onclick="setAvailability('${key}', '${email}', false)" class="flex-1 bg-white border border-red-300 text-red-600 text-xs py-2 rounded font-medium hover:bg-red-50">Unavailable</button>
+                        <div class="flex-1 bg-gray-100 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200 cursor-not-allowed">🔒 Locked</div>
+                        ${unavailableBtn}
+                    </div>`;
+            } else if (needed <= 0) {
+                actionHtml = `
+                    <div class="flex gap-2 w-full">
+                        <div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded text-center border border-gray-200">Full</div>
+                        ${unavailableBtn}
                     </div>`;
             } else {
                 actionHtml = `
-                    <div class="flex justify-between items-center w-full">
-                        <span class="text-xs text-gray-500 italic">Slots Full</span>
-                        <button onclick="setAvailability('${key}', '${email}', false)" class="text-xs text-red-500 hover:underline">Mark Unavailable</button>
+                    <div class="flex gap-2 w-full">
+                        <button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold hover:bg-indigo-700 shadow-sm transition">Volunteer</button>
+                        ${unavailableBtn}
                     </div>`;
             }
         }
@@ -1548,7 +1572,81 @@ window.saveAttendance = async function() {
     renderStaffTable(); 
     alert("Attendance Saved & Counts Updated!");
 }
+// --- EXCHANGE MARKET LOGIC ---
 
+// 1. Post a duty for exchange (Liability remains until picked)
+async function postForExchange(key, email) {
+    if (!confirm("Post this duty for exchange?\n\nYou remain responsible for this slot until someone else accepts it.")) return;
+    
+    const slot = invigilationSlots[key];
+    if (!slot.exchangeRequests) slot.exchangeRequests = [];
+    
+    if (!slot.exchangeRequests.includes(email)) {
+        slot.exchangeRequests.push(email);
+        await syncSlotsToCloud();
+        renderStaffCalendar(email);
+    }
+}
+
+// 2. Withdraw a posted request
+async function withdrawExchange(key, email) {
+    const slot = invigilationSlots[key];
+    if (slot.exchangeRequests) {
+        slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
+        await syncSlotsToCloud();
+        renderStaffCalendar(email);
+    }
+}
+
+// 3. Updated Volunteer (Handles Picking Up Exchange)
+async function volunteer(key, email) {
+    const slot = invigilationSlots[key];
+    const [datePart] = key.split(' | ');
+    
+    // Check conflicts
+    const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
+    const conflict = sameDaySessions.some(k => invigilationSlots[k].assigned.includes(email));
+    if (conflict && !confirm("Whoa! You're already on duty today. Double shift? 🦸‍♂️")) return;
+
+    // CHECK IF TAKING AN EXCHANGE
+    if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
+        // Pick the first person offering
+        const originalOwner = slot.exchangeRequests[0];
+        
+        if (confirm(`Accept duty exchange from ${getNameFromEmail(originalOwner)}?`)) {
+            // Remove Original
+            slot.assigned = slot.assigned.filter(e => e !== originalOwner);
+            slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== originalOwner);
+            
+            // Update Original Owner Stats
+            const ownerObj = staffData.find(s => s.email === originalOwner);
+            if(ownerObj && ownerObj.dutiesAssigned > 0) ownerObj.dutiesAssigned--;
+
+            // Add New (You)
+            slot.assigned.push(email);
+            const me = staffData.find(s => s.email === email);
+            if(me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
+
+            await syncSlotsToCloud();
+            await syncStaffToCloud();
+            window.closeModal('day-detail-modal');
+            renderStaffCalendar(email);
+            return;
+        } else {
+            return; // Cancelled
+        }
+    }
+
+    // Standard Volunteer Logic
+    if (!confirm("Confirm duty?")) return;
+    slot.assigned.push(email);
+    const me = staffData.find(s => s.email === email);
+    if(me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
+    
+    await syncSlotsToCloud();
+    await syncStaffToCloud();
+    window.closeModal('day-detail-modal');
+}
 
 // --- EXPORT TO WINDOW (Final Fix) ---
 // This makes functions available to HTML onclick="" events
@@ -1594,6 +1692,8 @@ window.loadSessionAttendance = loadSessionAttendance;
 window.addSubstituteToAttendance = addSubstituteToAttendance;
 window.updateAttCount = updateAttCount;
 window.saveAttendance = saveAttendance;
+window.postForExchange = postForExchange;
+window.withdrawExchange = withdrawExchange;
 window.openDutyNormsModal = openDutyNormsModal;
 window.switchAdminTab = function(tabName) {
     // Hide All
