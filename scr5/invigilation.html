@@ -166,10 +166,15 @@
                     </div>
 
                     <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col">
-                        <h3 class="text-xs font-bold text-gray-500 uppercase mb-2 pb-2 border-b flex justify-between items-center">
-                            <span>Duty Priority List</span>
-                            <span class="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">Highest Pending 1st</span>
-                        </h3>
+                        <div class="flex justify-between items-center border-b pb-2 mb-2">
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-500 uppercase">Duty Priority List</h3>
+                                <span class="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">Highest Pending 1st</span>
+                            </div>
+                            <button onclick="openDutyNormsModal()" class="text-[10px] text-indigo-600 border border-indigo-200 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 font-bold">
+                                ℹ️ Norms
+                            </button>
+                        </div>
                         <div id="staff-rank-list" class="space-y-1 overflow-y-auto custom-scroll flex-1 pr-1">
                             </div>
                     </div>
@@ -403,6 +408,30 @@
         </div>
     </div>
    
+    <div id="norms-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Duty Calculation Norms</h3>
+            <p class="text-xs text-gray-500 mb-4">Reference for duty assignment targets.</p>
+            
+            <div class="space-y-3 text-sm">
+                <div class="flex justify-between items-center bg-blue-50 p-2.5 rounded border border-blue-100">
+                    <span class="font-bold text-blue-800">Global Default</span>
+                    <span class="font-mono font-bold text-blue-600" id="ref-global-target">2/mo</span>
+                </div>
+                
+                <div>
+                    <div class="text-xs font-bold text-gray-400 uppercase mb-1">Role Specific Targets</div>
+                    <div id="ref-roles-list" class="space-y-1 max-h-48 overflow-y-auto custom-scroll border border-gray-100 rounded p-2">
+                        </div>
+                </div>
+            </div>
+
+            <div class="mt-6 text-right">
+                <button onclick="closeModal('norms-modal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200">Close</button>
+            </div>
+        </div>
+    </div>
+
     
     <script type="module" src="invigilation.js">
     </script>
