@@ -1,6 +1,7 @@
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } 
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs } 
+// FIX: Added 'orderBy' to imports
+import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, orderBy } 
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const auth = window.firebase.auth;
@@ -45,6 +46,42 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
+// --- NEW: FETCH FULL DATA (HANDLES CHUNKS) ---
+async function fetchFullCollegeData(collegeId) {
+    console.log("Fetching full data from cloud...");
+    
+    // 1. Fetch Main Document
+    const mainRef = doc(db, "colleges", collegeId);
+    const mainSnap = await getDoc(mainRef);
+    
+    if (!mainSnap.exists()) return null;
+    let fullData = mainSnap.data();
+
+    // 2. Fetch Data Chunks (Student Data is here)
+    try {
+        const dataColRef = collection(db, "colleges", collegeId, "data");
+        const q = query(dataColRef, orderBy("index")); 
+        const querySnapshot = await getDocs(q);
+        
+        let fullPayload = "";
+        querySnapshot.forEach((doc) => {
+            const d = doc.data();
+            if (d.payload) fullPayload += d.payload;
+        });
+
+        if (fullPayload) {
+            const bulkData = JSON.parse(fullPayload);
+            // Merge bulk data (examBaseData, etc.) into the main object
+            fullData = { ...fullData, ...bulkData };
+            console.log("Chunks merged successfully.");
+        }
+    } catch (e) {
+        console.error("Error fetching chunks:", e);
+    }
+    
+    return fullData;
+}
+
 // --- CORE LOGIN LOGIC ---
 async function handleLogin(user) {
     document.getElementById('login-btn').innerText = "Verifying...";
@@ -56,7 +93,10 @@ async function handleLogin(user) {
     if (!querySnapshot.empty) {
         const docSnap = querySnapshot.docs[0];
         currentCollegeId = docSnap.id;
-        collegeData = docSnap.data();
+        
+        // FIX: Fetch FULL data (including student list chunks)
+        collegeData = await fetchFullCollegeData(currentCollegeId);
+        
         initAdminDashboard();
     } else {
         const urlParams = new URLSearchParams(window.location.search);
@@ -67,11 +107,13 @@ async function handleLogin(user) {
 }
 
 async function checkStaffAccess(collegeId, email) {
+    // For Staff, we usually don't need the full massive student list, just slots & staff info.
+    // But to be safe and consistent, we'll fetch the main doc first.
     const docRef = doc(db, "colleges", collegeId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
-        const data = docSnap.data();
+        const data = docSnap.data(); // Main doc is enough for Invigilators
         const staffList = JSON.parse(data.examStaffData || '[]');
         const me = staffList.find(s => s.email.toLowerCase() === email.toLowerCase());
         
@@ -110,10 +152,10 @@ function updateAdminUI() {
         desigSelect.innerHTML = Object.keys(designationsConfig).map(r => `<option value="${r}">${r}</option>`).join('');
     }
     
-    renderStaffTable(); // This is the function that was missing!
+    renderStaffTable(); 
 }
 
-// --- RENDER STAFF TABLE (RESTORED) ---
+// --- RENDER STAFF TABLE ---
 function renderStaffTable() {
     if(!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
@@ -164,10 +206,12 @@ function renderStaffTable() {
 
 // --- SLOT GENERATION & ALLOCATION ---
 window.calculateSlotsFromSchedule = async function() {
-    if(!confirm("This will recalculate invigilation needs. Continue?")) return;
+    if(!confirm("This will recalculate invigilation needs using the latest exam data from the cloud. Continue?")) return;
     
-    const students = JSON.parse(collegeData.examBaseData || '[]');
-    if(students.length === 0) return alert("No exam data found.");
+    // This now works because we fetched chunks in handleLogin
+    const students = JSON.parse(collegeData.examBaseData || '[]'); 
+    
+    if(students.length === 0) return alert("No exam data found. Please ensure data is uploaded in the main app.");
 
     const sessions = {};
     students.forEach(s => {
@@ -177,6 +221,8 @@ window.calculateSlotsFromSchedule = async function() {
     });
 
     let newSlots = { ...invigilationSlots };
+    let slotsAdded = 0;
+
     Object.keys(sessions).forEach(key => {
         const count = sessions[key];
         const base = Math.ceil(count / 30);
@@ -185,15 +231,16 @@ window.calculateSlotsFromSchedule = async function() {
         
         if(!newSlots[key]) {
             newSlots[key] = { required: total, assigned: [], unavailable: [], isLocked: false };
+            slotsAdded++;
         } else {
-            newSlots[key].required = total;
+            newSlots[key].required = total; // Update count if changed
         }
     });
 
     invigilationSlots = newSlots;
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
-    alert("Slots generated!");
+    alert(`Slots updated! Found ${Object.keys(sessions).length} sessions.`);
 }
 
 window.runAutoAllocation = async function() {
@@ -464,7 +511,7 @@ window.saveRoleAssignment = async function() {
 window.removeRole = async function(sIdx, rIdx) {
     staffData[sIdx].roleHistory.splice(rIdx, 1);
     await syncStaffToCloud();
-    window.closeModal('role-assignment-modal'); // Re-open to refresh ideally, but closing is safer
+    window.closeModal('role-assignment-modal'); 
     renderStaffTable();
 }
 
