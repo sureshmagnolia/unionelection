@@ -400,20 +400,11 @@ function renderSlotsGridAdmin() {
     slotItems.sort((a, b) => b.date - a.date);
 
     let lastMonth = "";
-    let lastWeek = "";
 
     if (slotItems.length === 0) {
         ui.adminSlotsGrid.innerHTML = `<div class="col-span-full text-center text-gray-400 py-10 italic">No exam slots available. Add a slot to begin.</div>`;
         return;
     }
-
-    const getWeekOfMonth = (date) => {
-        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
-        const dayOfWeek = firstDay.getDay();
-        const startOffset = dayOfWeek;
-        const dayOfMonth = date.getDate();
-        return Math.ceil((dayOfMonth + startOffset) / 7);
-    };
 
     // Group Logic
     const groupedSlots = {};
@@ -446,13 +437,18 @@ function renderSlotsGridAdmin() {
             lastMonth = group.month;
         }
 
-        // Week Header
+        // Week Header (With NOTIFY Button)
         ui.adminSlotsGrid.innerHTML += `
             <div class="col-span-full mt-3 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
                 <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                     <span class="bg-white px-2 py-0.5 rounded border border-indigo-100">Week ${group.week}</span>
                 </span>
                 <div class="flex gap-2">
+                    <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" 
+                        class="text-[10px] bg-green-600 text-white border border-green-700 px-3 py-1 rounded hover:bg-green-700 font-bold transition shadow-sm flex items-center gap-1">
+                        📢 Notify Faculty
+                    </button>
+
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" 
                         class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
                         ⚡ Auto-Assign
@@ -495,11 +491,14 @@ function renderSlotsGridAdmin() {
                         <div class="text-xs text-gray-600 mb-2"><strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}</div>
                         ${unavButton}
                     </div>
-                    <div class="flex gap-2 mt-3">
-                        <button onclick="printSessionReport('${key}')" class="w-20 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition" title="Print Report"><span>🖨️</span> Print</button>
-                        <button onclick="openManualAllocationModal('${key}')" class="flex-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition">Manual Assign</button>
-                        <button onclick="toggleLock('${key}')" class="w-16 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
+                    <div class="grid grid-cols-3 gap-2 mt-3">
+                        <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-xs bg-green-50 text-green-700 border border-green-200 rounded py-1.5 hover:bg-green-100 font-bold transition" title="Send Daily Reminder">
+                            🔔 Remind
+                        </button>
+                        <button onclick="printSessionReport('${key}')" class="col-span-1 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition" title="Print Report"><span>🖨️</span> Print</button>
+                        <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition">Manual</button>
                     </div>
+                     <button onclick="toggleLock('${key}')" class="w-full mt-2 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock Slot' : 'Lock Slot'}</button>
                 </div>`;
         });
     });
@@ -2932,6 +2931,198 @@ window.viewActivityLogs = async function() {
     window.openModal('inconvenience-modal');
 }
 
+// ==========================================
+// 📢 MESSAGING & ALERTS SYSTEM
+// ==========================================
+
+// 1. WEEKLY NOTIFICATION
+window.openWeeklyNotificationModal = function(monthStr, weekNum) {
+    const list = document.getElementById('notif-list-container');
+    const title = document.getElementById('notif-modal-title');
+    const subtitle = document.getElementById('notif-modal-subtitle');
+    const preview = document.getElementById('notif-message-preview');
+    
+    title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
+    subtitle.textContent = "Send weekly schedule to faculty via WhatsApp.";
+    list.innerHTML = '';
+    
+    // 1. Find all duties for this week per faculty
+    const facultyDuties = {}; // email -> [{date, session, key}]
+
+    Object.keys(invigilationSlots).forEach(key => {
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+        
+        if (mStr === monthStr && wNum === weekNum) {
+            const slot = invigilationSlots[key];
+            const [dStr, tStr] = key.split(' | ');
+            const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
+            const sessionCode = isAN ? "AN" : "FN";
+            const dayName = date.toLocaleString('en-us', { weekday: 'short' }); // Mon, Tue...
+            
+            slot.assigned.forEach(email => {
+                if (!facultyDuties[email]) facultyDuties[email] = [];
+                facultyDuties[email].push({
+                    date: dStr,
+                    day: dayName,
+                    session: sessionCode
+                });
+            });
+        }
+    });
+
+    if (Object.keys(facultyDuties).length === 0) {
+        list.innerHTML = `<div class="text-center text-gray-400 py-8 italic">No duties assigned in this week yet.</div>`;
+        window.openModal('notification-modal');
+        return;
+    }
+
+    // 2. Generate Preview Text (Sample)
+    const sampleName = "Abdul Raheem MK";
+    const sampleTime = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
+    preview.innerHTML = `🟡🟡🟡 ${sampleName}: Your invigilation duties updated now (${sampleTime}), details below.\n\nDate/s and Session/s: *(01/12/25-Mon-FN), (03/12/25-Wed-AN)*.\n\n🟢 Kindly check...`;
+
+    // 3. Render List
+    const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
+
+    sortedEmails.forEach(email => {
+        const duties = facultyDuties[email];
+        // Sort duties chronologically
+        duties.sort((a, b) => {
+            const da = a.date.split('.').reverse().join('');
+            const db = b.date.split('.').reverse().join('');
+            return da.localeCompare(db);
+        });
+
+        const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
+        const staff = staffData.find(s => s.email === email);
+        const name = staff ? staff.name : email;
+        const phone = staff ? staff.phone : "";
+        
+        const msg = generateWeeklyMessage(name, dutyString);
+        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : "#";
+        
+        const btnColor = "bg-blue-600 hover:bg-blue-700";
+        const btnText = "Send WhatsApp";
+        const disabledAttr = phone ? "" : "disabled";
+        const noPhoneWarning = phone ? "" : `<span class="text-red-500 text-xs ml-2">(No Phone)</span>`;
+
+        list.innerHTML += `
+            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition">
+                <div>
+                    <div class="font-bold text-gray-800">${name} ${noPhoneWarning}</div>
+                    <div class="text-xs text-gray-500 mt-1 font-mono">${dutyString}</div>
+                </div>
+                <a href="${waLink}" target="_blank" ${disabledAttr}
+                   onclick="markAsSent(this)"
+                   class="${btnColor} text-white text-xs font-bold px-4 py-2 rounded shadow transition flex items-center gap-2">
+                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                   Send
+                </a>
+            </div>
+        `;
+    });
+
+    window.openModal('notification-modal');
+}
+
+// 2. DAILY REMINDER (Slot Specific)
+window.openSlotReminderModal = function(key) {
+    const list = document.getElementById('notif-list-container');
+    const title = document.getElementById('notif-modal-title');
+    const subtitle = document.getElementById('notif-modal-subtitle');
+    const preview = document.getElementById('notif-message-preview');
+    
+    const slot = invigilationSlots[key];
+    if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this slot.");
+
+    title.textContent = `🔔 Daily Reminder: ${key}`;
+    subtitle.textContent = "Send previous-day reminder to report on time.";
+    list.innerHTML = '';
+
+    // 1. Calculate Reporting Time (30 mins prior)
+    const [dateStr, timeStr] = key.split(' | ');
+    const reportTime = calculateReportTime(timeStr); // e.g. "09:00 AM"
+
+    // 2. Preview
+    preview.innerHTML = `🔔 REMINDER: Exam Duty Tomorrow (${dateStr})\nSession: ${timeStr}\n\nPlease report to the office of the CS by *${reportTime}* (30 min prior to start).\n\n- Chief Supt.`;
+
+    // 3. Render List
+    slot.assigned.forEach(email => {
+        const staff = staffData.find(s => s.email === email);
+        const name = staff ? staff.name : email;
+        const phone = staff ? staff.phone : "";
+        
+        const msg = generateDailyMessage(dateStr, timeStr, reportTime);
+        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : "#";
+        
+        const disabledAttr = phone ? "" : "disabled";
+        const noPhoneWarning = phone ? "" : `<span class="text-red-500 text-xs ml-2">(No Phone)</span>`;
+
+        list.innerHTML += `
+            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition">
+                <div>
+                    <div class="font-bold text-gray-800">${name} ${noPhoneWarning}</div>
+                    <div class="text-xs text-gray-500 mt-1">Report by: <span class="font-bold text-red-600">${reportTime}</span></div>
+                </div>
+                <a href="${waLink}" target="_blank" ${disabledAttr}
+                   onclick="markAsSent(this)"
+                   class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2 rounded shadow transition flex items-center gap-2">
+                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                   Remind
+                </a>
+            </div>
+        `;
+    });
+
+    window.openModal('notification-modal');
+}
+
+// --- MESSAGE GENERATORS ---
+
+function generateWeeklyMessage(name, dutyString) {
+    const now = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
+    
+    return `🟡🟡🟡 ${name}: Your invigilation duties updated now (${now}), details of invigilation duties given below.\n\nDate/s and Session/s: *${dutyString}*.\n\n🟢 *Kindly check the General instructions to invigilators here: https://bit.ly/gvc-exam*\n\n_Any inconvenience may kindly be adjusted through internal arrangements using the link http://www.gvc.ac.in/exam and the same may be reported in advance to SAS @ 9447955360 or to EC @ 9074061026. Duties and dates are subjected to change according to University Schedules, which will be intimated to you at the earliest. _-This is an automatically generated early reminder. For any queries contact: 9074061026 or Mail to examinations@gvc.ac.in -Chief Supt.-`;
+}
+
+function generateDailyMessage(dateStr, sessionStr, reportTime) {
+    return `🔔 REMINDER: Exam Duty Tomorrow (${dateStr})\nSession: ${sessionStr}\n\nPlease report to the office of the CS by *${reportTime}* (30 min prior to start).\n\n- Chief Supt.`;
+}
+
+function calculateReportTime(timeStr) {
+    try {
+        let [time, mod] = timeStr.split(' ');
+        let [h, m] = time.split(':');
+        let date = new Date();
+        date.setHours(parseInt(h) + (mod === 'PM' && h !== '12' ? 12 : 0));
+        date.setMinutes(parseInt(m));
+        
+        // Subtract 30 mins
+        date.setMinutes(date.getMinutes() - 30);
+        
+        // Format back
+        let rh = date.getHours();
+        let rm = date.getMinutes();
+        let rMod = rh >= 12 ? 'PM' : 'AM';
+        rh = rh % 12;
+        rh = rh ? rh : 12;
+        return `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')} ${rMod}`;
+    } catch (e) { return timeStr; }
+}
+
+// --- UI Helper: Mark button as sent ---
+window.markAsSent = function(btn) {
+    btn.classList.remove('bg-blue-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-orange-700');
+    btn.classList.add('bg-green-600', 'hover:bg-green-700', 'cursor-default');
+    btn.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        Sent
+    `;
+    // Optional: Disable click after sending to prevent double-send? 
+    // User might want to re-send if it failed, so we keep it clickable but green.
+}
 
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
@@ -2987,6 +3178,9 @@ window.openCompletedDutiesModal = openCompletedDutiesModal;
 window.runWeeklyAutoAssign = runWeeklyAutoAssign;
 window.viewAutoAssignLogs = viewAutoAssignLogs;
 window.viewActivityLogs = viewActivityLogs;
+window.openWeeklyNotificationModal = openWeeklyNotificationModal;
+window.openSlotReminderModal = openSlotReminderModal;
+window.markAsSent = markAsSent;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
