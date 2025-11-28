@@ -385,6 +385,10 @@ function updateAdminUI() {
     
     renderStaffTable(); 
 }
+function getFirstName(fullName) {
+    if (!fullName) return "";
+    return fullName.split(' ')[0]; // "Abdul Raheem" -> "Abdul"
+}
 // --- RENDER ADMIN SLOTS (Grouped by Month & Week, Slots Ascending) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
@@ -2990,7 +2994,7 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
     const preview = document.getElementById('notif-message-preview');
     
     title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
-    subtitle.textContent = "Send weekly schedule to faculty via WhatsApp.";
+    subtitle.textContent = "Send schedule via WhatsApp (Full Name) or SMS (First Name).";
     list.innerHTML = '';
     
     const facultyDuties = {}; 
@@ -3024,10 +3028,9 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
         return;
     }
 
-    // Generate Preview
+    // Preview (WhatsApp Style)
     const sampleName = "Abdul Raheem MK";
-    const sampleTime = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
-    preview.innerHTML = `🟡🟡🟡 ${sampleName}: Your invigilation duties updated now (${sampleTime})...\n\nDate/s and Session/s: *(01/12/25-Mon-FN)*...`;
+    preview.textContent = generateWeeklyMessage(sampleName, "(01/12-Mon-FN)...");
 
     const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
@@ -3041,33 +3044,47 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
 
         const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
         const staff = staffData.find(s => s.email === email);
-        const name = staff ? staff.name : email;
+        const fullName = staff ? staff.name : email;
+        const firstName = getFirstName(fullName);
         
-        // --- PHONE NUMBER FIX ---
+        // --- PHONE PREP ---
         let phone = staff ? (staff.phone || "") : "";
-        phone = phone.replace(/\D/g, ''); // Remove non-digits
-        if (phone.length === 10) phone = "91" + phone; // Add Country Code if missing
-        // ------------------------
+        phone = phone.replace(/\D/g, ''); 
+        if (phone.length === 10) phone = "91" + phone;
+        // ------------------
+
+        // 1. WhatsApp (Full Name)
+        const waMsg = generateWeeklyMessage(fullName, dutyString);
+        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
         
-        const msg = generateWeeklyMessage(name, dutyString);
-        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : "#";
-        
-        const btnColor = "bg-blue-600 hover:bg-blue-700";
+        // 2. SMS (First Name + Short)
+        // Limit duty string length for SMS
+        const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
+        const smsMsg = `${firstName}: Duty ${shortDutyStr}. Check Portal. -CS GVC`;
+        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
+
         const disabledAttr = phone ? "" : "disabled";
         const noPhoneWarning = phone ? "" : `<span class="text-red-500 text-xs ml-2">(No Phone)</span>`;
 
         list.innerHTML += `
             <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition">
-                <div>
-                    <div class="font-bold text-gray-800">${name} ${noPhoneWarning}</div>
-                    <div class="text-xs text-gray-500 mt-1 font-mono">${dutyString}</div>
+                <div class="flex-1 min-w-0 pr-2">
+                    <div class="font-bold text-gray-800 truncate">${fullName} ${noPhoneWarning}</div>
+                    <div class="text-xs text-gray-500 mt-1 font-mono truncate">${dutyString}</div>
                 </div>
-                <a href="${waLink}" target="_blank" ${disabledAttr}
-                   onclick="markAsSent(this)"
-                   class="${btnColor} text-white text-xs font-bold px-4 py-2 rounded shadow transition flex items-center gap-2">
-                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                   Send
-                </a>
+                <div class="flex gap-2 shrink-0">
+                    <a href="${smsLink}" target="_blank" ${disabledAttr}
+                       class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send SMS (First Name)">
+                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                       SMS
+                    </a>
+                    <a href="${waLink}" target="_blank" ${disabledAttr}
+                       onclick="markAsSent(this)"
+                       class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send WhatsApp (Full Name)">
+                       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                       WA
+                    </a>
+                </div>
             </div>
         `;
     });
@@ -3086,44 +3103,58 @@ window.openSlotReminderModal = function(key) {
     if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this slot.");
 
     title.textContent = `🔔 Daily Reminder: ${key}`;
-    subtitle.textContent = "Send previous-day reminder to report on time.";
+    subtitle.textContent = "Send previous-day reminder via WhatsApp or SMS.";
     list.innerHTML = '';
 
     const [dateStr, timeStr] = key.split(' | ');
     const reportTime = calculateReportTime(timeStr); 
 
-    // Generate Preview using first staff name or placeholder
-    const sampleName = slot.assigned.length > 0 ? getNameFromEmail(slot.assigned[0]) : "Faculty Name";
-    preview.textContent = generateDailyMessage(sampleName, dateStr, timeStr, reportTime);
+    // Preview for WhatsApp
+    preview.textContent = generateDailyMessage("Faculty Name", dateStr, timeStr, reportTime);
 
     slot.assigned.forEach(email => {
         const staff = staffData.find(s => s.email === email);
-        const name = staff ? staff.name : email;
+        const fullName = staff ? staff.name : email;
+        const firstName = getFirstName(fullName);
         
-        // --- PHONE NUMBER FIX ---
+        // --- PHONE PREP ---
         let phone = staff ? (staff.phone || "") : "";
-        phone = phone.replace(/\D/g, ''); // Remove non-digits
-        if (phone.length === 10) phone = "91" + phone; // Add Country Code if missing
-        // ------------------------
+        phone = phone.replace(/\D/g, ''); 
+        if (phone.length === 10) phone = "91" + phone; 
+        // ------------------
         
-        const msg = generateDailyMessage(name, dateStr, timeStr, reportTime);
-        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : "#";
+        // 1. WhatsApp (Full)
+        const waMsg = generateDailyMessage(fullName, dateStr, timeStr, reportTime);
+        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
+
+        // 2. SMS (Short)
+        const shortDate = dateStr.slice(0, 5); // "01.12"
+        const sessionShort = timeStr.includes("AM") || timeStr.startsWith("09") ? "FN" : "AN";
+        const smsMsg = `${firstName}: Duty ${shortDate} ${sessionShort}. Report ${reportTime}. -CS GVC`;
+        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
         
         const disabledAttr = phone ? "" : "disabled";
         const noPhoneWarning = phone ? "" : `<span class="text-red-500 text-xs ml-2">(No Phone)</span>`;
 
         list.innerHTML += `
             <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition">
-                <div>
-                    <div class="font-bold text-gray-800">${name} ${noPhoneWarning}</div>
-                    <div class="text-xs text-gray-500 mt-1">Report by: <span class="font-bold text-red-600">${reportTime}</span></div>
+                <div class="flex-1 min-w-0 pr-2">
+                    <div class="font-bold text-gray-800 truncate">${fullName} ${noPhoneWarning}</div>
+                    <div class="text-xs text-gray-500 mt-1">Report: <span class="font-bold text-red-600">${reportTime}</span></div>
                 </div>
-                <a href="${waLink}" target="_blank" ${disabledAttr}
-                   onclick="markAsSent(this)"
-                   class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2 rounded shadow transition flex items-center gap-2">
-                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                   Remind
-                </a>
+                <div class="flex gap-2 shrink-0">
+                    <a href="${smsLink}" target="_blank" ${disabledAttr}
+                       class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="SMS (Short)">
+                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                       SMS
+                    </a>
+                    <a href="${waLink}" target="_blank" ${disabledAttr}
+                       onclick="markAsSent(this)"
+                       class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="WhatsApp (Full)">
+                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                       Remind
+                    </a>
+                </div>
             </div>
         `;
     });
