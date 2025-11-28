@@ -9,7 +9,16 @@ const provider = window.firebase.provider;
 
 // --- CONFIG ---
 const DEFAULT_DESIGNATIONS = { "Assistant Professor": 2, "Associate Professor": 1, "Guest Lecturer": 4, "Professor": 0 };
-const DEFAULT_ROLES = { "Vice Principal": 0, "HOD": 1, "NSS Officer": 1, "Warden": 0, "Exam Chief": 0 };
+// REPLACE the existing DEFAULT_ROLES line with this:
+const DEFAULT_ROLES = { 
+    "Vice Principal": 0, 
+    "HOD": 1, 
+    "NSS Officer": 1, 
+    "Warden": 0, 
+    "Exam Chief": 0,
+    "Chief Superintendent": 0,       // <--- NEW
+    "Senior Asst. Superintendent": 0 // <--- NEW
+};
 // Add with other defaults
 const DEFAULT_DEPARTMENTS = ["English", "Malayalam", "Commerce", "Mathematics", "Physics", "Computer Science", "Botany", "Zoology", "History", "Economics"];
 
@@ -1854,7 +1863,6 @@ function populateAttendanceSessions() {
         ui.attSessionSelect.appendChild(opt);
     });
 }
-
 window.loadSessionAttendance = function() {
     const key = ui.attSessionSelect.value;
     if (!key) {
@@ -1864,27 +1872,80 @@ window.loadSessionAttendance = function() {
     }
     
     const slot = invigilationSlots[key];
-    const isLocked = slot.attendanceLocked || false; // Check Lock Status
+    const isLocked = slot.attendanceLocked || false; 
 
     ui.attArea.classList.remove('hidden');
     ui.attPlaceholder.classList.add('hidden');
     ui.attList.innerHTML = '';
     
-    // 1. Render Rows (Pass Lock State)
-    const presentList = slot.attendance || slot.assigned || [];
-    presentList.forEach(email => {
+    // --- 1. SUPERVISION LOGIC (CS & SAS) ---
+    // A. Find Default Holders (Active Roles)
+    const today = new Date();
+    let defaultCS = "";
+    let defaultSAS = "";
+    
+    staffData.forEach(s => {
+        if (s.roleHistory) {
+            const activeRole = s.roleHistory.find(r => 
+                new Date(r.start) <= today && new Date(r.end) >= today && 
+                (r.role === "Chief Superintendent" || r.role === "Exam Chief" || r.role === "Senior Asst. Superintendent")
+            );
+            if (activeRole) {
+                if (activeRole.role === "Chief Superintendent" || activeRole.role === "Exam Chief") defaultCS = s.email;
+                if (activeRole.role === "Senior Asst. Superintendent") defaultSAS = s.email;
+            }
+        }
+    });
+
+    // B. Determine Current Selection (Saved > Default)
+    // We check if specific CS/SAS were saved for this session
+    const savedSup = slot.supervision || {};
+    const currentCS = savedSup.cs || defaultCS;
+    const currentSAS = savedSup.sas || defaultSAS;
+
+    // C. Render Dropdowns
+    const csSelect = document.getElementById('att-cs-select');
+    const sasSelect = document.getElementById('att-sas-select');
+    
+    // Helper to populate
+    const populateSup = (select, selectedVal) => {
+        select.innerHTML = '<option value="">-- Select --</option>';
+        staffData.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.email;
+            opt.textContent = s.name;
+            if (s.email === selectedVal) opt.selected = true;
+            select.appendChild(opt);
+        });
+        select.disabled = isLocked;
+    };
+
+    if (csSelect) populateSup(csSelect, currentCS);
+    if (sasSelect) populateSup(sasSelect, currentSAS);
+
+    // --- 2. ATTENDANCE LIST RENDERING ---
+    
+    // Start with the assigned invigilators
+    let presentSet = new Set(slot.attendance || slot.assigned || []);
+    
+    // AUTO-MARK: Ensure CS and SAS are in the "Present" list
+    if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
+    if (currentSAS && !presentSet.has(currentSAS)) presentSet.add(currentSAS);
+    
+    // Render
+    presentSet.forEach(email => {
         addAttendanceRow(email, isLocked);
     });
 
-    // 2. Populate Substitute Dropdown
+    // --- 3. SUBSTITUTE DROPDOWN ---
     ui.attSubSelect.innerHTML = '<option value="">Select Staff...</option>';
     staffData.forEach(s => {
-        if (!presentList.includes(s.email)) {
+        if (!presentSet.has(s.email)) {
             ui.attSubSelect.innerHTML += `<option value="${s.email}">${s.name}</option>`;
         }
     });
     
-    // 3. UI STATE MANAGEMENT (Lock Logic)
+    // --- 4. LOCK STATE UI ---
     const addBtn = document.getElementById('btn-att-add');
     const saveBtn = document.getElementById('btn-att-save');
     const lockBtn = document.getElementById('btn-att-lock');
@@ -1892,7 +1953,6 @@ window.loadSessionAttendance = function() {
     const statusText = document.getElementById('att-lock-status');
 
     if (isLocked) {
-        // LOCKED STATE: Disable everything
         subSelect.disabled = true;
         if(addBtn) { addBtn.disabled = true; addBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
         
@@ -1910,7 +1970,6 @@ window.loadSessionAttendance = function() {
         if(statusText) statusText.textContent = "Attendance is finalized and locked.";
 
     } else {
-        // UNLOCKED STATE: Enable everything
         subSelect.disabled = false;
         if(addBtn) { addBtn.disabled = false; addBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
 
@@ -1930,6 +1989,7 @@ window.loadSessionAttendance = function() {
     
     updateAttCount();
 }
+
 
 function addAttendanceRow(email, isLocked) {
     const s = staffData.find(st => st.email === email);
@@ -1985,15 +2045,20 @@ window.saveAttendance = async function() {
     
     const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
     
+    // Capture Supervision
+    const csVal = document.getElementById('att-cs-select').value;
+    const sasVal = document.getElementById('att-sas-select').value;
+
     // Update Cloud Data
     invigilationSlots[key].attendance = presentEmails;
+    invigilationSlots[key].supervision = { cs: csVal, sas: sasVal }; // <--- NEW
     
     await syncSlotsToCloud();
     
-    // Refresh UI to show updated counts
+    // Refresh UI
     populateAttendanceSessions(); 
     renderStaffTable(); 
-    alert("Attendance Saved & Counts Updated!");
+    alert("Attendance & Supervision Saved!");
 }
 window.toggleAttendanceLock = async function(key, lockState) {
     if (lockState && !confirm("Lock this attendance register? \n\nNo further changes will be allowed unless you unlock it.")) return;
