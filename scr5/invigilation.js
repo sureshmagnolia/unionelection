@@ -1057,22 +1057,23 @@ window.toggleAdvance = async function(dateStr, email, session) {
         // REMOVE (Simple Confirm)
         if(confirm(`Remove 'Unavailable' status for ${session}?`)) {
             advanceUnavailability[dateStr][session] = list.filter(u => u.email !== email);
+            
+            // LOGGING
+            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from ${dateStr} (${session}) unavailability list.`);
+            
             await saveAdvanceUnavailability();
             renderStaffCalendar(email); 
             openDayModal(dateStr, email); 
         }
     } else {
         // ADD (Open Modal for Reason)
-        // We use a special key format: "ADVANCE|DD.MM.YYYY|SESSION"
         document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`; 
         document.getElementById('unav-email').value = email;
         
-        // Reset Modal Fields
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
         document.getElementById('unav-details-container').classList.add('hidden');
         
-        // Switch Modals
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
     }
@@ -1234,19 +1235,23 @@ window.confirmUnavailable = async function() {
         if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
         
         if (session === 'WHOLE') {
-            // Remove existing to avoid duplicates, then add new
+            // Remove existing to avoid duplicates
             advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
             advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
             
             advanceUnavailability[dateStr].FN.push(entry);
             advanceUnavailability[dateStr].AN.push(entry);
+            
+            // LOGGING
+            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
         } else {
-            // Single Session (FN or AN)
+            // Single Session
             if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
-            // Remove existing
             advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
-            // Add new
             advanceUnavailability[dateStr][session].push(entry);
+
+            // LOGGING
+            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
         }
         
         await saveAdvanceUnavailability();
@@ -1256,9 +1261,12 @@ window.confirmUnavailable = async function() {
         renderStaffCalendar(email);
 
     } else {
-        // --- CASE B: SLOT SPECIFIC (No Change) ---
+        // --- CASE B: SLOT SPECIFIC ---
         if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
         invigilationSlots[key].unavailable.push(entry);
+        
+        // LOGGING
+        logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
         
         await syncSlotsToCloud();
         window.closeModal('unavailable-modal');
@@ -1680,12 +1688,15 @@ window.saveManualAllocation = async function() {
     const key = document.getElementById('manual-session-key').value;
     const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
     if (invigilationSlots[key]) {
+        // LOGGING
+        const addedCount = selectedEmails.length;
+        logActivity("Manual Assignment", `Assigned ${addedCount} staff to session ${key}`);
+        
         invigilationSlots[key].assigned = selectedEmails;
         await syncSlotsToCloud();
         window.closeModal('manual-allocation-modal');
     }
 }
-
 window.updateManualCounts = function() {
     const count = document.querySelectorAll('.manual-chk:checked').length;
     document.getElementById('manual-sel-count').textContent = count;
@@ -2079,7 +2090,6 @@ window.saveAttendance = async function() {
     const key = ui.attSessionSelect.value;
     if (!key) return;
     
-    // --- VALIDATION: CS & SAS ARE MANDATORY ---
     const csVal = document.getElementById('att-cs-select').value;
     const sasVal = document.getElementById('att-sas-select').value;
 
@@ -2087,7 +2097,6 @@ window.saveAttendance = async function() {
         alert("⚠️ Mandatory Fields Missing\n\nPlease select both a Chief Superintendent (CS) and a Senior Assistant Superintendent (SAS) before saving attendance.");
         return;
     }
-    // ------------------------------------------
     
     if(!confirm(`Confirm attendance for ${key}?\n\nThis will update the 'Duties Done' count for all checked staff.`)) return;
     
@@ -2096,6 +2105,9 @@ window.saveAttendance = async function() {
     // Update Cloud Data
     invigilationSlots[key].attendance = presentEmails;
     invigilationSlots[key].supervision = { cs: csVal, sas: sasVal }; 
+    
+    // LOGGING
+    logActivity("Attendance Marked", `Marked ${presentEmails.length} staff present for ${key}. CS: ${getNameFromEmail(csVal)}, SAS: ${getNameFromEmail(sasVal)}`);
     
     await syncSlotsToCloud();
     
@@ -2181,36 +2193,35 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     // 1. Validation
     if (!slot.assigned.includes(sellerEmail)) {
         alert("This user is no longer assigned to this slot.");
-        renderExchangeMarket(buyerEmail); // Refresh UI
+        renderExchangeMarket(buyerEmail);
         return;
     }
 
     // 2. Perform Swap
-    // Remove Seller
     slot.assigned = slot.assigned.filter(e => e !== sellerEmail);
     slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
-    
-    // Add Buyer
     slot.assigned.push(buyerEmail);
 
-    // 3. Update Stats (Duties Assigned Count)
+    // 3. Update Stats
     const seller = staffData.find(s => s.email === sellerEmail);
     const buyer = staffData.find(s => s.email === buyerEmail);
     
     if (seller && seller.dutiesAssigned > 0) seller.dutiesAssigned--;
     if (buyer) buyer.dutiesAssigned = (buyer.dutiesAssigned || 0) + 1;
 
-    // 4. Sync
+    // 4. LOGGING
+    logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
+
+    // 5. Sync
     await syncSlotsToCloud();
     await syncStaffToCloud();
 
     alert(`Success! You have accepted the duty from ${sellerName}.`);
     
-    // 5. Refresh UI
     window.closeModal('day-detail-modal');
     renderStaffCalendar(buyerEmail);
     renderExchangeMarket(buyerEmail);
-    initStaffDashboard(buyer); // Full Refresh to update counts
+    initStaffDashboard(buyer); 
 }
 window.postForExchange = async function(key, email) {
     // 1. Confirm Action
@@ -2220,23 +2231,20 @@ window.postForExchange = async function(key, email) {
     if (!slot.exchangeRequests) slot.exchangeRequests = [];
     
     if (!slot.exchangeRequests.includes(email)) {
-        // 2. Update Local Data (Optimistic)
+        // 2. Update Local Data
         slot.exchangeRequests.push(email);
         
-        // 3. IMMEDIATE UI UPDATES
+        // 3. LOGGING
+        logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
+        
+        // 4. IMMEDIATE UI UPDATES
         try {
-            // Update Background Calendar (to show Orange "Posted")
             renderStaffCalendar(email);
-            
-            // Update Sidebar Market Widget
             if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-
-            // CRITICAL CHANGE: Close Modal Immediately
             window.closeModal('day-detail-modal');
-            
         } catch(e) { console.error("UI Update Error:", e); }
 
-        // 4. Save to Cloud (Background Process)
+        // 5. Save to Cloud
         await syncSlotsToCloud();
     }
 }
@@ -2250,20 +2258,17 @@ window.withdrawExchange = async function(key, email) {
         // 2. Update Local Data
         slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
         
-        // 3. IMMEDIATE UI UPDATES
+        // 3. LOGGING
+        logActivity("Exchange Withdrawn", `${getNameFromEmail(email)} withdrew request for ${key}.`);
+        
+        // 4. IMMEDIATE UI UPDATES
         try {
-            // Update Background Calendar (to show Blue "Assigned")
             renderStaffCalendar(email);
-
-            // Update Sidebar Market Widget
             if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-            
-            // CRITICAL CHANGE: Close Modal Immediately
             window.closeModal('day-detail-modal');
-
         } catch(e) { console.error("UI Update Error:", e); }
 
-        // 4. Save to Cloud
+        // 5. Save to Cloud
         await syncSlotsToCloud();
     }
 }
@@ -2742,6 +2747,9 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         } catch(e) { console.error("Log save failed", e); }
     }
 
+    // *** ADD THIS LOGGING BLOCK HERE ***
+    logActivity("Auto-Assign Run", `Admin ran auto-assign for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
+
     // 7. Save Slots & Refresh
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
@@ -2775,6 +2783,81 @@ window.viewAutoAssignLogs = async function() {
         window.openModal('inconvenience-modal');
     }
 }
+// --- ACTIVITY LOGGING SYSTEM (1MB Limit + FIFO) ---
+async function logActivity(action, details) {
+    try {
+        const userEmail = currentUser ? currentUser.email : "Unknown";
+        const timestamp = new Date().toISOString();
+        
+        // Short keys to save space: t=time, u=user, a=action, d=details
+        const newEntry = { t: timestamp, u: userEmail, a: action, d: details };
+        
+        // Store in a separate document to avoid bloating the main college config
+        const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
+        const snap = await getDoc(logRef);
+        
+        let entries = [];
+        if (snap.exists()) {
+            entries = snap.data().entries || [];
+        }
+        
+        // Add new entry
+        entries.push(newEntry);
+        
+        // SIZE CHECK: Keep under ~1MB (approx 950,000 chars to be safe)
+        // Simple FIFO rotation
+        while (JSON.stringify(entries).length > 950000) {
+            entries.shift(); // Remove oldest
+        }
+        
+        await setDoc(logRef, { entries: entries });
+        
+    } catch (e) {
+        console.error("Logging Error:", e);
+    }
+}
+
+window.viewActivityLogs = async function() {
+    const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
+    const snap = await getDoc(logRef);
+    
+    if (!snap.exists() || !snap.data().entries || snap.data().entries.length === 0) {
+        return alert("No activity logs found.");
+    }
+    
+    const entries = snap.data().entries.reverse(); // Show newest first
+    
+    const list = document.getElementById('inconvenience-list');
+    const title = document.getElementById('inconvenience-modal-subtitle');
+    document.querySelector('#inconvenience-modal h3').textContent = "🕒 User Activity Log";
+    title.textContent = "History of user actions (Filling, Removal, Unavailability).";
+    
+    list.innerHTML = entries.map(e => {
+        const dateObj = new Date(e.t);
+        const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
+        
+        let colorClass = "border-l-4 border-gray-400";
+        if (e.a.includes("Assigned")) colorClass = "border-l-4 border-green-500";
+        if (e.a.includes("Removed") || e.a.includes("Withdraw")) colorClass = "border-l-4 border-red-500";
+        if (e.a.includes("Unavailable")) colorClass = "border-l-4 border-orange-500";
+        if (e.a.includes("Exchange")) colorClass = "border-l-4 border-purple-500";
+
+        return `
+            <div class="bg-white p-2 rounded shadow-sm mb-2 border border-gray-200 ${colorClass} text-xs">
+                <div class="flex justify-between text-gray-500 mb-1">
+                    <span class="font-mono">${dateStr}</span>
+                    <span class="font-bold text-gray-700">${e.u}</span>
+                </div>
+                <div class="font-bold text-gray-800">${e.a}</div>
+                <div class="text-gray-600 mt-0.5">${e.d}</div>
+            </div>
+        `;
+    }).join('');
+    
+    window.openModal('inconvenience-modal');
+}
+
+
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
