@@ -545,7 +545,11 @@ function renderStaffTable() {
             <td class="px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
             <td class="px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
             <td class="px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
-            <td class="px-6 py-3 text-right text-xs font-medium flex justify-end gap-2"><button onclick="openRoleAssignmentModal(${index})" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded">Role</button><button onclick="deleteStaff(${index})" class="text-red-500 hover:text-red-700">&times;</button></td>
+            <td class="px-6 py-3 text-right text-xs font-medium flex justify-end gap-2">
+                <button onclick="editStaff(${index})" class="text-blue-600 hover:text-blue-900 bg-blue-50 px-2 py-1 rounded">Edit</button>
+                <button onclick="openRoleAssignmentModal(${index})" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded">Role</button>
+                <button onclick="deleteStaff(${index})" class="text-red-500 hover:text-red-700">&times;</button>
+            </td>
         `;
         ui.staffTableBody.appendChild(row);
     });
