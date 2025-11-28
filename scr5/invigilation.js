@@ -385,7 +385,7 @@ function updateAdminUI() {
     
     renderStaffTable(); 
 }
-// --- RENDER ADMIN SLOTS (With Weekly Controls) ---
+// --- RENDER ADMIN SLOTS (With Weekly Controls & Auto-Assign) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
@@ -412,6 +412,7 @@ function renderSlotsGridAdmin() {
         if (date > groups[groupKey].maxDate) groups[groupKey].maxDate = date;
     });
 
+    // 2. Sort Weeks (Newest First)
     const sortedGroups = Object.values(groups).sort((a, b) => b.maxDate - a.maxDate);
 
     if (sortedGroups.length === 0) {
@@ -420,29 +421,49 @@ function renderSlotsGridAdmin() {
     }
 
     let lastMonth = "";
+    let lastWeek = "";
 
     sortedGroups.forEach(group => {
         group.slots.sort((a, b) => a.date - b.date);
 
+        // Month Header
         if (group.monthStr !== lastMonth) {
             ui.adminSlotsGrid.innerHTML += `
                 <div class="col-span-full mt-6 mb-1 border-b border-gray-300 pb-2">
-                    <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">📅 ${group.monthStr}</h3>
+                    <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">
+                        📅 ${group.monthStr}
+                    </h3>
                 </div>`;
             lastMonth = group.monthStr;
+            lastWeek = ""; 
         }
 
-        ui.adminSlotsGrid.innerHTML += `
-            <div class="col-span-full mt-3 mb-2 flex justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm">
-                <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                    <span class="bg-white px-2 py-0.5 rounded border border-indigo-100">Week ${group.weekNum}</span>
-                </span>
-                <div class="flex gap-2">
-                    <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, true)" class="text-[10px] bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-bold transition shadow-sm flex items-center gap-1">🔒 Lock Week</button>
-                    <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, false)" class="text-[10px] bg-white border border-green-200 text-green-600 px-3 py-1 rounded hover:bg-green-50 font-bold transition shadow-sm flex items-center gap-1">🔓 Unlock Week</button>
-                </div>
-            </div>`;
+        // Week Header with AUTO-ASSIGN Button
+        if (group.monthStr + group.weekNum !== lastWeek) {
+            ui.adminSlotsGrid.innerHTML += `
+                <div class="col-span-full mt-3 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
+                    <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <span class="bg-white px-2 py-0.5 rounded border border-indigo-100">Week ${group.weekNum}</span>
+                    </span>
+                    <div class="flex gap-2">
+                         <button onclick="runWeeklyAutoAssign('${group.monthStr}', ${group.weekNum})" 
+                            class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
+                            ⚡ Auto-Assign Week
+                        </button>
+                        <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, true)" 
+                            class="text-[10px] bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-bold transition shadow-sm flex items-center gap-1">
+                            🔒 Lock
+                        </button>
+                        <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, false)" 
+                            class="text-[10px] bg-white border border-green-200 text-green-600 px-3 py-1 rounded hover:bg-green-50 font-bold transition shadow-sm flex items-center gap-1">
+                            🔓 Unlock
+                        </button>
+                    </div>
+                </div>`;
+            lastWeek = group.monthStr + group.weekNum;
+        }
 
+        // Render Slots
         group.slots.forEach(item => {
             const { key, slot } = item;
             const filled = slot.assigned.length;
@@ -469,16 +490,12 @@ function renderSlotsGridAdmin() {
                         <div class="text-xs text-gray-600 mb-2"><strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}</div>
                         ${unavButton}
                     </div>
-                    
                     <div class="flex gap-2 mt-3">
-                        <button onclick="printSessionReport('${key}')" class="w-20 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition" title="Print Report">
-                            <span>🖨️</span> Print
-                        </button>
+                        <button onclick="printSessionReport('${key}')" class="w-20 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition" title="Print Report"><span>🖨️</span> Print</button>
                         <button onclick="openManualAllocationModal('${key}')" class="flex-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition">Manual Assign</button>
                         <button onclick="toggleLock('${key}')" class="w-16 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
                     </div>
-                </div>
-            `;
+                </div>`;
         });
     });
 }
@@ -2575,7 +2592,183 @@ window.openCompletedDutiesModal = function(email) {
 
     window.openModal('completed-duties-modal');
 }
+// --- WEEKLY AUTO-ASSIGN ALGORITHM ---
+window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
+    if(!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nNOTE: This respects "Advance Unavailability" and prioritizes staff with high pending duties.\n\nRules:\n1. Max 3 duties/week (Soft Limit)\n2. Avoid Same Day & Adjacent Days (Soft Limit)\n3. "Show Must Go On" - Rules will break if no one else is available.`)) return;
 
+    // 1. Identify Target Slots (Only unlocked ones in this week)
+    const targetSlots = [];
+    Object.keys(invigilationSlots).forEach(key => {
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+        const slot = invigilationSlots[key];
+
+        if (mStr === monthStr && wNum === weekNum && !slot.isLocked) {
+            targetSlots.push({ key, date, slot });
+        }
+    });
+
+    if (targetSlots.length === 0) return alert("No unlocked slots found in this week. Unlock slots first.");
+
+    // 2. Sort Slots Chronologically (Important for adjacent checks)
+    targetSlots.sort((a, b) => a.date - b.date);
+
+    // 3. Prepare Staff Stats
+    // Calculate pending duty for everyone to prioritize high pending
+    let eligibleStaff = staffData.map(s => ({
+        ...s,
+        pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
+        assignedThisWeek: 0 // Reset counter for this run
+    }));
+
+    // Count duties ALREADY assigned in this week (manual ones)
+    targetSlots.forEach(t => {
+        t.slot.assigned.forEach(email => {
+            const s = eligibleStaff.find(st => st.email === email);
+            if(s) s.assignedThisWeek++;
+        });
+    });
+
+    const logEntries = [];
+    let assignedCount = 0;
+
+    // 4. Process Each Slot
+    for (const target of targetSlots) {
+        const { key, date, slot } = target;
+        const needed = slot.required - slot.assigned.length;
+        
+        if (needed <= 0) continue;
+
+        // Iterate to fill needed spots
+        for (let i = 0; i < needed; i++) {
+            // Score Candidates
+            const candidates = eligibleStaff.map(s => {
+                let score = s.pending * 100; // Base Score: High Pending = High Priority
+                let warnings = [];
+
+                // --- HARD CONSTRAINTS (Must Exclude) ---
+                if (slot.assigned.includes(s.email)) return null; // Already in this slot
+                if (isUserUnavailable(slot, s.email, key)) return null; // Marked Unavailable (Slot or Advance)
+
+                // --- SOFT CONSTRAINTS (Penalize Score) ---
+                
+                // Rule 1: Max 3 per week
+                if (s.assignedThisWeek >= 3) {
+                    score -= 5000; 
+                    warnings.push("Over Weekly Limit (3)");
+                }
+
+                // Rule 2: Same Day Conflict (AM/PM)
+                const sameDayKeys = targetSlots.filter(t => 
+                    t.date.toDateString() === date.toDateString() && t.key !== key
+                ).map(t => t.key);
+                
+                let hasSameDay = false;
+                sameDayKeys.forEach(sdk => {
+                    if (invigilationSlots[sdk].assigned.includes(s.email)) hasSameDay = true;
+                });
+                if (hasSameDay) {
+                    score -= 2000;
+                    warnings.push("Same Day Double Duty");
+                }
+
+                // Rule 3: Adjacent Day Conflict
+                const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
+                const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
+                
+                let hasAdjacent = false;
+                targetSlots.forEach(t => {
+                    if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString()) 
+                        && t.slot.assigned.includes(s.email)) {
+                        hasAdjacent = true;
+                    }
+                });
+                if (hasAdjacent) {
+                    score -= 1000;
+                    warnings.push("Adjacent Day Duty");
+                }
+
+                return { staff: s, score, warnings };
+            }).filter(c => c !== null); // Filter out hard exclusions
+
+            // Sort by Score (High to Low)
+            candidates.sort((a, b) => b.score - a.score);
+
+            if (candidates.length > 0) {
+                const choice = candidates[0]; // Best candidate
+                
+                // Assign
+                slot.assigned.push(choice.staff.email);
+                choice.staff.assignedThisWeek++;
+                choice.staff.pending--; // Decrease pending priority for next slot
+                assignedCount++;
+
+                // Log Logic
+                if (choice.warnings.length > 0) {
+                    logEntries.push({
+                        type: "WARN",
+                        msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}`
+                    });
+                } else {
+                     // Optional: Log success too if needed, but keep it clean
+                }
+            } else {
+                logEntries.push({
+                    type: "ERROR",
+                    msg: `FAILED to fill slot ${key}. No eligible staff available (Everyone unavailable).`
+                });
+            }
+        }
+    }
+
+    // 5. Save Log
+    if (logEntries.length > 0) {
+        const logRef = doc(db, "colleges", currentCollegeId);
+        const timestamp = new Date().toLocaleString();
+        // Append to existing logs
+        const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
+        
+        try {
+             await updateDoc(logRef, {
+                autoAssignLogs: arrayUnion(...newLogs)
+            });
+        } catch(e) { console.error("Log save failed", e); }
+    }
+
+    // 6. Save Slots & Refresh
+    await syncSlotsToCloud();
+    renderSlotsGridAdmin();
+    
+    let alertMsg = `✅ Auto-Assign Complete!\n फिल्लड़ ${assignedCount} positions.`;
+    if (logEntries.length > 0) {
+        alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated (Rules Broken). Check Logs.`;
+    }
+    alert(alertMsg);
+}
+window.viewAutoAssignLogs = async function() {
+    const ref = doc(db, "colleges", currentCollegeId);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+        const logs = snap.data().autoAssignLogs || [];
+        if (logs.length === 0) return alert("No logs found.");
+
+        // Show in a simple modal or reuse 'inconvenience-modal'
+        const list = document.getElementById('inconvenience-list');
+        const title = document.getElementById('inconvenience-modal-subtitle');
+        document.querySelector('#inconvenience-modal h3').textContent = "📜 Auto-Assign Logs";
+        title.textContent = "History of automated decisions & overrides.";
+
+        list.innerHTML = logs.reverse().map(l => {
+            const isWarn = l.includes("WARN");
+            const isErr = l.includes("ERROR");
+            const color = isErr ? "text-red-600 bg-red-50" : (isWarn ? "text-orange-600 bg-orange-50" : "text-gray-600");
+            return `<div class="text-xs p-2 border-b border-gray-100 ${color} font-mono">${l}</div>`;
+        }).join('');
+
+        window.openModal('inconvenience-modal');
+    }
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -2627,6 +2820,8 @@ window.toggleWeekLock = toggleWeekLock;
 window.printSessionReport = printSessionReport;
 window.renderAdminTodayStats = renderAdminTodayStats;
 window.openCompletedDutiesModal = openCompletedDutiesModal;
+window.runWeeklyAutoAssign = runWeeklyAutoAssign;
+window.viewAutoAssignLogs = viewAutoAssignLogs;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
