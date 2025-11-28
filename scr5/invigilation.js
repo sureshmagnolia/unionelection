@@ -1491,22 +1491,7 @@ function renderRolesList() {
         return;
     }
 
-    Object.entries(rolesConfig).forEach(([role, target]) => {
-        container.innerHTML += `
-            <div class="flex justify-between items-center text-xs bg-white p-2 rounded border mb-1 group">
-                <span class="font-bold text-gray-700">${role}</span>
-                <div class="flex items-center gap-3">
-                    <button onclick="editRoleConfig('${role}', ${target})" 
-                            class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono font-bold hover:bg-indigo-100 hover:text-indigo-900 border border-transparent hover:border-indigo-200 transition" 
-                            title="Click to Edit Target">
-                        ${target}/mo ✎
-                    </button>
-                    
-                    <button onclick="deleteRoleConfig('${role}')" class="text-red-400 hover:text-red-700 font-bold text-lg leading-none transition">&times;</button>
-                </div>
-            </div>`;
-    });
-}
+  }
 
  
 window.addNewRoleConfig = function() {
