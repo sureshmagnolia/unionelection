@@ -385,89 +385,94 @@ function updateAdminUI() {
     
     renderStaffTable(); 
 }
-// --- RENDER ADMIN SLOTS (With Weekly Controls & Auto-Assign) ---
+// --- RENDER ADMIN SLOTS (Grouped by Month & Week, Slots Ascending) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
     
-    // 1. Group Data
-    const groups = {}; 
+    // 1. Prepare Data & Sort
+    const slotItems = Object.keys(invigilationSlots).map(key => ({
+        key,
+        date: parseDate(key),
+        slot: invigilationSlots[key]
+    }));
 
-    Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
-        const monthStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const weekNum = getWeekOfMonth(date);
-        const groupKey = `${monthStr}-W${weekNum}`;
-
-        if (!groups[groupKey]) {
-            groups[groupKey] = {
-                monthStr,
-                weekNum,
-                slots: [],
-                maxDate: new Date(0)
-            };
-        }
-
-        groups[groupKey].slots.push({ key, date, slot: invigilationSlots[key] });
-        if (date > groups[groupKey].maxDate) groups[groupKey].maxDate = date;
-    });
-
-    // 2. Sort Weeks (Newest First)
-    const sortedGroups = Object.values(groups).sort((a, b) => b.maxDate - a.maxDate);
-
-    if (sortedGroups.length === 0) {
-        ui.adminSlotsGrid.innerHTML = `<div class="col-span-full text-center text-gray-400 py-10 italic">No exam slots available. Add a slot to begin.</div>`;
-        return;
-    }
+    slotItems.sort((a, b) => b.date - a.date);
 
     let lastMonth = "";
     let lastWeek = "";
 
-    sortedGroups.forEach(group => {
-        group.slots.sort((a, b) => a.date - b.date);
+    if (slotItems.length === 0) {
+        ui.adminSlotsGrid.innerHTML = `<div class="col-span-full text-center text-gray-400 py-10 italic">No exam slots available. Add a slot to begin.</div>`;
+        return;
+    }
 
+    const getWeekOfMonth = (date) => {
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+        const dayOfWeek = firstDay.getDay();
+        const startOffset = dayOfWeek;
+        const dayOfMonth = date.getDate();
+        return Math.ceil((dayOfMonth + startOffset) / 7);
+    };
+
+    // Group Logic
+    const groupedSlots = {};
+    slotItems.forEach(item => {
+        const monthStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const weekNum = getWeekOfMonth(item.date);
+        const groupKey = `${monthStr}-W${weekNum}`;
+        if (!groupedSlots[groupKey]) {
+            groupedSlots[groupKey] = { month: monthStr, week: weekNum, items: [] };
+        }
+        groupedSlots[groupKey].items.push(item);
+    });
+
+    // Sort Groups (Newest Week First)
+    const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => {
+        const dateA = groupedSlots[a].items[0].date;
+        const dateB = groupedSlots[b].items[0].date;
+        return dateB - dateA;
+    });
+
+    sortedGroupKeys.forEach(gKey => {
+        const group = groupedSlots[gKey];
+        
         // Month Header
-        if (group.monthStr !== lastMonth) {
+        if (group.month !== lastMonth) {
             ui.adminSlotsGrid.innerHTML += `
                 <div class="col-span-full mt-6 mb-1 border-b border-gray-300 pb-2">
-                    <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">
-                        📅 ${group.monthStr}
-                    </h3>
+                    <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">📅 ${group.month}</h3>
                 </div>`;
-            lastMonth = group.monthStr;
-            lastWeek = ""; 
+            lastMonth = group.month;
         }
 
-        // Week Header with AUTO-ASSIGN Button
-        if (group.monthStr + group.weekNum !== lastWeek) {
-            ui.adminSlotsGrid.innerHTML += `
-                <div class="col-span-full mt-3 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
-                    <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                        <span class="bg-white px-2 py-0.5 rounded border border-indigo-100">Week ${group.weekNum}</span>
-                    </span>
-                    <div class="flex gap-2">
-                         <button onclick="runWeeklyAutoAssign('${group.monthStr}', ${group.weekNum})" 
-                            class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
-                            ⚡ Auto-Assign Week
-                        </button>
-                        <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, true)" 
-                            class="text-[10px] bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-bold transition shadow-sm flex items-center gap-1">
-                            🔒 Lock
-                        </button>
-                        <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, false)" 
-                            class="text-[10px] bg-white border border-green-200 text-green-600 px-3 py-1 rounded hover:bg-green-50 font-bold transition shadow-sm flex items-center gap-1">
-                            🔓 Unlock
-                        </button>
-                    </div>
-                </div>`;
-            lastWeek = group.monthStr + group.weekNum;
-        }
+        // Week Header
+        ui.adminSlotsGrid.innerHTML += `
+            <div class="col-span-full mt-3 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
+                <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                    <span class="bg-white px-2 py-0.5 rounded border border-indigo-100">Week ${group.week}</span>
+                </span>
+                <div class="flex gap-2">
+                    <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" 
+                        class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
+                        ⚡ Auto-Assign
+                    </button>
+                    <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" 
+                        class="text-[10px] bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-bold transition shadow-sm flex items-center gap-1">
+                        🔒 Lock
+                    </button>
+                    <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" 
+                        class="text-[10px] bg-white border border-green-200 text-green-600 px-3 py-1 rounded hover:bg-green-50 font-bold transition shadow-sm flex items-center gap-1">
+                        🔓 Unlock
+                    </button>
+                </div>
+            </div>`;
 
-        // Render Slots
-        group.slots.forEach(item => {
-            const { key, slot } = item;
+        // Render Slots (Ascending Date Order within Week)
+        group.items.sort((a, b) => a.date - b.date);
+        
+        group.items.forEach(({ key, slot }) => {
             const filled = slot.assigned.length;
-            
             let statusColor = slot.isLocked ? "border-red-500 bg-red-50" : (filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50");
             let statusIcon = slot.isLocked ? "🔒" : (filled >= slot.required ? "✅" : "🔓");
 
@@ -2592,11 +2597,12 @@ window.openCompletedDutiesModal = function(email) {
 
     window.openModal('completed-duties-modal');
 }
-// --- WEEKLY AUTO-ASSIGN ALGORITHM ---
+// --- WEEKLY AUTO-ASSIGN ALGORITHM (Admin Mode Only) ---
 window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
-    if(!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nNOTE: This respects "Advance Unavailability" and prioritizes staff with high pending duties.\n\nRules:\n1. Max 3 duties/week (Soft Limit)\n2. Avoid Same Day & Adjacent Days (Soft Limit)\n3. "Show Must Go On" - Rules will break if no one else is available.`)) return;
+    // 1. CHECK: Confirm Intent
+    if(!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week (Soft Limit)\n2. Avoid Same Day & Adjacent Days\n3. "Show Must Go On" - Rules break if necessary.`)) return;
 
-    // 1. Identify Target Slots (Only unlocked ones in this week)
+    // 2. Identify Target Slots (MUST BE LOCKED)
     const targetSlots = [];
     Object.keys(invigilationSlots).forEach(key => {
         const date = parseDate(key);
@@ -2604,17 +2610,20 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         const wNum = getWeekOfMonth(date);
         const slot = invigilationSlots[key];
 
-        if (mStr === monthStr && wNum === weekNum && !slot.isLocked) {
+        // *** CHANGE: Only target LOCKED slots ***
+        if (mStr === monthStr && wNum === weekNum && slot.isLocked) {
             targetSlots.push({ key, date, slot });
         }
     });
 
-    if (targetSlots.length === 0) return alert("No unlocked slots found in this week. Unlock slots first.");
+    if (targetSlots.length === 0) {
+        return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
+    }
 
-    // 2. Sort Slots Chronologically (Important for adjacent checks)
+    // 3. Sort Slots Chronologically (Important for adjacent checks)
     targetSlots.sort((a, b) => a.date - b.date);
 
-    // 3. Prepare Staff Stats
+    // 4. Prepare Staff Stats
     // Calculate pending duty for everyone to prioritize high pending
     let eligibleStaff = staffData.map(s => ({
         ...s,
@@ -2633,7 +2642,7 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
     const logEntries = [];
     let assignedCount = 0;
 
-    // 4. Process Each Slot
+    // 5. Process Each Slot
     for (const target of targetSlots) {
         const { key, date, slot } = target;
         const needed = slot.required - slot.assigned.length;
@@ -2710,8 +2719,6 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
                         type: "WARN",
                         msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}`
                     });
-                } else {
-                     // Optional: Log success too if needed, but keep it clean
                 }
             } else {
                 logEntries.push({
@@ -2722,11 +2729,10 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         }
     }
 
-    // 5. Save Log
+    // 6. Save Log
     if (logEntries.length > 0) {
         const logRef = doc(db, "colleges", currentCollegeId);
         const timestamp = new Date().toLocaleString();
-        // Append to existing logs
         const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
         
         try {
@@ -2736,11 +2742,11 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         } catch(e) { console.error("Log save failed", e); }
     }
 
-    // 6. Save Slots & Refresh
+    // 7. Save Slots & Refresh
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
     
-    let alertMsg = `✅ Auto-Assign Complete!\n फिल्लड़ ${assignedCount} positions.`;
+    let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
     if (logEntries.length > 0) {
         alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated (Rules Broken). Check Logs.`;
     }
