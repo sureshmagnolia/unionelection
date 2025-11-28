@@ -1865,7 +1865,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     initStaffDashboard(buyer); // Full Refresh to update counts
 }
 window.postForExchange = async function(key, email) {
-    // 1. Confirmation
+    // 1. Confirm Action
     if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
     
     const slot = invigilationSlots[key];
@@ -1875,17 +1875,16 @@ window.postForExchange = async function(key, email) {
         // 2. Update Local Data (Optimistic)
         slot.exchangeRequests.push(email);
         
-        // 3. FORCE UI UPDATE (Immediate)
+        // 3. IMMEDIATE UI UPDATES
         try {
-            // Update Calendar Background
+            // Update Background Calendar (to show Orange "Posted")
             renderStaffCalendar(email);
             
             // Update Sidebar Market Widget
             if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
 
-            // CRITICAL: Refresh the Modal Button Instantly
-            const dateStr = key.split('|')[0].trim(); 
-            openDayModal(dateStr, email); 
+            // CRITICAL CHANGE: Close Modal Immediately
+            window.closeModal('day-detail-modal');
             
         } catch(e) { console.error("UI Update Error:", e); }
 
@@ -1903,24 +1902,20 @@ window.withdrawExchange = async function(key, email) {
         // 2. Update Local Data
         slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
         
-        // 3. FORCE UI UPDATE (Immediate)
+        // 3. IMMEDIATE UI UPDATES
         try {
-            // Update Calendar Background
+            // Update Background Calendar (to show Blue "Assigned")
             renderStaffCalendar(email);
 
             // Update Sidebar Market Widget
             if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
             
-            // CRITICAL: Refresh the Modal Button Instantly
-            const dateStr = key.split('|')[0].trim();
-            openDayModal(dateStr, email);
+            // CRITICAL CHANGE: Close Modal Immediately
+            window.closeModal('day-detail-modal');
 
         } catch(e) { console.error("UI Update Error:", e); }
 
-        // 4. Notification
-        // alert("✅ Request withdrawn."); // Optional: Removed to make it faster/smoother
-
-        // 5. Save to Cloud
+        // 4. Save to Cloud
         await syncSlotsToCloud();
     }
 }
