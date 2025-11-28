@@ -1508,17 +1508,7 @@ function renderRolesList() {
     });
 }
 
-    Object.entries(rolesConfig).forEach(([role, target]) => {
-        container.innerHTML += `
-            <div class="flex justify-between items-center text-xs bg-white p-2 rounded border mb-1">
-                <span class="font-bold text-gray-700">${role}</span>
-                <div class="flex items-center gap-3">
-                    <span class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono font-bold">${target}/mo</span>
-                    <button onclick="deleteRoleConfig('${role}')" class="text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button>
-                </div>
-            </div>`;
-    });
-
+ 
 window.addNewRoleConfig = function() {
     const name = document.getElementById('new-role-name').value.trim();
     const target = parseInt(document.getElementById('new-role-target').value);
