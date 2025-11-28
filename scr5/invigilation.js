@@ -2792,7 +2792,6 @@ async function logActivity(action, details) {
         // Short keys to save space: t=time, u=user, a=action, d=details
         const newEntry = { t: timestamp, u: userEmail, a: action, d: details };
         
-        // Store in a separate document to avoid bloating the main college config
         const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
         const snap = await getDoc(logRef);
         
@@ -2801,11 +2800,9 @@ async function logActivity(action, details) {
             entries = snap.data().entries || [];
         }
         
-        // Add new entry
         entries.push(newEntry);
         
-        // SIZE CHECK: Keep under ~1MB (approx 950,000 chars to be safe)
-        // Simple FIFO rotation
+        // SIZE CHECK: Keep under ~1MB (approx 950k chars)
         while (JSON.stringify(entries).length > 950000) {
             entries.shift(); // Remove oldest
         }
@@ -2815,6 +2812,84 @@ async function logActivity(action, details) {
     } catch (e) {
         console.error("Logging Error:", e);
     }
+}
+
+// --- ENHANCED ACTIVITY LOG VIEWER (With Search/Filter) ---
+window.viewActivityLogs = async function() {
+    const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
+    const snap = await getDoc(logRef);
+    
+    if (!snap.exists() || !snap.data().entries || snap.data().entries.length === 0) {
+        return alert("No activity logs found.");
+    }
+    
+    // 1. Get Data & Reverse (Newest First)
+    const entries = snap.data().entries.reverse();
+    
+    // 2. Setup Modal Elements
+    const list = document.getElementById('inconvenience-list');
+    const titleEl = document.querySelector('#inconvenience-modal h3');
+    const subtitleEl = document.getElementById('inconvenience-modal-subtitle');
+    
+    titleEl.textContent = "🕒 User Activity Log";
+    
+    // 3. Inject Search Bar into Subtitle Area
+    subtitleEl.innerHTML = `
+        <input type="text" id="activity-log-search" 
+               placeholder="🔍 Search User, Action, or Details..." 
+               class="w-full mt-2 p-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-indigo-500 shadow-inner">
+    `;
+    
+    // 4. Render Function
+    const renderLogs = (filterText = "") => {
+        const search = filterText.toLowerCase();
+        
+        // Filter Logic
+        const filtered = entries.filter(e => 
+            (e.u && e.u.toLowerCase().includes(search)) || 
+            (e.a && e.a.toLowerCase().includes(search)) || 
+            (e.d && e.d.toLowerCase().includes(search))
+        );
+        
+        if (filtered.length === 0) {
+            list.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">No matching records found.</div>`;
+            return;
+        }
+
+        list.innerHTML = filtered.map(e => {
+            const dateObj = new Date(e.t);
+            const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
+            
+            let colorClass = "border-l-4 border-gray-400";
+            let bgClass = "bg-white";
+            
+            if (e.a.includes("Assigned")) { colorClass = "border-l-4 border-green-500"; bgClass = "bg-green-50"; }
+            if (e.a.includes("Removed") || e.a.includes("Withdraw")) { colorClass = "border-l-4 border-red-500"; bgClass = "bg-red-50"; }
+            if (e.a.includes("Unavailable")) { colorClass = "border-l-4 border-orange-500"; bgClass = "bg-orange-50"; }
+            if (e.a.includes("Exchange")) { colorClass = "border-l-4 border-purple-500"; bgClass = "bg-purple-50"; }
+            if (e.a.includes("Auto")) { colorClass = "border-l-4 border-blue-500"; bgClass = "bg-blue-50"; }
+
+            return `
+                <div class="${bgClass} p-3 rounded shadow-sm mb-2 border border-gray-200 ${colorClass} text-xs transition hover:shadow-md">
+                    <div class="flex justify-between text-gray-500 mb-1 border-b border-gray-200/50 pb-1">
+                        <span class="font-mono text-[10px]">${dateStr}</span>
+                        <span class="font-bold text-gray-700 truncate max-w-[150px]" title="${e.u}">${e.u}</span>
+                    </div>
+                    <div class="font-bold text-gray-800 mt-1 text-sm">${e.a}</div>
+                    <div class="text-gray-600 mt-0.5 leading-relaxed font-medium">${e.d}</div>
+                </div>
+            `;
+        }).join('');
+    };
+
+    // 5. Attach Real-time Search Listener
+    document.getElementById('activity-log-search').addEventListener('input', (e) => {
+        renderLogs(e.target.value);
+    });
+    
+    // 6. Initial Render & Open
+    renderLogs();
+    window.openModal('inconvenience-modal');
 }
 
 window.viewActivityLogs = async function() {
@@ -2911,6 +2986,7 @@ window.renderAdminTodayStats = renderAdminTodayStats;
 window.openCompletedDutiesModal = openCompletedDutiesModal;
 window.runWeeklyAutoAssign = runWeeklyAutoAssign;
 window.viewAutoAssignLogs = viewAutoAssignLogs;
+window.viewActivityLogs = viewActivityLogs;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
