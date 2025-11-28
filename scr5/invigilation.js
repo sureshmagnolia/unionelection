@@ -182,9 +182,9 @@ function setupLiveSync(collegeId, mode) {
                         
                         // --- UPDATE STATS LIVE ---
                         const done = getDutiesDoneCount(me.email);
-                        const pending = calculateStaffTarget(me) - done;
+                        const pending = Math.max(0, calculateStaffTarget(me) - done); // FIX: No negative
                         
-                        document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
+                        document.getElementById('staff-view-pending').textContent = pending;
                         const completedEl = document.getElementById('staff-view-completed');
                         if(completedEl) completedEl.textContent = done;
                     }
@@ -290,19 +290,17 @@ function initStaffDashboard(me) {
     // --- CALCULATE STATS ---
     const target = calculateStaffTarget(me);
     const done = getDutiesDoneCount(me.email); 
-    const pending = target - done;
+    const pending = Math.max(0, target - done); // FIX: No negative values
     
     // Update UI
-    document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
+    document.getElementById('staff-view-pending').textContent = pending;
     const completedEl = document.getElementById('staff-view-completed');
     if(completedEl) completedEl.textContent = done;
 
-    // --- NEW: Attach Click Handler for History ---
     const completedCard = document.getElementById('staff-completed-card');
     if(completedCard) {
         completedCard.onclick = () => window.openCompletedDutiesModal(me.email);
     }
-    // ---------------------------------------------
     
     updateHeaderButtons('staff');
     renderStaffCalendar(me.email);
@@ -314,7 +312,6 @@ function initStaffDashboard(me) {
     
     showView('staff');
     
-    // Calendar Navigation Listeners
     document.getElementById('cal-prev').onclick = () => { 
         currentCalDate.setMonth(currentCalDate.getMonth()-1); 
         renderStaffCalendar(me.email); 
@@ -507,7 +504,6 @@ function renderSlotsGridAdmin() {
         });
     });
 }
-
 function renderStaffTable() {
     if(!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
@@ -515,16 +511,24 @@ function renderStaffTable() {
 
     staffData.forEach((staff, index) => {
         if (filter && !staff.name.toLowerCase().includes(filter)) return;
+        
         const target = calculateStaffTarget(staff);
-        const done = getDutiesDoneCount(staff.email); // Calculated dynamically
-        const pending = target - done;
+        const done = getDutiesDoneCount(staff.email);
+        
+        // FIX: Clamp Pending to 0
+        const rawPending = target - done;
+        const pending = Math.max(0, rawPending);
+
         let activeRoleLabel = "";
         const today = new Date();
         if (staff.roleHistory) {
             const activeRole = staff.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
             if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1">${activeRole.role}</span>`;
         }
+        
+        // Status Color Logic (Green if 0)
         const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
+        
         const row = document.createElement('tr');
         row.className = "hover:bg-gray-50 transition border-b border-gray-100";
         row.innerHTML = `
@@ -537,6 +541,7 @@ function renderStaffTable() {
         ui.staffTableBody.appendChild(row);
     });
 }
+
 function renderStaffRankList(myEmail) {
     const list = document.getElementById('staff-rank-list');
     if (!list) return;
@@ -557,17 +562,17 @@ function renderStaffRankList(myEmail) {
         const textClass = isMe ? "text-indigo-700 font-bold" : "text-gray-700";
         const rankBadge = i < 3 ? `text-orange-500 font-black` : `text-gray-400 font-medium`;
         
-        // --- NEW: Active Role Logic ---
+        // FIX: Display 0 if negative
+        const displayPending = Math.max(0, s.pending);
+
         let roleBadge = "";
         if (s.roleHistory) {
             const today = new Date();
             const activeRole = s.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
             if (activeRole) {
-                // Small purple badge for the role
                 roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
             }
         }
-        // ------------------------------
 
         return `
             <div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition mb-1">
@@ -581,7 +586,7 @@ function renderStaffRankList(myEmail) {
                         <span class="text-[9px] text-gray-400 truncate">${s.dept}</span>
                     </div>
                 </div>
-                <span class="font-mono font-bold ${s.pending > 0 ? 'text-red-600' : 'text-green-600'} ml-2">${s.pending}</span>
+                <span class="font-mono font-bold ${displayPending > 0 ? 'text-red-600' : 'text-green-600'} ml-2">${displayPending}</span>
             </div>`;
     }).join('');
 }
@@ -1589,11 +1594,9 @@ window.openManualAllocationModal = function(key) {
 
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
-    // Default to 0 if undefined to prevent layout issues
     document.getElementById('manual-modal-req').textContent = slot.required || 0;
     
-    // 1. Sort Staff (Calculate Pending Duties Dynamically)
-    // We use getDutiesDoneCount(s.email) to ensure accuracy
+    // 1. Sort Staff
     const rankedStaff = staffData.map(s => {
         const done = getDutiesDoneCount(s.email);
         const target = calculateStaffTarget(s);
@@ -1601,7 +1604,7 @@ window.openManualAllocationModal = function(key) {
             ...s,
             pending: target - done
         };
-    }).sort((a, b) => b.pending - a.pending); // Highest pending first
+    }).sort((a, b) => b.pending - a.pending);
 
     // 2. Render Available List
     const availList = document.getElementById('manual-available-list');
@@ -1610,16 +1613,15 @@ window.openManualAllocationModal = function(key) {
 
     rankedStaff.forEach(s => {
         const isAssigned = slot.assigned.includes(s.email);
-        
-        // CHECK AVAILABILITY (Includes Advance Check)
         if (isUserUnavailable(slot, s.email, key)) return; 
         
         if (isAssigned) selectedCount++;
         const checkState = isAssigned ? 'checked' : '';
         const rowClass = isAssigned ? 'bg-indigo-50' : 'hover:bg-gray-50';
         
-        // Color code for pending count
-        const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
+        // FIX: Display 0 if negative
+        const displayPending = Math.max(0, s.pending);
+        const pendingColor = displayPending > 0 ? 'text-red-600' : 'text-green-600';
 
         availList.innerHTML += `
             <tr class="${rowClass} border-b last:border-0 transition">
@@ -1631,7 +1633,7 @@ window.openManualAllocationModal = function(key) {
                     <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
                 </td>
                 <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
-                    ${s.pending}
+                    ${displayPending}
                 </td>
             </tr>`;
     });
@@ -1640,17 +1642,13 @@ window.openManualAllocationModal = function(key) {
         availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No staff available. Add staff in Settings.</td></tr>`;
     }
 
-    // 3. Render Unavailable List (Merged Logic)
+    // 3. Render Unavailable List (Same as before)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
     
-    // Combine Slot Specific + Advance
     const allUnavailable = [];
-    
-    // A. Slot Specific
     if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
     
-    // B. Advance (Safe Check)
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
     const t = timeStr ? timeStr.toUpperCase() : "";
@@ -1658,7 +1656,6 @@ window.openManualAllocationModal = function(key) {
     
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
-            // Avoid duplicates by checking email
             if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
                 allUnavailable.push(u);
             }
