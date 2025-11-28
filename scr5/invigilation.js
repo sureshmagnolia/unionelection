@@ -223,44 +223,48 @@ function getDutiesDoneCount(email) {
     });
     return count;
 }
-
 function calculateStaffTarget(staff) {
+    // 1. Get Current Academic Year Boundaries
     const acYear = getCurrentAcademicYear();
     const today = new Date();
     
-    // 1. Determine Calculation Period
-    // End: Today (or end of Academic Year if today is later)
-    // Start: June 1st (or Joining Date if joined later)
-    const calcEnd = (today < acYear.end) ? today : acYear.end;
+    // 2. Determine Start Date
+    // Rule: Start from June 1st. If joined AFTER June 1st, use Joining Date.
     const joinDate = new Date(staff.joiningDate);
-    const calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
+    let calcStart = acYear.start;
+    
+    if (joinDate > acYear.start) {
+        calcStart = joinDate;
+    }
 
-    if (calcStart > calcEnd) return 0; // Joined in future
+    // 3. Determine End Date (Today or End of AY)
+    const calcEnd = (today < acYear.end) ? today : acYear.end;
+
+    if (calcStart > calcEnd) return 0; // Joined in future or data error
 
     let totalTarget = 0;
     let cursor = new Date(calcStart);
     
-    // 2. Iterate Month by Month
+    // 4. Iterate Month by Month
     while (cursor <= calcEnd) {
-        const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-        const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-        
-        // Default: Global Target
+        // Use the target from the role configuration or global default
         let monthlyRate = globalDutyTarget; 
         
-        // Override 1: Designation (If you want designations to have defaults)
+        // Designation Override
         if (designationsConfig[staff.designation] !== undefined) {
              monthlyRate = designationsConfig[staff.designation];
         }
 
-        // Override 2: Functional Roles (Time-Bound)
+        // Role Override (Time-Bound)
         if (staff.roleHistory && staff.roleHistory.length > 0) {
+            const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+            const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+
             staff.roleHistory.forEach(roleAssign => {
                 const roleStart = new Date(roleAssign.start);
                 const roleEnd = new Date(roleAssign.end);
                 
-                // Check if role is active during this specific month
-                // Logic: Role Start is before Month End AND Role End is after Month Start
+                // Check overlap
                 if (roleStart <= currentMonthEnd && roleEnd >= currentMonthStart) {
                     if (rolesConfig[roleAssign.role] !== undefined) {
                         monthlyRate = rolesConfig[roleAssign.role];
@@ -271,14 +275,17 @@ function calculateStaffTarget(staff) {
 
         totalTarget += monthlyRate;
         
-        // Move to next month
+        // Move to next month (set to 1st to avoid edge cases like Feb 30)
+        cursor.setDate(1);
         cursor.setMonth(cursor.getMonth() + 1);
+        
         // Safety break
         if (cursor.getFullYear() > calcEnd.getFullYear() + 1) break; 
     }
 
     return totalTarget;
 }
+
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = me.name;
@@ -510,12 +517,15 @@ function renderStaffTable() {
     const filter = document.getElementById('staff-search').value.toLowerCase();
 
     staffData.forEach((staff, index) => {
+        // FILTER: Hide Archived
+        if (staff.status === 'archived') return;
+        
         if (filter && !staff.name.toLowerCase().includes(filter)) return;
         
         const target = calculateStaffTarget(staff);
         const done = getDutiesDoneCount(staff.email);
         
-        // FIX: Clamp Pending to 0
+        // Display 0 if negative
         const rawPending = target - done;
         const pending = Math.max(0, rawPending);
 
@@ -526,7 +536,6 @@ function renderStaffTable() {
             if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1">${activeRole.role}</span>`;
         }
         
-        // Status Color Logic (Green if 0)
         const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
         
         const row = document.createElement('tr');
@@ -546,32 +555,31 @@ function renderStaffRankList(myEmail) {
     const list = document.getElementById('staff-rank-list');
     if (!list) return;
     
-    // 1. Calculate and Sort
-    const rankedStaff = staffData.map(s => ({ 
-        ...s, 
-        pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email) 
-    })).sort((a, b) => {
-        if (b.pending !== a.pending) return b.pending - a.pending;
-        return a.name.localeCompare(b.name);
-    });
+    // 1. Calculate and Sort (Filter out Archived)
+    const rankedStaff = staffData
+        .filter(s => s.status !== 'archived') // <--- FILTER ADDED
+        .map(s => ({ 
+            ...s, 
+            pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email) 
+        }))
+        .sort((a, b) => {
+            if (b.pending !== a.pending) return b.pending - a.pending;
+            return a.name.localeCompare(b.name);
+        });
 
-    // 2. Render List
+    // 2. Render List (Same as before)
     list.innerHTML = rankedStaff.map((s, i) => {
         const isMe = s.email === myEmail;
         const bgClass = isMe ? "bg-indigo-50 border-indigo-200" : "bg-gray-50 border-transparent hover:bg-gray-100";
         const textClass = isMe ? "text-indigo-700 font-bold" : "text-gray-700";
         const rankBadge = i < 3 ? `text-orange-500 font-black` : `text-gray-400 font-medium`;
-        
-        // FIX: Display 0 if negative
         const displayPending = Math.max(0, s.pending);
-
+        
         let roleBadge = "";
         if (s.roleHistory) {
             const today = new Date();
             const activeRole = s.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
-            if (activeRole) {
-                roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
-            }
+            if (activeRole) roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
         }
 
         return `
@@ -1544,15 +1552,18 @@ window.saveNewStaff = async function() {
 }
 
 window.deleteStaff = async function(index) {
-    if(confirm("Delete staff?")) {
-        const email = staffData[index].email;
-        staffData.splice(index, 1);
+    const staff = staffData[index];
+    if(!staff) return;
+
+    if(confirm(`Archive ${staff.name}?\n\nThey will be hidden from new duty assignments, but their past attendance records will remain for reports.`)) {
+        // Soft Delete
+        staffData[index].status = 'archived';
         await syncStaffToCloud();
-        await removeStaffAccess(email); // Remove from access list
+        await removeStaffAccess(staff.email); // Optional: Block login
         renderStaffTable();
+        alert("Staff archived successfully.");
     }
 }
-
 window.openRoleAssignmentModal = function(index) {
     const staff = staffData[index];
     const modal = document.getElementById('role-assignment-modal');
@@ -1730,13 +1741,16 @@ function getNameFromEmail(email) {
 function getCurrentAcademicYear() {
     const now = new Date();
     const year = now.getFullYear();
-    const month = now.getMonth(); 
-    // Academic Year: June (5) to May (4)
-    let startYear = (month < 5) ? year - 1 : year;
+    const month = now.getMonth(); // 0-11
+    
+    // Academic Year starts June 1st (Month 5)
+    // If we are in Jan-May (0-4), the AY started in the previous year.
+    const startYear = (month < 5) ? year - 1 : year;
+    
     return { 
         label: `${startYear}-${startYear+1}`, 
-        start: new Date(startYear, 5, 1), 
-        end: new Date(startYear+1, 4, 31) 
+        start: new Date(startYear, 5, 1), // June 1st
+        end: new Date(startYear+1, 4, 31) // May 31st
     };
 }
 // --- ROLE EDITOR FUNCTIONS ---
@@ -3443,7 +3457,37 @@ document.getElementById('btn-staff-replace').addEventListener('click', async () 
         updateAdminUI();
     }
 });
+window.clearOldData = async function() {
+    const acYear = getCurrentAcademicYear();
+    const cutoffDate = acYear.start; // June 1st of Current AY
 
+    if (!confirm(`⚠️ MAINTENANCE: Clear Previous Year Data? ⚠️\n\nThis will DELETE all attendance slots and duty records BEFORE ${cutoffDate.toDateString()}.\n\n1. Please DOWNLOAD the Attendance Register (.csv) first as a backup.\n2. This action cannot be undone.`)) return;
+
+    if (!confirm("Are you absolutely sure you have a backup?")) return;
+
+    const newSlots = {};
+    let removedCount = 0;
+
+    Object.keys(invigilationSlots).forEach(key => {
+        const date = parseDate(key);
+        
+        // Keep slots that are ON or AFTER the cutoff
+        if (date >= cutoffDate) {
+            newSlots[key] = invigilationSlots[key];
+        } else {
+            removedCount++;
+        }
+    });
+
+    if (removedCount > 0) {
+        invigilationSlots = newSlots;
+        await syncSlotsToCloud();
+        renderSlotsGridAdmin();
+        alert(`✅ Cleanup Complete.\n\nRemoved ${removedCount} old session records.\nSystem is ready for AY ${acYear.label}.`);
+    } else {
+        alert("No old data found to clear.");
+    }
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
