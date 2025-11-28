@@ -691,7 +691,11 @@ window.openDayModal = function(dateStr, email) {
     const container = document.getElementById('modal-sessions-container');
     container.innerHTML = '';
     
-    // 1. RENDER EXISTING EXAM SESSIONS (IF ANY)
+    // TRACK ASSIGNMENTS FOR THIS DAY
+    let isAssignedFN = false;
+    let isAssignedAN = false;
+
+    // 1. RENDER EXISTING EXAM SESSIONS
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
     
     if (sessions.length > 0) {
@@ -707,10 +711,18 @@ window.openDayModal = function(dateStr, email) {
             const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
             const marketOffers = slot.exchangeRequests ? slot.exchangeRequests.filter(e => e !== email) : [];
 
+            // Determine Session Time for Button Logic
             const t = key.split(' | ')[1].toUpperCase();
-            const sessLabel = (t.includes("PM") || t.startsWith("12")) ? "AFTERNOON (AN)" : "FORENOON (FN)";
+            const isAN = (t.includes("PM") || t.startsWith("12:") || t.startsWith("12."));
+            const sessLabel = isAN ? "AFTERNOON (AN)" : "FORENOON (FN)";
 
-            // --- Action Buttons ---
+            // Update Daily Flags
+            if (isAssigned) {
+                if (isAN) isAssignedAN = true;
+                else isAssignedFN = true;
+            }
+
+            // --- Action Buttons (Existing Logic) ---
             let actionHtml = "";
             if (isAssigned) {
                 if (isPostedByMe) {
@@ -751,13 +763,48 @@ window.openDayModal = function(dateStr, email) {
         container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
     }
 
-    // 2. ADVANCE / SESSION UNAVAILABILITY SECTION (Always Visible now)
+    // 2. ADVANCE / SESSION UNAVAILABILITY SECTION (With Logic to Disable if Assigned)
     const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
     
-    // Status Checks
+    // Current Status
     const fnUnavail = adv.FN && adv.FN.some(u => u.email === email);
     const anUnavail = adv.AN && adv.AN.some(u => u.email === email);
     const bothUnavail = fnUnavail && anUnavail;
+
+    // Helper to generate button styles/states
+    const getBtnState = (isAssigned, isMarked, label) => {
+        if (isAssigned) {
+            return {
+                disabled: 'disabled',
+                class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed',
+                text: `🚫 On Duty (${label})`
+            };
+        }
+        if (isMarked) {
+            return {
+                disabled: '',
+                class: 'bg-red-600 text-white border-red-700 hover:bg-red-700',
+                text: `🚫 ${label} Unavailable`
+            };
+        }
+        return {
+            disabled: '',
+            class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50',
+            text: `Mark ${label}`
+        };
+    };
+
+    const fnBtn = getBtnState(isAssignedFN, fnUnavail, "FN");
+    const anBtn = getBtnState(isAssignedAN, anUnavail, "AN");
+    
+    // Disable Whole Day if Assigned to ANY part of the day
+    const anyDuty = isAssignedFN || isAssignedAN;
+    const wholeClass = anyDuty 
+        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" 
+        : (bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100');
+    
+    const wholeText = anyDuty ? "🚫 Cannot Mark Whole Day (On Duty)" : (bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable');
+    const wholeDisabled = anyDuty ? "disabled" : "";
 
     container.innerHTML += `
         <div class="mt-4 pt-4 border-t border-gray-200">
@@ -766,26 +813,23 @@ window.openDayModal = function(dateStr, email) {
             </h4>
             <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
                 <p class="text-[10px] text-gray-600 mb-3">
-                    Mark leave for sessions or the whole day. This applies even if slots are added later.
+                    Mark leave for sessions or the whole day.
                 </p>
                 <div class="grid grid-cols-2 gap-2 mb-2">
-                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" 
-                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1
-                        ${fnUnavail ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">
-                        ${fnUnavail ? '🚫 FN Unavailable' : 'Mark FN'}
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" ${fnBtn.disabled}
+                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${fnBtn.class}">
+                        ${fnBtn.text}
                     </button>
                     
-                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" 
-                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1
-                        ${anUnavail ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">
-                        ${anUnavail ? '🚫 AN Unavailable' : 'Mark AN'}
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" ${anBtn.disabled}
+                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${anBtn.class}">
+                        ${anBtn.text}
                     </button>
                 </div>
                 
-                <button onclick="toggleWholeDay('${dateStr}', '${email}')" 
-                    class="w-full py-2 text-xs font-bold rounded border transition flex items-center justify-center gap-2
-                    ${bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100'}">
-                    ${bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable'}
+                <button onclick="toggleWholeDay('${dateStr}', '${email}')" ${wholeDisabled}
+                    class="w-full py-2 text-xs font-bold rounded border transition flex items-center justify-center gap-2 ${wholeClass}">
+                    ${wholeText}
                 </button>
             </div>
         </div>
