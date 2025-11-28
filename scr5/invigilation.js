@@ -301,16 +301,15 @@ function isUserUnavailable(slot, email, key) {
     if (key) {
         const [dateStr, timeStr] = key.split(' | ');
         if (advanceUnavailability[dateStr]) {
-            // Determine Session (FN or AN)
+            // Determine Session
             let session = "FN";
             const t = timeStr ? timeStr.toUpperCase() : "";
-            // Logic: PM is AN, unless it is 12:xx PM which is usually AN, but let's stick to standard logic
-            // Standard: If it has PM and is not 12:xx AM (invalid), it is AN. 
-            // Simple check: 12:00 PM onwards is AN.
             if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
             
-            if (advanceUnavailability[dateStr][session] && advanceUnavailability[dateStr][session].includes(email)) {
-                return true;
+            const list = advanceUnavailability[dateStr][session];
+            if (list) {
+                // Check if email exists in the list of objects
+                return list.some(u => u.email === email);
             }
         }
     }
@@ -574,10 +573,11 @@ function renderStaffCalendar(myEmail) {
             let advBadges = "";
             
             if (adv) {
-                if (adv.FN && adv.FN.includes(myEmail)) {
+                // UPDATED CHECKS: use .some()
+                if (adv.FN && adv.FN.some(u => u.email === myEmail)) {
                     advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center mb-0.5">FN: Unavail</div>`;
                 }
-                if (adv.AN && adv.AN.includes(myEmail)) {
+                if (adv.AN && adv.AN.some(u => u.email === myEmail)) {
                     advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center">AN: Unavail</div>`;
                 }
             }
@@ -1046,7 +1046,6 @@ window.setAvailability = async function(key, email, isAvailable) {
         window.openModal('unavailable-modal');
     }
 }
-
 window.confirmUnavailable = async function() {
     const key = document.getElementById('unav-key').value;
     const email = document.getElementById('unav-email').value;
@@ -1086,11 +1085,15 @@ window.confirmUnavailable = async function() {
         window.closeModal('unavailable-modal');
         
         // Refresh views
-        const [datePart] = key.split(' | ');
+        // Try to parse date from key to refresh modal if needed
+        try {
+            const [datePart] = key.split(' | ');
+            openDayModal(datePart, email);
+        } catch(e) {}
         renderStaffCalendar(email);
-        openDayModal(datePart, email);
     }
 }
+
 window.waNotify = function(key) {
     const slot = invigilationSlots[key];
     if(slot.assigned.length === 0) return alert("No staff assigned.");
@@ -1364,34 +1367,93 @@ window.removeRoleFromStaff = async function(sIdx, rIdx) {
 
 window.openManualAllocationModal = function(key) {
     const slot = invigilationSlots[key];
-    if (!slot.isLocked) { alert("Lock slot first."); return; }
+    if (!slot.isLocked) {
+        alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts.");
+        return;
+    }
+
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
     document.getElementById('manual-modal-req').textContent = slot.required;
-    const rankedStaff = staffData.map(s => ({ ...s, pending: calculateStaffTarget(s) - (s.dutiesDone || 0) })).sort((a, b) => b.pending - a.pending);
+    
+    // 1. Sort Staff
+    const rankedStaff = staffData.map(s => ({
+        ...s,
+        pending: calculateStaffTarget(s) - (s.dutiesDone || 0)
+    })).sort((a, b) => b.pending - a.pending);
+
+    // 2. Render Available List
     const availList = document.getElementById('manual-available-list');
     availList.innerHTML = '';
     let selectedCount = 0;
+
     rankedStaff.forEach(s => {
         const isAssigned = slot.assigned.includes(s.email);
+        
+        // CHECK AVAILABILITY (Includes Advance Check)
         if (isUserUnavailable(slot, s.email, key)) return; 
+        
         if (isAssigned) selectedCount++;
         const checkState = isAssigned ? 'checked' : '';
         const rowClass = isAssigned ? 'bg-indigo-50' : 'hover:bg-gray-50';
-        availList.innerHTML += `<tr class="${rowClass} border-b last:border-0 transition"><td class="px-3 py-2 text-center"><input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600" value="${s.email}" ${checkState} onchange="window.updateManualCounts()"></td><td class="px-3 py-2"><div class="font-bold text-gray-800">${s.name}</div><div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div></td><td class="px-3 py-2 text-center font-mono font-bold ${s.pending > 0 ? 'text-red-600' : 'text-green-600'}">${s.pending}</td></tr>`;
+        const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
+
+        availList.innerHTML += `
+            <tr class="${rowClass} border-b last:border-0 transition">
+                <td class="px-3 py-2 text-center w-10">
+                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
+                </td>
+                <td class="px-3 py-2">
+                    <div class="font-bold text-gray-800">${s.name}</div>
+                    <div class="text-[10px] text-gray-500">${s.dept}</div>
+                </td>
+                <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
+                    ${s.pending}
+                </td>
+            </tr>`;
     });
+
+    // 3. Render Unavailable List (MERGED)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
-    if (slot.unavailable && slot.unavailable.length > 0) {
-        slot.unavailable.forEach(u => {
+    
+    // Combine Slot Specific + Advance
+    const allUnavailable = [];
+    
+    // A. Slot Specific
+    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
+    
+    // B. Advance
+    const [dateStr, timeStr] = key.split(' | ');
+    let session = "FN";
+    const t = timeStr ? timeStr.toUpperCase() : "";
+    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
+    
+    if (advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+        advanceUnavailability[dateStr][session].forEach(u => {
+            // Avoid duplicates
+            if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
+                allUnavailable.push(u);
+            }
+        });
+    }
+
+    if (allUnavailable.length > 0) {
+        allUnavailable.forEach(u => {
             const email = (typeof u === 'string') ? u : u.email;
             const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
             const s = staffData.find(st => st.email === email) || { name: email };
-            unavList.innerHTML += `<div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm"><div class="font-bold text-red-700">${s.name}</div><div class="text-gray-600 font-medium mt-0.5">${reason}</div></div>`;
+            unavList.innerHTML += `
+                <div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm mb-1">
+                    <div class="font-bold text-red-700">${s.name}</div>
+                    <div class="text-gray-600 font-medium mt-0.5">${reason}</div>
+                </div>`;
         });
-    } else { unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`; }
+    } else {
+        unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
+    }
+
     document.getElementById('manual-sel-count').textContent = selectedCount;
-    document.getElementById('manual-req-count').textContent = slot.required;
     window.openModal('manual-allocation-modal');
 }
 
