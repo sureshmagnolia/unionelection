@@ -1680,13 +1680,30 @@ function renderRolesList() {
     
     container.innerHTML = '';
     
-    if (Object.keys(rolesConfig).length === 0) {
+    // Sort roles alphabetically for better UX
+    const sortedRoles = Object.entries(rolesConfig).sort((a,b) => a[0].localeCompare(b[0]));
+
+    if (sortedRoles.length === 0) {
         container.innerHTML = '<p class="text-gray-400 text-xs text-center py-2">No custom roles defined.</p>';
         return;
     }
 
-  }
-
+    sortedRoles.forEach(([role, target]) => {
+        container.innerHTML += `
+            <div class="flex justify-between items-center text-xs bg-white p-2 rounded border mb-1 group">
+                <span class="font-bold text-gray-700">${role}</span>
+                <div class="flex items-center gap-2">
+                    <button onclick="editRoleConfig('${role}', ${target})" 
+                            class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-mono font-bold hover:bg-indigo-100 border border-indigo-100 transition text-[10px]" 
+                            title="Click to Edit Target">
+                        ${target}/mo ✎
+                    </button>
+                    
+                    <button onclick="deleteRoleConfig('${role}')" class="text-red-400 hover:text-red-600 font-bold px-1.5 py-0.5 rounded hover:bg-red-50 transition" title="Delete Role">&times;</button>
+                </div>
+            </div>`;
+    });
+}
  
 window.addNewRoleConfig = function() {
     const name = document.getElementById('new-role-name').value.trim();
@@ -2089,12 +2106,6 @@ window.deleteDepartment = function(name) {
     }
 }
 
-// Update openRoleConfigModal to render the list when opened
-const originalOpenConfig = window.openRoleConfigModal;
-window.openRoleConfigModal = function() {
-    originalOpenConfig(); // Call existing logic
-    renderDepartmentsList(); // Render departments
-}
 
 // --- EXPORT TO WINDOW (Final Fix) ---
 // This makes functions available to HTML onclick="" events
