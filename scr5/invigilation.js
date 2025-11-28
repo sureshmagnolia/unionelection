@@ -1749,31 +1749,7 @@ window.saveAttendance = async function() {
     renderStaffTable(); 
     alert("Attendance Saved & Counts Updated!");
 }
-// --- EXCHANGE MARKET LOGIC ---
 
-// 1. Post a duty for exchange (Liability remains until picked)
-async function postForExchange(key, email) {
-    if (!confirm("Post this duty for exchange?\n\nYou remain responsible for this slot until someone else accepts it.")) return;
-    
-    const slot = invigilationSlots[key];
-    if (!slot.exchangeRequests) slot.exchangeRequests = [];
-    
-    if (!slot.exchangeRequests.includes(email)) {
-        slot.exchangeRequests.push(email);
-        await syncSlotsToCloud();
-        renderStaffCalendar(email);
-    }
-}
-
-// 2. Withdraw a posted request
-async function withdrawExchange(key, email) {
-    const slot = invigilationSlots[key];
-    if (slot.exchangeRequests) {
-        slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
-        await syncSlotsToCloud();
-        renderStaffCalendar(email);
-    }
-}
 
 // 3. Updated Volunteer (Handles Picking Up Exchange)
 async function volunteer(key, email) {
@@ -1965,8 +1941,6 @@ window.loadSessionAttendance = loadSessionAttendance;
 window.addSubstituteToAttendance = addSubstituteToAttendance;
 window.updateAttCount = updateAttCount;
 window.saveAttendance = saveAttendance;
-window.postForExchange = postForExchange;
-window.withdrawExchange = withdrawExchange;
 window.openDutyNormsModal = openDutyNormsModal;
 window.acceptExchange = acceptExchange;
 window.switchAdminTab = function(tabName) {
