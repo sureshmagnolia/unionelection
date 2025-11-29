@@ -7140,6 +7140,10 @@ window.deleteRoom = function(index) {
 function showRoomSelectionModal() {
     getRoomCapacitiesFromStorage();
     roomSelectionList.innerHTML = '';
+    
+    // Clear previous search
+    const searchInput = document.getElementById('room-selection-search');
+    if(searchInput) searchInput.value = "";
 
     // 1. Smart Default Stream Logic (Existing)
     const [date, time] = currentSessionKey.split(' | ');
@@ -7357,6 +7361,28 @@ addRoomAllotmentButton.addEventListener('click', () => {
 closeRoomModal.addEventListener('click', () => {
     roomSelectionModal.classList.add('hidden');
 });
+
+// --- NEW: Room Search Filter Listener ---
+const roomSearchInput = document.getElementById('room-selection-search');
+if (roomSearchInput) {
+    roomSearchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        const items = roomSelectionList.children;
+        
+        Array.from(items).forEach(item => {
+            // Prevent hiding the "Stream Selection" dropdown (it has a <select> inside)
+            if (item.querySelector('select')) return;
+
+            // Filter based on text content (Room Name + Location)
+            const text = item.textContent.toLowerCase();
+            if (text.includes(query)) {
+                item.classList.remove('hidden');
+            } else {
+                item.classList.add('hidden');
+            }
+        });
+    });
+}
 
 saveRoomAllotmentButton.addEventListener('click', () => {
     saveRoomAllotment();
