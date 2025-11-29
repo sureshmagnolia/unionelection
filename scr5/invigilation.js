@@ -30,9 +30,6 @@ const DEFAULT_ROLES = {
     [ROLE_PRINCIPAL]: 0
 };
 
-// Protected Roles (Cannot be deleted)
-const SYSTEM_ROLES = ["Chief Superintendent", "Senior Asst. Superintendent", "Principal"];
-
 // Add with other defaults
 const DEFAULT_DEPARTMENTS = [
     { name: "English", email: "" }, 
