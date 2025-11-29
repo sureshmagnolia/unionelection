@@ -906,6 +906,9 @@ let lastGeneratedRoomData = [];
 let lastGeneratedReportType = "";
 let currentStreamConfig = ["Regular"]; // Default
 
+let isStreamLocked = true; // Default Locked
+let isQPLocked = true;     // Default Locked
+
 // --- (V28) Global var to hold room config map for report generation ---
 let currentRoomConfig = {};
 
@@ -6426,7 +6429,6 @@ sessionSelectQP.addEventListener('change', () => {
     }
 });
 
-// V92: Renders the QP Code list (Grouped by Stream)
 // V93: Renders the QP Code list (Regular First, then Alphabetical)
 function render_qp_code_list(sessionKey) {
     const [date, time] = sessionKey.split(' | ');
@@ -6488,22 +6490,33 @@ function render_qp_code_list(sessionKey) {
         const base64Key = getQpKey(item.course, item.stream);
         const savedCode = sessionCodes[base64Key] || "";
 
+       const disabledAttr = isQPLocked ? "disabled" : "";
+       const bgClass = isQPLocked ? "bg-gray-50 text-gray-500" : "bg-white";
+
        htmlChunks.push(`
         <div class="flex items-center gap-3 p-2 border-b border-gray-200 hover:bg-gray-50">
             <label class="font-medium text-gray-700 w-2/3 text-sm">
                 ${item.course}
             </label>
             <input type="text" 
-                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500 ${bgClass}" 
                    value="${savedCode}" 
                    data-course-key="${base64Key}"
-                   placeholder="QP Code">
+                   placeholder="QP Code"
+                   ${disabledAttr}>
         </div>
        `);
     });
     
     qpCodeContainer.innerHTML = htmlChunks.join('');
-    saveQpCodesButton.disabled = false;
+    
+    saveQpCodesButton.disabled = isQPLocked;
+    if(isQPLocked) {
+        saveQpCodesButton.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        saveQpCodesButton.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+    
     qpCodeStatus.textContent = '';
 }
 
@@ -6557,8 +6570,7 @@ saveQpCodesButton.addEventListener('click', () => {
     syncDataToCloud(); // <--- ADD THIS
 });
 
-// V89: NEW INPUT STRATEGY
-// The input listener is now *only* for user feedback.
+
 // It does NOT update any data.
 qpCodeContainer.addEventListener('input', (e) => {
     if (e.target.classList.contains('qp-code-input')) {
@@ -6568,7 +6580,26 @@ qpCodeContainer.addEventListener('input', (e) => {
         qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
     }
 });
-
+const toggleQPLockBtn = document.getElementById('toggle-qp-lock-btn');
+    if (toggleQPLockBtn) {
+        toggleQPLockBtn.addEventListener('click', () => {
+            isQPLocked = !isQPLocked;
+            
+            // Update Button UI
+            if (isQPLocked) {
+                toggleQPLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Codes Locked</span>`;
+                toggleQPLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm shrink-0 ml-2";
+            } else {
+                toggleQPLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
+                toggleQPLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm shrink-0 ml-2";
+            }
+            
+            // Re-render list to apply disabled state
+            if (sessionSelectQP.value) {
+                render_qp_code_list(sessionSelectQP.value);
+            }
+        });
+    }
 
 // --- V68: Report Filter Logic ---
 filterSessionRadio.addEventListener('change', () => {
@@ -10075,17 +10106,30 @@ window.handlePythonExtraction = function(jsonString) {
     function renderStreamSettings() {
         if (!streamContainer) return;
         streamContainer.innerHTML = '';
+        
+        // Toggle Input Visibility based on Lock
+        const inputGroup = document.getElementById('stream-input-group');
+        if (inputGroup) {
+            if (isStreamLocked) inputGroup.classList.add('hidden');
+            else inputGroup.classList.remove('hidden');
+        }
+
         currentStreamConfig.forEach((stream, index) => {
             const div = document.createElement('div');
             div.className = "flex justify-between items-center bg-white border p-2 rounded text-sm";
+            
+            // Only show delete button if Unlocked AND not the first item
+            const deleteBtn = (!isStreamLocked && index > 0) 
+                ? `<button class="text-red-500 hover:text-red-700" onclick="deleteStream('${stream}')">&times;</button>` 
+                : '<span class="text-xs text-gray-400"></span>'; // Empty spacer
+
             div.innerHTML = `
                 <span class="font-medium">${stream}</span>
-                ${index > 0 ? `<button class="text-red-500 hover:text-red-700" onclick="deleteStream('${stream}')">&times;</button>` : '<span class="text-xs text-gray-400">(Default)</span>'}
+                ${index === 0 ? '<span class="text-xs text-gray-400">(Default)</span>' : deleteBtn}
             `;
             streamContainer.appendChild(div);
         });
     }
-
 // Populate Dropdowns (Fixed: Variable Name Typo)
     function populateStreamDropdowns() {
         const streamsToRender = (currentStreamConfig && currentStreamConfig.length > 0) 
@@ -10179,6 +10223,27 @@ window.handlePythonExtraction = function(jsonString) {
             syncDataToCloud();
         }
     };
+
+// Toggle Stream Lock
+    const toggleStreamLockBtn = document.getElementById('toggle-stream-lock-btn');
+    if (toggleStreamLockBtn) {
+        toggleStreamLockBtn.addEventListener('click', () => {
+            isStreamLocked = !isStreamLocked;
+            
+            // Update Button UI
+            if (isStreamLocked) {
+                toggleStreamLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>List Locked</span>`;
+                toggleStreamLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm";
+            } else {
+                toggleStreamLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
+                toggleStreamLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm";
+            }
+            
+            renderStreamSettings();
+        });
+    }
+
+
 // --- Event listener for "Generate Room Allotment Summary" ---
 const generateRoomSummaryButton = document.getElementById('generate-room-summary-button');
 
