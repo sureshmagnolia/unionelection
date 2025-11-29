@@ -4217,7 +4217,97 @@ window.toggleGlobalTargetLock = function() {
     }
     if(btn) updateLockIcon('global-target-lock-btn', isGlobalTargetLocked);
 }
+// ==========================================
+// 💾 MASTER BACKUP & RESTORE SYSTEM
+// ==========================================
 
+window.downloadMasterBackup = function() {
+    const collegeName = collegeData ? collegeData.examCollegeName : "Exam_System";
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+    const backup = {
+        meta: {
+            version: "1.0",
+            timestamp: new Date().toISOString(),
+            college: collegeName
+        },
+        data: {
+            staffData,
+            invigilationSlots,
+            advanceUnavailability,
+            rolesConfig,
+            designationsConfig,
+            departmentsConfig,
+            globalDutyTarget,
+            googleScriptUrl
+        }
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+    const link = document.createElement('a');
+    link.setAttribute("href", dataStr);
+    link.setAttribute("download", `Invigilation_MASTER_BACKUP_${collegeName}_${timestamp}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+window.handleMasterRestore = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE all current data:\n- Staff List\n- Duty Assignments\n- Settings & Roles\n- Unavailability Records\n\nThis action cannot be undone. Are you sure?")) {
+        input.value = "";
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const backup = JSON.parse(e.target.result);
+            
+            // Validation
+            if (!backup.data || !backup.data.staffData) {
+                throw new Error("Invalid backup file: Missing core data.");
+            }
+
+            // 1. Update Local State
+            const d = backup.data;
+            staffData = d.staffData || [];
+            invigilationSlots = d.invigilationSlots || {};
+            advanceUnavailability = d.advanceUnavailability || {};
+            rolesConfig = d.rolesConfig || {};
+            designationsConfig = d.designationsConfig || {};
+            departmentsConfig = d.departmentsConfig || [];
+            globalDutyTarget = d.globalDutyTarget || 2;
+            googleScriptUrl = d.googleScriptUrl || "";
+
+            // 2. Save to Cloud (Atomic Update)
+            const ref = doc(db, "colleges", currentCollegeId);
+            await updateDoc(ref, {
+                examStaffData: JSON.stringify(staffData),
+                examInvigilationSlots: JSON.stringify(invigilationSlots),
+                invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
+                invigRoles: JSON.stringify(rolesConfig),
+                invigDesignations: JSON.stringify(designationsConfig),
+                invigDepartments: JSON.stringify(departmentsConfig),
+                invigGlobalTarget: globalDutyTarget,
+                invigGoogleScriptUrl: googleScriptUrl
+            });
+
+            // 3. Refresh UI
+            updateAdminUI();
+            renderSlotsGridAdmin();
+            alert("✅ System successfully restored from backup.");
+            
+        } catch (err) {
+            console.error("Restore Error:", err);
+            alert("Restore Failed: " + err.message);
+        }
+        input.value = ""; // Reset input
+    };
+    reader.readAsText(file);
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -4288,6 +4378,8 @@ window.getFirstName = getFirstName;
 window.toggleStaffListLock = toggleStaffListLock;
 window.toggleEmailConfigLock = toggleEmailConfigLock;
 window.toggleGlobalTargetLock = toggleGlobalTargetLock;
+window.downloadMasterBackup = downloadMasterBackup;
+window.handleMasterRestore = handleMasterRestore;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
