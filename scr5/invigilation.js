@@ -4005,12 +4005,26 @@ document.getElementById('btn-staff-merge').addEventListener('click', async () =>
     updateAdminUI();
 });
 
+// 5. Replace Logic (Overwrite Database) - FIXED
 document.getElementById('btn-staff-replace').addEventListener('click', async () => {
     if (confirm("⚠️ WARNING: This will DELETE all existing staff data and replace it with the CSV data.\n\nAre you sure?")) {
         staffData = tempStaffData;
         await syncStaffToCloud();
         
-        alert("✅ Database replaced successfully.");
+        // *** FIX: Grant Access to New List ***
+        if (typeof addStaffAccess === 'function') {
+             // Optional: Clear old access list first if you want strict replacement
+             // For now, we just ensure new people get access
+             let count = 0;
+             for (const s of staffData) { 
+                 await addStaffAccess(s.email); 
+                 count++;
+             }
+             console.log(`Access granted to ${count} staff.`);
+        }
+        // **************************************
+        
+        alert("✅ Database replaced successfully & Permissions updated.");
         window.closeModal('staff-conflict-modal');
         renderStaffTable();
         updateAdminUI();
@@ -5136,6 +5150,34 @@ window.viewSlotHistory = function(key) {
     list.innerHTML = slot.allocationLog;
     window.openModal('inconvenience-modal');
 }
+
+// --- NEW: SYNC STAFF PERMISSIONS BUTTON ---
+window.syncAllStaffPermissions = async function() {
+    if (!staffData || staffData.length === 0) return alert("No staff data to sync.");
+    
+    if (!confirm(`🛡️ Sync Permissions?\n\nThis will iterate through all ${staffData.length} staff members in your database and ensure they have "Staff Access" in Firebase.\n\nUse this if people cannot log in.`)) return;
+
+    const btn = document.getElementById('btn-sync-perms');
+    const originalText = btn ? btn.innerHTML : "Sync Permissions";
+    if (btn) { btn.disabled = true; btn.innerHTML = "Syncing..."; }
+
+    let count = 0;
+    try {
+        for (const staff of staffData) {
+            if (staff.email && staff.email.includes('@')) {
+                await addStaffAccess(staff.email);
+                count++;
+            }
+        }
+        alert(`✅ Success! Permissions verified/added for ${count} staff members.`);
+    } catch (e) {
+        console.error(e);
+        alert("Error syncing permissions: " + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+    }
+};
+
 // Initialize Listeners
 setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
 setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
