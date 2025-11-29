@@ -152,6 +152,8 @@ function setupLiveSync(collegeId, mode) {
             
             // NEW: Load Advance Unavailability
             advanceUnavailability = JSON.parse(collegeData.invigAdvanceUnavailability || '{}');
+            // *** ADD THIS LINE ***
+            googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
             
             if (mode === 'admin') {
                 if (document.getElementById('view-admin').classList.contains('hidden') && 
@@ -1871,6 +1873,12 @@ window.openRoleConfigModal = function() {
 
     // 3. Load Data & Render
     document.getElementById('global-duty-target').value = globalDutyTarget;
+
+    // *** ADD THIS BLOCK ***
+    const urlInput = document.getElementById('google-script-url');
+    if(urlInput) urlInput.value = googleScriptUrl;
+    // ********************
+
     renderRolesList();
     if(typeof renderDepartmentsList === "function") renderDepartmentsList();
 
@@ -1952,12 +1960,17 @@ window.saveRoleConfig = async function() {
     
     globalDutyTarget = newGlobal;
     
+    // *** ADD THIS LINE ***
+    const newUrl = document.getElementById('google-script-url').value.trim();
+    googleScriptUrl = newUrl; // Update local variable immediately
+    
     // Save to Cloud
     const ref = doc(db, "colleges", currentCollegeId);
     await updateDoc(ref, {
         invigRoles: JSON.stringify(rolesConfig),
-        invigDepartments: JSON.stringify(departmentsConfig), // <--- ADDED THIS
-        invigGlobalTarget: globalDutyTarget
+        invigDepartments: JSON.stringify(departmentsConfig),
+        invigGlobalTarget: globalDutyTarget,
+        invigGoogleScriptUrl: googleScriptUrl // <--- ADD THIS TO SAVE
     });
     
     window.closeModal('role-config-modal');
