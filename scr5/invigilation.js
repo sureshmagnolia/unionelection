@@ -3887,7 +3887,7 @@ document.getElementById('btn-staff-replace').addEventListener('click', async () 
     }
 });
 
-
+// --- MAINTENANCE: CLEAR OLD DATA ---
 window.clearOldData = async function() {
     const acYear = getCurrentAcademicYear();
     const cutoffDate = acYear.start; // June 1st of Current AY
@@ -3919,6 +3919,7 @@ window.clearOldData = async function() {
         alert("No old data found to clear.");
     }
 }
+
 
 // --- STAFF MANAGEMENT: ADD & EDIT ---
 
