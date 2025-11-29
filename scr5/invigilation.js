@@ -2830,10 +2830,10 @@ window.openCompletedDutiesModal = function(email) {
 
     window.openModal('completed-duties-modal');
 }
-// --- WEEKLY AUTO-ASSIGN ALGORITHM (Admin Mode Only) ---
+// --- WEEKLY AUTO-ASSIGN ALGORITHM (Admin Mode Only + Dept Logic) ---
 window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
     // 1. CHECK: Confirm Intent
-    if(!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week (Soft Limit)\n2. Avoid Same Day & Adjacent Days\n3. "Show Must Go On" - Rules break if necessary.`)) return;
+    if(!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session (except single-person depts)\n4. "Show Must Go On" - Rules break if necessary.`)) return;
 
     // 2. Identify Target Slots (MUST BE LOCKED)
     const targetSlots = [];
@@ -2843,7 +2843,6 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         const wNum = getWeekOfMonth(date);
         const slot = invigilationSlots[key];
 
-        // *** CHANGE: Only target LOCKED slots ***
         if (mStr === monthStr && wNum === weekNum && slot.isLocked) {
             targetSlots.push({ key, date, slot });
         }
@@ -2853,16 +2852,22 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
     }
 
-    // 3. Sort Slots Chronologically (Important for adjacent checks)
+    // 3. Sort Slots Chronologically
     targetSlots.sort((a, b) => a.date - b.date);
 
-    // 4. Prepare Staff Stats
-    // Calculate pending duty for everyone to prioritize high pending
-    let eligibleStaff = staffData.map(s => ({
-        ...s,
-        pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
-        assignedThisWeek: 0 // Reset counter for this run
-    }));
+    // 4. Prepare Staff Stats & Department Counts
+    const deptCounts = {}; // Total staff per dept
+    let eligibleStaff = staffData.map(s => {
+        // Count Department Totals (Exclude Archived)
+        if (s.status !== 'archived') {
+            deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
+        }
+        return {
+            ...s,
+            pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
+            assignedThisWeek: 0 // Reset counter for this run
+        };
+    });
 
     // Count duties ALREADY assigned in this week (manual ones)
     targetSlots.forEach(t => {
@@ -2882,6 +2887,15 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         
         if (needed <= 0) continue;
 
+        // Track Department counts SPECIFIC TO THIS SLOT
+        const slotDeptCounts = {};
+        slot.assigned.forEach(email => {
+            const s = staffData.find(st => st.email === email);
+            if (s && s.dept) {
+                slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
+            }
+        });
+
         // Iterate to fill needed spots
         for (let i = 0; i < needed; i++) {
             // Score Candidates
@@ -2891,31 +2905,40 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
 
                 // --- HARD CONSTRAINTS (Must Exclude) ---
                 if (slot.assigned.includes(s.email)) return null; // Already in this slot
-                if (isUserUnavailable(slot, s.email, key)) return null; // Marked Unavailable (Slot or Advance)
+                if (isUserUnavailable(slot, s.email, key)) return null; // Marked Unavailable
 
                 // --- SOFT CONSTRAINTS (Penalize Score) ---
                 
-                // Rule 1: Max 3 per week
+                // Rule 1: Max 3 per week (-5000)
                 if (s.assignedThisWeek >= 3) {
                     score -= 5000; 
                     warnings.push("Over Weekly Limit (3)");
                 }
 
-                // Rule 2: Same Day Conflict (AM/PM)
+                // Rule 2: Department Saturation (-4000)
+                // Logic: Max 60% of dept strength, ignored if dept size <= 1
+                const deptTotal = deptCounts[s.dept] || 0;
+                if (deptTotal > 1) {
+                    const currentDeptAssigned = slotDeptCounts[s.dept] || 0;
+                    const deptLimit = Math.ceil(deptTotal * 0.60);
+                    
+                    if (currentDeptAssigned >= deptLimit) {
+                        score -= 4000;
+                        warnings.push(`Dept Saturation (>60% of ${s.dept})`);
+                    }
+                }
+
+                // Rule 3: Same Day Conflict (-2000)
                 const sameDayKeys = targetSlots.filter(t => 
                     t.date.toDateString() === date.toDateString() && t.key !== key
                 ).map(t => t.key);
                 
-                let hasSameDay = false;
-                sameDayKeys.forEach(sdk => {
-                    if (invigilationSlots[sdk].assigned.includes(s.email)) hasSameDay = true;
-                });
-                if (hasSameDay) {
+                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) {
                     score -= 2000;
                     warnings.push("Same Day Double Duty");
                 }
 
-                // Rule 3: Adjacent Day Conflict
+                // Rule 4: Adjacent Day Conflict (-1000)
                 const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
                 const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
                 
@@ -2932,7 +2955,7 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
                 }
 
                 return { staff: s, score, warnings };
-            }).filter(c => c !== null); // Filter out hard exclusions
+            }).filter(c => c !== null); 
 
             // Sort by Score (High to Low)
             candidates.sort((a, b) => b.score - a.score);
@@ -2943,10 +2966,14 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
                 // Assign
                 slot.assigned.push(choice.staff.email);
                 choice.staff.assignedThisWeek++;
-                choice.staff.pending--; // Decrease pending priority for next slot
+                choice.staff.pending--; 
+                
+                // Update Slot Dept Count immediately
+                slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
+                
                 assignedCount++;
 
-                // Log Logic
+                // Log Warnings
                 if (choice.warnings.length > 0) {
                     logEntries.push({
                         type: "WARN",
@@ -2956,7 +2983,7 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
             } else {
                 logEntries.push({
                     type: "ERROR",
-                    msg: `FAILED to fill slot ${key}. No eligible staff available (Everyone unavailable).`
+                    msg: `FAILED to fill slot ${key}. No eligible staff available.`
                 });
             }
         }
@@ -2975,10 +3002,8 @@ window.runWeeklyAutoAssign = async function(monthStr, weekNum) {
         } catch(e) { console.error("Log save failed", e); }
     }
 
-    // *** ADD THIS LOGGING BLOCK HERE ***
+    // 7. Save & Refresh
     logActivity("Auto-Assign Run", `Admin ran auto-assign for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-
-    // 7. Save Slots & Refresh
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
     
