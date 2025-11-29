@@ -1857,200 +1857,9 @@ window.removeRoleFromStaff = async function(sIdx, rIdx) {
     window.closeModal('role-assignment-modal');
     renderStaffTable();
 }
-// --- MANUAL ALLOCATION (Fixed: Auto-Select Top N) ---
-window.openManualAllocationModal = function(key) {
-    const slot = invigilationSlots[key];
-    
-    // 1. Lock Check
-    if (!slot.isLocked) {
-        alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts.");
-        return;
-    }
-
-    // 2. Reset Search
-    const searchInput = document.getElementById('manual-staff-search');
-    if(searchInput) searchInput.value = "";
-    const noResults = document.getElementById('manual-no-results');
-    if(noResults) noResults.classList.add('hidden');
-
-    // 3. Setup Modal Header
-    document.getElementById('manual-session-key').value = key;
-    document.getElementById('manual-modal-title').textContent = key;
-    
-    // Force Integer for Requirement
-    const requiredCount = parseInt(slot.required) || 0; 
-    document.getElementById('manual-modal-req').textContent = requiredCount;
-
-    // --- 4. SMART SORTING & SCORING ---
-    const targetDate = parseDate(key);
-    const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-    const weekNum = getWeekOfMonth(targetDate);
-    const targetDateString = targetDate.toDateString();
-    const prevDate = new Date(targetDate); prevDate.setDate(targetDate.getDate() - 1);
-    const nextDate = new Date(targetDate); nextDate.setDate(targetDate.getDate() + 1);
-    const prevDateStr = prevDate.toDateString();
-    const nextDateStr = nextDate.toDateString();
-
-    const staffContext = {}; 
-    staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
-
-    Object.keys(invigilationSlots).forEach(k => {
-        if (k === key) return; 
-        const sSlot = invigilationSlots[k];
-        const sDate = parseDate(k);
-        const sDateString = sDate.toDateString();
-        
-        const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const sWeek = getWeekOfMonth(sDate);
-        const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
-        const isSameDay = (sDateString === targetDateString);
-        const isAdjacent = (sDateString === prevDateStr || sDateString === nextDateStr);
-
-        (sSlot.assigned || []).forEach(email => {
-            if (staffContext[email]) {
-                if (isSameWeek) staffContext[email].weekCount++;
-                if (isSameDay) staffContext[email].hasSameDay = true;
-                if (isAdjacent) staffContext[email].hasAdjacent = true;
-            }
-        });
-    });
-
-    const rankedStaff = staffData
-        .filter(s => s.status !== 'archived')
-        .map(s => {
-            const done = getDutiesDoneCount(s.email);
-            const target = calculateStaffTarget(s);
-            const pending = Math.max(0, target - done);
-            const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
-            
-            let score = pending * 100; 
-            let badges = [];
-
-            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
-            if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
-            if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
-            
-            return { ...s, pending, score, badges };
-        })
-        .sort((a, b) => b.score - a.score); 
-
-    // --- 5. RENDER & AUTO-SELECT ---
-    const availList = document.getElementById('manual-available-list');
-    availList.innerHTML = '';
-    
-    const assignedList = slot.assigned || [];
-    const isFreshAllocation = (assignedList.length === 0);
-    let slotsToFill = isFreshAllocation ? requiredCount : 0;
-    let currentSelectionCount = 0;
-
-    rankedStaff.forEach(s => {
-        if (isUserUnavailable(slot, s.email, key)) return; 
-        
-        let isChecked = false;
-        
-        if (isFreshAllocation) {
-            if (slotsToFill > 0) {
-                isChecked = true;
-                slotsToFill--;
-            }
-        } else {
-            if (assignedList.includes(s.email)) {
-                isChecked = true;
-            }
-        }
-        
-        if (isChecked) currentSelectionCount++;
-
-        const checkState = isChecked ? 'checked' : '';
-        const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
-        const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
-        
-        const warningHtml = s.badges.map(b => 
-            `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
-        ).join('');
-
-        availList.innerHTML += `
-            <tr class="${rowClass} border-b last:border-0 transition">
-                <td class="px-3 py-2 text-center w-10">
-                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
-                </td>
-                <td class="px-3 py-2">
-                    <div class="flex items-center flex-wrap">
-                        <span class="font-bold text-gray-800 mr-2">${s.name}</span>
-                        ${warningHtml}
-                    </div>
-                    <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
-                </td>
-                <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
-                    ${s.pending}
-                </td>
-            </tr>`;
-    });
-
-    if (availList.innerHTML === "") {
-        availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
-    }
-
-    // 6. Render Unavailable List
-    const unavList = document.getElementById('manual-unavailable-list');
-    unavList.innerHTML = '';
-    
-    const allUnavailable = [];
-    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
-    
-    const [dateStr, timeStr] = key.split(' | ');
-    let session = "FN";
-    const t = timeStr ? timeStr.toUpperCase() : "";
-    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
-    
-    if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
-        advanceUnavailability[dateStr][session].forEach(u => {
-            if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
-                allUnavailable.push(u);
-            }
-        });
-    }
-
-    if (allUnavailable.length > 0) {
-        allUnavailable.forEach(u => {
-            const email = (typeof u === 'string') ? u : u.email;
-            const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
-            const s = staffData.find(st => st.email === email) || { name: email };
-            
-            unavList.innerHTML += `
-                <div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm mb-1">
-                    <div class="font-bold text-red-700">${s.name}</div>
-                    <div class="text-gray-600 font-medium mt-0.5">${reason}</div>
-                </div>`;
-        });
-    } else {
-        unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
-    }
-
-    // 7. Update Counters & Open
-    document.getElementById('manual-sel-count').textContent = currentSelectionCount;
-    
-    window.openModal('manual-allocation-modal');
-}
 
 
-window.saveManualAllocation = async function() {
-    const key = document.getElementById('manual-session-key').value;
-    const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
-    if (invigilationSlots[key]) {
-        // LOGGING
-        const addedCount = selectedEmails.length;
-        logActivity("Manual Assignment", `Assigned ${addedCount} staff to session ${key}`);
-        
-        invigilationSlots[key].assigned = selectedEmails;
-        await syncSlotsToCloud();
-        window.closeModal('manual-allocation-modal');
-    }
-}
-window.updateManualCounts = function() {
-    const count = document.querySelectorAll('.manual-chk:checked').length;
-    document.getElementById('manual-sel-count').textContent = count;
-}
+
 
 window.openInconvenienceModal = function(key) {
     const slot = invigilationSlots[key];
@@ -4738,7 +4547,202 @@ window.filterManualStaff = function() {
         else noResults.classList.remove('hidden');
     }
 }
+// --- MANUAL ALLOCATION (Consolidated & Fixed) ---
 
+window.openManualAllocationModal = function(key) {
+    const slot = invigilationSlots[key];
+    
+    // 1. Lock Check
+    if (!slot.isLocked) {
+        alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts.");
+        return;
+    }
+
+    // 2. Reset Search
+    const searchInput = document.getElementById('manual-staff-search');
+    if(searchInput) searchInput.value = "";
+    const noResults = document.getElementById('manual-no-results');
+    if(noResults) noResults.classList.add('hidden');
+
+    // 3. Setup Modal Header & Counts (FIXED: Updates BOTH counters immediately)
+    document.getElementById('manual-session-key').value = key;
+    document.getElementById('manual-modal-title').textContent = key;
+    
+    const requiredCount = parseInt(slot.required) || 0; 
+    document.getElementById('manual-modal-req').textContent = requiredCount; // Header
+    document.getElementById('manual-req-count').textContent = requiredCount; // Big Box
+
+    // --- 4. SMART SORTING & SCORING ---
+    const targetDate = parseDate(key);
+    const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const weekNum = getWeekOfMonth(targetDate);
+    const targetDateString = targetDate.toDateString();
+    const prevDate = new Date(targetDate); prevDate.setDate(targetDate.getDate() - 1);
+    const nextDate = new Date(targetDate); nextDate.setDate(targetDate.getDate() + 1);
+    const prevDateStr = prevDate.toDateString();
+    const nextDateStr = nextDate.toDateString();
+
+    const staffContext = {}; 
+    staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
+
+    Object.keys(invigilationSlots).forEach(k => {
+        if (k === key) return; 
+        const sSlot = invigilationSlots[k];
+        const sDate = parseDate(k);
+        const sDateString = sDate.toDateString();
+        const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const sWeek = getWeekOfMonth(sDate);
+        const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
+        const isSameDay = (sDateString === targetDateString);
+        const isAdjacent = (sDateString === prevDateStr || sDateString === nextDateStr);
+
+        (sSlot.assigned || []).forEach(email => {
+            if (staffContext[email]) {
+                if (isSameWeek) staffContext[email].weekCount++;
+                if (isSameDay) staffContext[email].hasSameDay = true;
+                if (isAdjacent) staffContext[email].hasAdjacent = true;
+            }
+        });
+    });
+
+    const rankedStaff = staffData
+        .filter(s => s.status !== 'archived')
+        .map(s => {
+            const done = getDutiesDoneCount(s.email);
+            const target = calculateStaffTarget(s);
+            const pending = Math.max(0, target - done);
+            const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
+            
+            let score = pending * 100; 
+            let badges = [];
+
+            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Limit (3/wk)"); }
+            if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
+            if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
+            
+            return { ...s, pending, score, badges };
+        })
+        .sort((a, b) => b.score - a.score); 
+
+    // --- 5. RENDER & AUTO-SELECT ---
+    const availList = document.getElementById('manual-available-list');
+    availList.innerHTML = '';
+    
+    const assignedList = slot.assigned || [];
+    const isFreshAllocation = (assignedList.length === 0);
+    let slotsToFill = isFreshAllocation ? requiredCount : 0;
+    let currentSelectionCount = 0;
+
+    rankedStaff.forEach(s => {
+        if (isUserUnavailable(slot, s.email, key)) return; 
+        
+        let isChecked = false;
+        
+        if (isFreshAllocation) {
+            if (slotsToFill > 0) {
+                isChecked = true;
+                slotsToFill--;
+            }
+        } else {
+            if (assignedList.includes(s.email)) {
+                isChecked = true;
+            }
+        }
+        
+        if (isChecked) currentSelectionCount++;
+
+        const checkState = isChecked ? 'checked' : '';
+        const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
+        const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
+        
+        const warningHtml = s.badges.map(b => 
+            `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
+        ).join('');
+
+        availList.innerHTML += `
+            <tr class="${rowClass} border-b last:border-0 transition">
+                <td class="px-3 py-2 text-center w-10">
+                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
+                </td>
+                <td class="px-3 py-2">
+                    <div class="flex items-center flex-wrap">
+                        <span class="font-bold text-gray-800 mr-2">${s.name}</span>
+                        ${warningHtml}
+                    </div>
+                    <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
+                </td>
+                <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
+                    ${s.pending}
+                </td>
+            </tr>`;
+    });
+
+    if (availList.innerHTML === "") {
+        availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
+    }
+
+    // 6. Render Unavailable List
+    const unavList = document.getElementById('manual-unavailable-list');
+    unavList.innerHTML = '';
+    
+    const allUnavailable = [];
+    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
+    
+    const [dateStr, timeStr] = key.split(' | ');
+    let session = "FN";
+    const t = timeStr ? timeStr.toUpperCase() : "";
+    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
+    
+    if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+        advanceUnavailability[dateStr][session].forEach(u => {
+            if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
+                allUnavailable.push(u);
+            }
+        });
+    }
+
+    if (allUnavailable.length > 0) {
+        allUnavailable.forEach(u => {
+            const email = (typeof u === 'string') ? u : u.email;
+            const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
+            const s = staffData.find(st => st.email === email) || { name: email };
+            
+            unavList.innerHTML += `
+                <div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm mb-1">
+                    <div class="font-bold text-red-700">${s.name}</div>
+                    <div class="text-gray-600 font-medium mt-0.5">${reason}</div>
+                </div>`;
+        });
+    } else {
+        unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
+    }
+
+    // 7. Final UI Update
+    document.getElementById('manual-sel-count').textContent = currentSelectionCount;
+    
+    window.openModal('manual-allocation-modal');
+}
+
+window.updateManualCounts = function() {
+    const count = document.querySelectorAll('.manual-chk:checked').length;
+    document.getElementById('manual-sel-count').textContent = count;
+}
+
+window.saveManualAllocation = async function() {
+    const key = document.getElementById('manual-session-key').value;
+    const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
+    
+    if (invigilationSlots[key]) {
+        // LOGGING
+        const addedCount = selectedEmails.length;
+        if(typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${addedCount} staff to session ${key}`);
+        
+        invigilationSlots[key].assigned = selectedEmails;
+        await syncSlotsToCloud();
+        window.closeModal('manual-allocation-modal');
+        renderSlotsGridAdmin();
+    }
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
