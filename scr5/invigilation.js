@@ -158,6 +158,7 @@ function setupLiveSync(collegeId, mode) {
             
             // CONFIGS
             designationsConfig = JSON.parse(collegeData.invigDesignations || JSON.stringify(DEFAULT_DESIGNATIONS));
+            const savedRoles = JSON.parse(collegeData.invigRoles || '{}');
             rolesConfig = JSON.parse(collegeData.invigRoles || JSON.stringify(DEFAULT_ROLES));
             googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
             departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
@@ -2317,19 +2318,26 @@ window.loadSessionAttendance = function() {
     }
     if (searchResults) searchResults.classList.add('hidden');
     currentSubstituteCandidate = null;
-    // --------------------
 
-    // --- 1. SUPERVISION LOGIC ---
-    const today = new Date();
+    // --- 1. SUPERVISION LOGIC (Date-Aware) ---
+    // Calculate the exact date of this session to find who was active THEN
+    const sessionDate = parseDate(key);
+    sessionDate.setHours(0, 0, 0, 0); // Normalize to midnight
+
     let defaultCS = "";
     let defaultSAS = "";
     
     staffData.forEach(s => {
         if (s.roleHistory) {
-            const activeRole = s.roleHistory.find(r => 
-                new Date(r.start) <= today && new Date(r.end) >= today && 
-                (r.role === "Chief Superintendent" || r.role === "Exam Chief" || r.role === "Senior Asst. Superintendent")
-            );
+            // Check if role was active ON THE SESSION DATE
+            const activeRole = s.roleHistory.find(r => {
+                const start = new Date(r.start); start.setHours(0,0,0,0);
+                const end = new Date(r.end); end.setHours(23,59,59,999); // End of that day
+                
+                return start <= sessionDate && end >= sessionDate && 
+                       (r.role === "Chief Superintendent" || r.role === "Exam Chief" || r.role === "Senior Asst. Superintendent");
+            });
+            
             if (activeRole) {
                 if (activeRole.role === "Chief Superintendent" || activeRole.role === "Exam Chief") defaultCS = s.email;
                 if (activeRole.role === "Senior Asst. Superintendent") defaultSAS = s.email;
@@ -2337,6 +2345,7 @@ window.loadSessionAttendance = function() {
         }
     });
 
+    // Determine Current Selection (Saved > Default)
     const savedSup = slot.supervision || {};
     const currentCS = savedSup.cs || defaultCS;
     const currentSAS = savedSup.sas || defaultSAS;
@@ -2361,6 +2370,8 @@ window.loadSessionAttendance = function() {
 
     // --- 2. ATTENDANCE LIST ---
     let presentSet = new Set(slot.attendance || slot.assigned || []);
+    
+    // Auto-Mark CS/SAS as Present
     if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
     if (currentSAS && !presentSet.has(currentSAS)) presentSet.add(currentSAS);
     
