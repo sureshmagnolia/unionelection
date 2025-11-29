@@ -241,18 +241,21 @@
             <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
                 <div class="mb-4 pb-4 border-b border-gray-200">
                     <h3 class="font-bold text-gray-700 text-xs uppercase mb-2">Session Supervision</h3>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="relative">
                             <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chief Superintendent (CS)</label>
-                            <select id="att-cs-select" class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500">
-                                <option value="">-- Select --</option>
-                            </select>
+                            <input type="text" id="att-cs-search" placeholder="Search CS Name..." 
+                                class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off">
+                            <input type="hidden" id="att-cs-email">
+                            <div id="att-cs-results" class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto custom-scroll hidden"></div>
                         </div>
-                        <div>
+                        
+                        <div class="relative">
                             <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Senior Asst. Supt. (SAS)</label>
-                            <select id="att-sas-select" class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500">
-                                <option value="">-- Select --</option>
-                            </select>
+                            <input type="text" id="att-sas-search" placeholder="Search SAS Name..." 
+                                class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off">
+                            <input type="hidden" id="att-sas-email">
+                            <div id="att-sas-results" class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto custom-scroll hidden"></div>
                         </div>
                     </div>
                 </div>
