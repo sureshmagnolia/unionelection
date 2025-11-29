@@ -55,6 +55,7 @@ let isRoleLocked = true;
 let isDeptLocked = true;
 let isStaffListLocked = true; // Default to Locked
 let currentSubstituteCandidate = null; // Stores selected staff for substitution
+let isGlobalTargetLocked = true; // <--- NEW
 let currentEmailQueue = []; // Stores the list for bulk sending
 
 // --- DOM ELEMENTS ---
@@ -167,6 +168,12 @@ function setupLiveSync(collegeId, mode) {
             
             // NEW: Load Advance Unavailability
             advanceUnavailability = JSON.parse(collegeData.invigAdvanceUnavailability || '{}');
+            // *** FIX: LOAD GLOBAL TARGET (Was Missing) ***
+            if (collegeData.invigGlobalTarget !== undefined) {
+                globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
+            } else {
+                globalDutyTarget = 2; // Default if not set
+            }
             // *** ADD THIS LINE ***
             googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
             
@@ -1915,35 +1922,39 @@ function getCurrentAcademicYear() {
     };
 }
 // --- ROLE EDITOR FUNCTIONS ---
-
 window.openRoleConfigModal = function() {
     // 1. Reset ALL Locks
     isRoleLocked = true;
     isDeptLocked = true;
-    isEmailConfigLocked = true; // <--- NEW
+    isEmailConfigLocked = true;
+    isGlobalTargetLocked = true; // <--- NEW
 
     // 2. Update UI for Locks
     updateLockIcon('role-lock-btn', true);
     updateLockIcon('dept-lock-btn', true);
-    updateLockIcon('email-config-lock-btn', true); // <--- NEW
+    updateLockIcon('email-config-lock-btn', true);
+    updateLockIcon('global-target-lock-btn', true); // <--- NEW
 
     toggleInputVisibility('role-input-row', true);
     toggleInputVisibility('dept-input-row', true);
     
-    // Disable Email Input initially
+    // 3. Configure Inputs (Locked by default)
     const urlInput = document.getElementById('google-script-url');
-    if(urlInput) {
-        urlInput.value = googleScriptUrl;
-        urlInput.disabled = true;
+    if(urlInput) { urlInput.value = googleScriptUrl; urlInput.disabled = true; }
+
+    const targetInput = document.getElementById('global-duty-target');
+    if(targetInput) { 
+        targetInput.value = globalDutyTarget; 
+        targetInput.disabled = true; // <--- NEW
     }
 
-    // 3. Load Data & Render
-    document.getElementById('global-duty-target').value = globalDutyTarget;
+    // 4. Render Lists
     renderRolesList();
     if(typeof renderDepartmentsList === "function") renderDepartmentsList();
 
     window.openModal('role-config-modal');
 }
+
 function renderRolesList() {
     const container = document.getElementById('roles-list-container');
     if (!container) return;
@@ -4189,7 +4200,25 @@ if (subInput) {
         }
     });
 }
-
+window.toggleGlobalTargetLock = function() {
+    isGlobalTargetLocked = !isGlobalTargetLocked;
+    const input = document.getElementById('global-duty-target');
+    const btn = document.getElementById('global-target-lock-btn');
+    
+    if(input) {
+        input.disabled = isGlobalTargetLocked;
+        // Visual feedback
+        if (!isGlobalTargetLocked) {
+            input.classList.remove('text-gray-600');
+            input.classList.add('text-black', 'bg-white');
+            input.focus();
+        } else {
+            input.classList.add('text-gray-600');
+            input.classList.remove('text-black', 'bg-white');
+        }
+    }
+    if(btn) updateLockIcon('global-target-lock-btn', isGlobalTargetLocked);
+}
 
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
@@ -4260,6 +4289,7 @@ window.sendBulkEmails = sendBulkEmails;
 window.getFirstName = getFirstName;
 window.toggleStaffListLock = toggleStaffListLock;
 window.toggleEmailConfigLock = toggleEmailConfigLock;
+window.toggleGlobalTargetLock = toggleGlobalTargetLock;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
