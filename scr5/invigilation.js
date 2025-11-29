@@ -1859,41 +1859,52 @@ window.removeRoleFromStaff = async function(sIdx, rIdx) {
 
 window.openManualAllocationModal = function(key) {
     const slot = invigilationSlots[key];
+    
+    // 1. Lock Check
     if (!slot.isLocked) {
         alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts.");
         return;
     }
 
+    // 2. Reset Search
+    const searchInput = document.getElementById('manual-staff-search');
+    if(searchInput) searchInput.value = "";
+    const noResults = document.getElementById('manual-no-results');
+    if(noResults) noResults.classList.add('hidden');
+
+    // 3. Setup Modal Header
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
     document.getElementById('manual-modal-req').textContent = slot.required || 0;
     
-    // 1. Sort Staff
-    const rankedStaff = staffData.map(s => {
-        const done = getDutiesDoneCount(s.email);
-        const target = calculateStaffTarget(s);
-        return {
-            ...s,
-            pending: target - done
-        };
-    }).sort((a, b) => b.pending - a.pending);
+    // 4. Sort Staff (Prioritize High Pending Duty)
+    const rankedStaff = staffData
+        .filter(s => s.status !== 'archived') // Hide Archived
+        .map(s => {
+            const done = getDutiesDoneCount(s.email);
+            const target = calculateStaffTarget(s);
+            return {
+                ...s,
+                pending: Math.max(0, target - done) // Ensure no negative numbers
+            };
+        })
+        .sort((a, b) => b.pending - a.pending); // Descending Sort
 
-    // 2. Render Available List
+    // 5. Render Available List
     const availList = document.getElementById('manual-available-list');
     availList.innerHTML = '';
     let selectedCount = 0;
 
     rankedStaff.forEach(s => {
         const isAssigned = slot.assigned.includes(s.email);
+        
+        // Check Availability (Checks both Slot & Advance lists)
         if (isUserUnavailable(slot, s.email, key)) return; 
         
         if (isAssigned) selectedCount++;
         const checkState = isAssigned ? 'checked' : '';
         const rowClass = isAssigned ? 'bg-indigo-50' : 'hover:bg-gray-50';
-        
-        // FIX: Display 0 if negative
-        const displayPending = Math.max(0, s.pending);
-        const pendingColor = displayPending > 0 ? 'text-red-600' : 'text-green-600';
+        const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
 
         availList.innerHTML += `
             <tr class="${rowClass} border-b last:border-0 transition">
@@ -1905,22 +1916,25 @@ window.openManualAllocationModal = function(key) {
                     <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
                 </td>
                 <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
-                    ${displayPending}
+                    ${s.pending}
                 </td>
             </tr>`;
     });
 
-    if (rankedStaff.length === 0) {
-        availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No staff available. Add staff in Settings.</td></tr>`;
+    if (availList.innerHTML === "") {
+        availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
     }
 
-    // 3. Render Unavailable List (Same as before)
+    // 6. Render Unavailable List (Merge Slot + Advance)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
     
     const allUnavailable = [];
+    
+    // A. Slot Specific
     if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
     
+    // B. Advance (Date/Session Wise)
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
     const t = timeStr ? timeStr.toUpperCase() : "";
@@ -1928,6 +1942,7 @@ window.openManualAllocationModal = function(key) {
     
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
+            // Avoid duplicates
             if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
                 allUnavailable.push(u);
             }
@@ -1937,7 +1952,7 @@ window.openManualAllocationModal = function(key) {
     if (allUnavailable.length > 0) {
         allUnavailable.forEach(u => {
             const email = (typeof u === 'string') ? u : u.email;
-            const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
+            const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
             const s = staffData.find(st => st.email === email) || { name: email };
             
             unavList.innerHTML += `
@@ -1950,6 +1965,7 @@ window.openManualAllocationModal = function(key) {
         unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
     }
 
+    // 7. Update Counters & Open
     document.getElementById('manual-sel-count').textContent = selectedCount;
     document.getElementById('manual-req-count').textContent = slot.required || 0;
     
@@ -4625,6 +4641,32 @@ async function finishAttendanceUpload(count, action) {
         loadSessionAttendance();
     }
 }
+// --- MANUAL ALLOCATION SEARCH ---
+window.filterManualStaff = function() {
+    const query = document.getElementById('manual-staff-search').value.toLowerCase();
+    const rows = document.querySelectorAll('#manual-available-list tr');
+    const noResults = document.getElementById('manual-no-results');
+    let hasVisible = false;
+
+    rows.forEach(row => {
+        // The Name is in the second column (index 1), inside a div
+        // The Dept is in the same cell, inside a div with text-[10px]
+        const textContent = row.innerText.toLowerCase(); // Simple check of all text in row
+        
+        if (textContent.includes(query)) {
+            row.classList.remove('hidden');
+            hasVisible = true;
+        } else {
+            row.classList.add('hidden');
+        }
+    });
+
+    if(noResults) {
+        if (hasVisible) noResults.classList.add('hidden');
+        else noResults.classList.remove('hidden');
+    }
+}
+
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -4699,6 +4741,7 @@ window.downloadMasterBackup = downloadMasterBackup;
 window.handleMasterRestore = handleMasterRestore;
 window.downloadAttendanceTemplate = downloadAttendanceTemplate;
 window.handleAttendanceCSVUpload = handleAttendanceCSVUpload;
+window.filterManualStaff = filterManualStaff;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
