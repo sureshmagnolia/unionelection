@@ -52,6 +52,7 @@ let globalDutyTarget = 2; // Default
 let googleScriptUrl = "";
 let isRoleLocked = true;
 let isDeptLocked = true;
+let isStaffListLocked = true; // Default to Locked
 let currentEmailQueue = []; // Stores the list for bulk sending
 
 // --- DOM ELEMENTS ---
@@ -598,29 +599,49 @@ function renderStaffTable() {
     if(!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
     const filter = document.getElementById('staff-search').value.toLowerCase();
+    const today = new Date(); // Current timestamp for role check
 
     staffData.forEach((staff, index) => {
-        // FILTER: Hide Archived
+        // Filter out archived
         if (staff.status === 'archived') return;
         
+        // Search Filter
         if (filter && !staff.name.toLowerCase().includes(filter)) return;
         
         const target = calculateStaffTarget(staff);
         const done = getDutiesDoneCount(staff.email);
-        
-        // Display 0 if negative
-        const rawPending = target - done;
-        const pending = Math.max(0, rawPending);
+        const pending = Math.max(0, target - done);
 
+        // --- 1. CURRENT ROLE TAG LOGIC ---
         let activeRoleLabel = "";
-        const today = new Date();
-        if (staff.roleHistory) {
-            const activeRole = staff.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
-            if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1">${activeRole.role}</span>`;
+        if (staff.roleHistory && staff.roleHistory.length > 0) {
+            // Find role where TODAY is between Start and End
+            const activeRole = staff.roleHistory.find(r => {
+                const start = new Date(r.start);
+                const end = new Date(r.end);
+                return start <= today && end >= today;
+            });
+            
+            if (activeRole) {
+                activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
+            }
         }
+        // ---------------------------------
         
         const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
         
+        // --- 2. LOCK LOGIC ---
+        let actionButtons = "";
+        if (isStaffListLocked) {
+            actionButtons = `<span class="text-gray-400 text-xs italic mr-2">Locked</span>`;
+        } else {
+            actionButtons = `
+                <button onclick="editStaff(${index})" class="text-blue-600 hover:text-blue-900 bg-blue-50 px-2 py-1 rounded border border-blue-100 transition">Edit</button>
+                <button onclick="openRoleAssignmentModal(${index})" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 transition">Role</button>
+                <button onclick="deleteStaff(${index})" class="text-red-500 hover:text-red-700 font-bold px-2 py-1 rounded hover:bg-red-50 transition">&times;</button>
+            `;
+        }
+
         const row = document.createElement('tr');
         row.className = "hover:bg-gray-50 transition border-b border-gray-100";
         row.innerHTML = `
@@ -628,10 +649,8 @@ function renderStaffTable() {
             <td class="px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
             <td class="px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
             <td class="px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
-            <td class="px-6 py-3 text-right text-xs font-medium flex justify-end gap-2">
-                <button onclick="editStaff(${index})" class="text-blue-600 hover:text-blue-900 bg-blue-50 px-2 py-1 rounded">Edit</button>
-                <button onclick="openRoleAssignmentModal(${index})" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded">Role</button>
-                <button onclick="deleteStaff(${index})" class="text-red-500 hover:text-red-700">&times;</button>
+            <td class="px-6 py-3 text-right text-xs font-medium flex justify-end gap-2 items-center">
+                ${actionButtons}
             </td>
         `;
         ui.staffTableBody.appendChild(row);
@@ -4046,6 +4065,21 @@ function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, mon
     </div>
     `;
 }
+window.toggleStaffListLock = function() {
+    isStaffListLocked = !isStaffListLocked;
+    const btn = document.getElementById('btn-staff-list-lock');
+    
+    if(btn) {
+        if (isStaffListLocked) {
+            btn.innerHTML = `<span>🔒</span> Locked`;
+            btn.className = "bg-gray-100 text-gray-500 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-gray-200";
+        } else {
+            btn.innerHTML = `<span>🔓</span> Editing`;
+            btn.className = "bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-red-100 animate-pulse";
+        }
+    }
+    renderStaffTable();
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -4113,6 +4147,7 @@ window.editStaff = editStaff;
 window.sendSingleEmail = sendSingleEmail;
 window.sendBulkEmails = sendBulkEmails;
 window.getFirstName = getFirstName;
+window.toggleStaffListLock = toggleStaffListLock;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
