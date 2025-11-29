@@ -3159,15 +3159,14 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
     const preview = document.getElementById('notif-message-preview');
     
     title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
-    subtitle.textContent = "Send detailed professional emails (Faculty + Dept CC) & instant alerts.";
+    subtitle.textContent = "Send detailed professional emails (Faculty + Consolidated Dept Summary).";
     list.innerHTML = '';
     
     // Clear Queue
     currentEmailQueue = [];
 
-    // 1. Gather Duties for this Week
+    // 1. Gather Duties
     const facultyDuties = {}; 
-
     Object.keys(invigilationSlots).forEach(key => {
         const date = parseDate(key);
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -3198,31 +3197,17 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
         return;
     }
 
-    // Preview (WhatsApp Style)
     const sampleName = "Abdul Raheem MK";
     preview.textContent = generateWeeklyMessage(sampleName, "(01/12-Mon-FN)...");
 
-    // 2. Add Bulk Send Button
-    list.innerHTML = `
-        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
-            <div class="text-xs text-gray-500">
-                Queue will include Faculty + Dept Copies.<br>
-                <strong>${Object.keys(facultyDuties).length}</strong> faculty in list.
-            </div>
-            <button id="btn-bulk-email-week" onclick="sendBulkEmails('btn-bulk-email-week')" 
-                class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                Send Bulk Emails
-            </button>
-        </div>
-    `;
+    // --- AGGREGATOR FOR DEPARTMENTS ---
+    const deptAggregator = {}; // { "English": [ { name: "John", duties: [] }, ... ] }
 
-    // 3. Process Each Faculty
     const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
+    // 2. Process Faculty
     sortedEmails.forEach((email, index) => {
         const duties = facultyDuties[email];
-        // Sort Chronologically
         duties.sort((a, b) => a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join('')));
 
         const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
@@ -3232,69 +3217,48 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
         const firstName = getFirstName(fullName);
         const staffEmail = staff ? staff.email : "";
         
-        // Phone
         let phone = staff ? (staff.phone || "") : "";
         phone = phone.replace(/\D/g, ''); 
         if (phone.length === 10) phone = "91" + phone;
 
-        // --- EMAIL PREPARATION ---
+        // A. Add to Faculty Queue
         const emailSubject = `Invigilation Duty: Week ${weekNum} (${monthStr})`;
         const emailBody = generateProfessionalEmail(fullName, duties, "Upcoming Invigilation Duties");
         const btnId = `email-btn-${index}`;
 
-        // A. Add Faculty to Queue
         if (staffEmail) {
             currentEmailQueue.push({
                 email: staffEmail,
                 name: fullName,
                 subject: emailSubject,
                 body: emailBody,
-                btnId: btnId // Link to button for visual feedback
+                btnId: btnId
             });
         }
 
-        // B. Add Dept CC to Queue (NEW LOGIC)
+        // B. Aggregate for Department
         if (staff && staff.dept) {
-            // Handle both string array (old) and object array (new)
-            const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
-            const deptObj = cleanDepts.find(d => d.name === staff.dept);
-            
-            if (deptObj && deptObj.email) {
-                const deptSubject = `[COPY] ${fullName} - Duty Week ${weekNum}`;
-                const deptBody = `<div style="background:#f9fafb; padding:10px; border-bottom:1px solid #ccc; color:#555; font-size:12px;">
-                                    <b>Department Copy</b><br>
-                                    This is a copy of the notification sent to ${fullName} (${staff.dept}).
-                                  </div>` + emailBody;
-
-                currentEmailQueue.push({
-                    email: deptObj.email,
-                    name: `HOD ${staff.dept}`,
-                    subject: deptSubject,
-                    body: deptBody,
-                    btnId: null // No button for this, it sends silently with bulk
-                });
-            }
+            if (!deptAggregator[staff.dept]) deptAggregator[staff.dept] = [];
+            deptAggregator[staff.dept].push({
+                name: fullName,
+                duties: duties
+            });
         }
 
-        // --- WHATSAPP / SMS PREPARATION ---
+        // UI Rendering (Same as before)
         const waMsg = generateWeeklyMessage(fullName, dutyString);
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
-        
         const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
         const smsMsg = `${firstName}: Duty ${shortDutyStr}. Check Portal. -CS GVC`;
         const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
 
-        // UI Flags
         const phoneDisabled = phone ? "" : "disabled";
         const emailDisabled = staffEmail ? "" : "disabled";
         const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
-
-        // Escape for HTML Onclick
         const safeName = fullName.replace(/'/g, "\\'");
         const safeSubject = emailSubject.replace(/'/g, "\\'");
         const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ''); 
 
-        // Render Row
         list.innerHTML += `
             <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
                 <div class="flex-1 min-w-0 pr-2">
@@ -3313,6 +3277,52 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
             </div>
         `;
     });
+
+    // 3. PROCESS DEPARTMENTS (ADD TO QUEUE)
+    const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
+    
+    Object.keys(deptAggregator).forEach(deptName => {
+        const deptObj = cleanDepts.find(d => d.name === deptName);
+        
+        if (deptObj && deptObj.email) {
+            const facultyList = deptAggregator[deptName];
+            
+            // Generate Consolidated Email
+            const deptSubject = `Consolidated Duty List: ${deptName} - Week ${weekNum}`;
+            const deptBody = generateDepartmentConsolidatedEmail(deptName, facultyList, weekNum, monthStr);
+
+            // Add to Queue (No button ID, sends silently with bulk)
+            currentEmailQueue.push({
+                email: deptObj.email,
+                name: `HOD ${deptName}`,
+                subject: deptSubject,
+                body: deptBody,
+                btnId: null 
+            });
+
+            // Optional: Add a visual divider in the list to show a dept email will be sent
+            list.insertAdjacentHTML('beforeend', `
+                <div class="bg-indigo-50 border border-indigo-100 p-2 rounded text-xs text-indigo-800 text-center mt-1">
+                    <span class="font-bold">queued:</span> Consolidated email for <b>${deptName}</b> (${deptObj.email})
+                </div>
+            `);
+        }
+    });
+
+    // Add Bulk Button at the top
+    const bulkBtnHtml = `
+        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
+            <div class="text-xs text-gray-500">
+                Queue: <b>${sortedEmails.length}</b> Faculty + <b>${Object.keys(deptAggregator).filter(d => cleanDepts.find(cd => cd.name === d && cd.email)).length}</b> Dept Emails.
+            </div>
+            <button id="btn-bulk-email-week" onclick="sendBulkEmails('btn-bulk-email-week')" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Send Bulk Emails
+            </button>
+        </div>
+    `;
+    list.insertAdjacentHTML('afterbegin', bulkBtnHtml);
 
     window.openModal('notification-modal');
 }
@@ -3922,7 +3932,67 @@ window.sendBulkEmails = async function(btnId) {
     if(typeof logActivity === 'function') logActivity("Bulk Email", `Sent ${sentCount} automated emails to faculty.`);
     alert(`Batch Complete! ${sentCount} emails sent.`);
 }
+// --- HELPER: Consolidated Department Email Template ---
+function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, monthStr) {
+    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+    
+    let tableRows = "";
+    
+    // 1. Build Table Rows
+    // facultyData is an array of { name: "John", duties: [ {date, session, time}, ... ] }
+    facultyData.sort((a, b) => a.name.localeCompare(b.name));
 
+    facultyData.forEach((f, index) => {
+        const bgClass = index % 2 === 0 ? "#ffffff" : "#f9fafb";
+        
+        // Rowspan for Faculty Name
+        const rowSpan = f.duties.length;
+        
+        f.duties.forEach((d, dIndex) => {
+            const nameCell = (dIndex === 0) 
+                ? `<td rowspan="${rowSpan}" style="padding: 8px; border: 1px solid #ddd; font-weight: bold; vertical-align: top; background-color: ${bgClass};">${f.name}</td>` 
+                : "";
+                
+            tableRows += `
+            <tr style="background-color: ${bgClass};">
+                ${nameCell}
+                <td style="padding: 8px; border: 1px solid #ddd;">${d.date}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${d.session}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: #555;">${d.time}</td>
+            </tr>`;
+        });
+    });
+
+    return `
+    <div style="font-family: Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 800px;">
+        <p>Dear Head of Department (<b>${deptName}</b>),</p>
+        <p>Please find below the consolidated invigilation duty list for faculty members of your department for <b>Week ${weekNum} (${monthStr})</b>.</p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px;">
+            <thead>
+                <tr style="background-color: #4f46e5; color: white; text-align: left;">
+                    <th style="padding: 10px; border: 1px solid #4f46e5; width: 30%;">Faculty Name</th>
+                    <th style="padding: 10px; border: 1px solid #4f46e5;">Date</th>
+                    <th style="padding: 10px; border: 1px solid #4f46e5;">Session</th>
+                    <th style="padding: 10px; border: 1px solid #4f46e5;">Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows}
+            </tbody>
+        </table>
+
+        <p style="font-size: 13px; color: #666;">
+            <i>Note: Individual notifications have been sent to the respective faculty members.</i>
+        </p>
+        
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #999;">
+            <b>Exam Cell, ${collegeName}</b>
+        </p>
+    </div>
+    `;
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
