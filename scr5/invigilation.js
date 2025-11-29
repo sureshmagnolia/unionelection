@@ -493,6 +493,7 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
     });
 }
 // --- RENDER ADMIN SLOTS (Monthly View) ---
+// --- RENDER ADMIN SLOTS (Monthly View with Logic Button) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
@@ -571,38 +572,47 @@ function renderSlotsGridAdmin() {
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
         
-        const hasLog = slot.allocationLog ? "" : "hidden"; // Check if log exists
+        // Week Header
+        ui.adminSlotsGrid.innerHTML += `
+            <div class="col-span-full mt-4 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
+                <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                    <span class="bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">Week ${group.week}</span>
+                </span>
+                <div class="flex gap-2">
+                    <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" 
+                        class="text-[10px] bg-green-600 text-white border border-green-700 px-3 py-1 rounded hover:bg-green-700 font-bold transition shadow-sm flex items-center gap-1">
+                        📢 Notify
+                    </button>
 
-            ui.adminSlotsGrid.innerHTML += `
-                <div class="border-l-4 ${statusColor} bg-white p-4 rounded shadow-sm slot-card flex flex-col justify-between transition-all">
-                    <div>
-                        <div class="flex justify-between items-start mb-2">
-                             </div>
-                        <div class="text-xs text-gray-600 mb-2"><strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}</div>
-                        ${unavButton}
-                    </div>
+                    <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" 
+                        class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
+                        ⚡ Auto-Assign
+                    </button>
                     
-                    <div class="grid grid-cols-4 gap-1 mt-3">
-                         <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded py-1.5 hover:bg-green-100 font-bold transition" title="Daily Reminder">🔔</button>
-                         <button onclick="printSessionReport('${key}')" class="col-span-1 text-[10px] bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold transition" title="Print">🖨️</button>
-                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition" title="Manual Edit">Edit</button>
-                         <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded py-1.5 hover:bg-orange-100 font-bold transition ${hasLog}" title="View Logic">📜</button>
+                    <div class="flex rounded shadow-sm">
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-red-600 px-2 py-1 rounded-l hover:bg-red-50 font-bold transition border-r-0">🔒</button>
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-green-600 px-2 py-1 rounded-r hover:bg-green-50 font-bold transition">🔓</button>
                     </div>
-                     <button onclick="toggleLock('${key}')" class="w-full mt-2 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock Slot' : 'Lock Slot'}</button>
-                </div>`;
+                </div>
+            </div>`;
 
         // Render Slots (Ascending Date)
         group.items.sort((a, b) => a.date - b.date);
         
+        // *** CRITICAL FIX: Ensure 'slot' is destructured correctly ***
         group.items.forEach(({ key, slot }) => {
             const filled = slot.assigned.length;
             let statusColor = slot.isLocked ? "border-red-500 bg-red-50" : (filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50");
             let statusIcon = slot.isLocked ? "🔒" : (filled >= slot.required ? "✅" : "🔓");
 
+            // Unavailability Button
             let unavButton = "";
             if (slot.unavailable && slot.unavailable.length > 0) {
                 unavButton = `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-2 bg-white text-red-700 border border-red-200 px-2 py-1.5 rounded text-xs font-bold hover:bg-red-50 transition shadow-sm"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> View ${slot.unavailable.length} Inconvenience(s)</button>`;
             }
+            
+            // Logic Log Check
+            const hasLog = slot.allocationLog ? "" : "hidden"; 
 
             ui.adminSlotsGrid.innerHTML += `
                 <div class="border-l-4 ${statusColor} bg-white p-4 rounded shadow-sm slot-card flex flex-col justify-between transition-all">
@@ -618,10 +628,12 @@ function renderSlotsGridAdmin() {
                         <div class="text-xs text-gray-600 mb-2"><strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}</div>
                         ${unavButton}
                     </div>
-                    <div class="grid grid-cols-3 gap-2 mt-3">
-                        <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-xs bg-green-50 text-green-700 border border-green-200 rounded py-1.5 hover:bg-green-100 font-bold transition" title="Send Daily Reminder">🔔 Remind</button>
-                        <button onclick="printSessionReport('${key}')" class="col-span-1 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition">🖨️ Print</button>
-                        <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition">Manual</button>
+                    
+                    <div class="grid grid-cols-4 gap-1 mt-3">
+                         <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded py-1.5 hover:bg-green-100 font-bold transition" title="Daily Reminder">🔔</button>
+                         <button onclick="printSessionReport('${key}')" class="col-span-1 text-[10px] bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold transition" title="Print">🖨️</button>
+                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition" title="Manual Edit">Edit</button>
+                         <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded py-1.5 hover:bg-orange-100 font-bold transition ${hasLog}" title="View Logic">📜</button>
                     </div>
                      <button onclick="toggleLock('${key}')" class="w-full mt-2 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock Slot' : 'Lock Slot'}</button>
                 </div>`;
