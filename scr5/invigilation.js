@@ -1857,6 +1857,7 @@ window.removeRoleFromStaff = async function(sIdx, rIdx) {
     renderStaffTable();
 }
 
+// --- MANUAL ALLOCATION (Smart Sort & Auto-Select) ---
 window.openManualAllocationModal = function(key) {
     const slot = invigilationSlots[key];
     
@@ -1876,35 +1877,120 @@ window.openManualAllocationModal = function(key) {
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
     document.getElementById('manual-modal-req').textContent = slot.required || 0;
+
+    // --- 4. SMART SORTING LOGIC ---
     
-    // 4. Sort Staff (Prioritize High Pending Duty)
+    // A. Parse Target Context
+    const targetDate = parseDate(key);
+    const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const weekNum = getWeekOfMonth(targetDate);
+    
+    const prevDate = new Date(targetDate); prevDate.setDate(targetDate.getDate() - 1);
+    const nextDate = new Date(targetDate); nextDate.setDate(targetDate.getDate() + 1);
+    const prevDateStr = prevDate.toDateString();
+    const nextDateStr = nextDate.toDateString();
+    const targetDateString = targetDate.toDateString();
+
+    // B. Analyze All Slots (to check for conflicts)
+    // We need to know what everyone is doing this week/day/adjacent
+    const staffContext = {}; // email -> { weekCount, sameDay, adjacent }
+    
+    staffData.forEach(s => {
+        staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false };
+    });
+
+    Object.keys(invigilationSlots).forEach(k => {
+        if (k === key) return; // Skip current slot (we are editing it)
+        
+        const sSlot = invigilationSlots[k];
+        const sDate = parseDate(k);
+        const sDateString = sDate.toDateString();
+        
+        // Check Week Match
+        const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const sWeek = getWeekOfMonth(sDate);
+        const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
+        
+        // Check Day Match
+        const isSameDay = (sDateString === targetDateString);
+        const isAdjacent = (sDateString === prevDateStr || sDateString === nextDateStr);
+
+        sSlot.assigned.forEach(email => {
+            if (staffContext[email]) {
+                if (isSameWeek) staffContext[email].weekCount++;
+                if (isSameDay) staffContext[email].hasSameDay = true;
+                if (isAdjacent) staffContext[email].hasAdjacent = true;
+            }
+        });
+    });
+
+    // C. Score & Sort Staff
     const rankedStaff = staffData
-        .filter(s => s.status !== 'archived') // Hide Archived
+        .filter(s => s.status !== 'archived')
         .map(s => {
             const done = getDutiesDoneCount(s.email);
             const target = calculateStaffTarget(s);
-            return {
-                ...s,
-                pending: Math.max(0, target - done) // Ensure no negative numbers
-            };
-        })
-        .sort((a, b) => b.pending - a.pending); // Descending Sort
+            const pending = Math.max(0, target - done);
+            
+            const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
+            
+            // Base Score: Pending Duties * 100
+            let score = pending * 100;
+            let badges = [];
 
-    // 5. Render Available List
+            // Penalties (Same as Auto-Assign)
+            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Limit (3/wk)"); }
+            if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
+            if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
+            
+            return { ...s, pending, score, badges };
+        })
+        .sort((a, b) => b.score - a.score); // Highest Score First
+
+    // --- 5. RENDER & AUTO-SELECT ---
+    
     const availList = document.getElementById('manual-available-list');
     availList.innerHTML = '';
-    let selectedCount = 0;
+    
+    // Determine Auto-Select Mode
+    // If NO ONE is currently assigned, we auto-select the top N
+    const isFreshAllocation = (slot.assigned.length === 0);
+    let autoSelectCount = isFreshAllocation ? (slot.required || 0) : 0;
+    
+    // Keep track of selections to update counter
+    let currentSelectionCount = 0;
 
     rankedStaff.forEach(s => {
-        const isAssigned = slot.assigned.includes(s.email);
+        // Check Availability
+        if (isUserUnavailable(slot, s.email, key)) return; // Skip unavailable
         
-        // Check Availability (Checks both Slot & Advance lists)
-        if (isUserUnavailable(slot, s.email, key)) return; 
+        // Selection Logic
+        let isChecked = false;
         
-        if (isAssigned) selectedCount++;
-        const checkState = isAssigned ? 'checked' : '';
-        const rowClass = isAssigned ? 'bg-indigo-50' : 'hover:bg-gray-50';
+        if (isFreshAllocation) {
+            // Auto-select top candidates until quota filled
+            if (autoSelectCount > 0) {
+                isChecked = true;
+                autoSelectCount--;
+            }
+        } else {
+            // Keep existing assignments
+            if (slot.assigned.includes(s.email)) {
+                isChecked = true;
+            }
+        }
+        
+        if (isChecked) currentSelectionCount++;
+
+        // Render Row
+        const checkState = isChecked ? 'checked' : '';
+        const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
         const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
+        
+        // Create Warning Badges HTML
+        const warningHtml = s.badges.map(b => 
+            `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
+        ).join('');
 
         availList.innerHTML += `
             <tr class="${rowClass} border-b last:border-0 transition">
@@ -1912,7 +1998,10 @@ window.openManualAllocationModal = function(key) {
                     <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
                 </td>
                 <td class="px-3 py-2">
-                    <div class="font-bold text-gray-800">${s.name}</div>
+                    <div class="flex items-center flex-wrap">
+                        <span class="font-bold text-gray-800 mr-2">${s.name}</span>
+                        ${warningHtml}
+                    </div>
                     <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
                 </td>
                 <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
@@ -1930,11 +2019,8 @@ window.openManualAllocationModal = function(key) {
     unavList.innerHTML = '';
     
     const allUnavailable = [];
-    
-    // A. Slot Specific
     if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
     
-    // B. Advance (Date/Session Wise)
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
     const t = timeStr ? timeStr.toUpperCase() : "";
@@ -1942,7 +2028,6 @@ window.openManualAllocationModal = function(key) {
     
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
-            // Avoid duplicates
             if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
                 allUnavailable.push(u);
             }
@@ -1966,7 +2051,7 @@ window.openManualAllocationModal = function(key) {
     }
 
     // 7. Update Counters & Open
-    document.getElementById('manual-sel-count').textContent = selectedCount;
+    document.getElementById('manual-sel-count').textContent = currentSelectionCount;
     document.getElementById('manual-req-count').textContent = slot.required || 0;
     
     window.openModal('manual-allocation-modal');
