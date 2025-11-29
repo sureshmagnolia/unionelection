@@ -3697,10 +3697,12 @@ window.downloadAttendanceCSV = function() {
 // 📤 BULK STAFF UPLOAD LOGIC
 // ==========================================
 
-// 1. Download Template
+// 1. Download Template (Updated for DD-MM-YY)
 window.downloadStaffTemplate = function() {
-    const headers = ["Name", "Email", "Phone", "Department", "Designation", "Joining Date (YYYY-MM-DD)"];
-    const sample = ["John Doe,john@example.com,9876543210,Physics,Assistant Professor,2023-06-01"];
+    // Header clearly indicates format
+    const headers = ["Name", "Email", "Phone", "Department", "Designation", "Joining Date (DD-MM-YY)"];
+    // Sample follows the format
+    const sample = ["John Doe,john@example.com,9876543210,Physics,Assistant Professor,01-06-23"];
     
     const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sample.join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -3725,18 +3727,16 @@ window.handleStaffCSVUpload = function(input) {
     reader.onload = function(e) {
         const text = e.target.result;
         processStaffCSV(text);
-        // Reset input so same file can be selected again if needed
-        input.value = ''; 
+        input.value = ''; // Reset
     };
     reader.readAsText(file);
 }
 
-// 4. Parse & Analyze CSV (Robust Date Fix: Handles DD-MM-YY)
+// 4. Parse & Analyze CSV (Robust Date Parsing)
 function processStaffCSV(csvText) {
     const lines = csvText.split('\n');
     if (lines.length < 2) return alert("CSV is empty or invalid.");
 
-    // Normalize headers: remove quotes and trim
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
     
     // Column Mapping
@@ -3756,47 +3756,30 @@ function processStaffCSV(csvText) {
 
     const parsedData = [];
     
-    // --- FIXED DATE HELPER (Handles DD-MM-YY) ---
+    // --- FIXED DATE HELPER (Handles DD-MM-YY & DD-MM-YYYY) ---
     const formatDate = (dateStr) => {
         if (!dateStr) return new Date().toISOString().split('T')[0]; 
         try {
-            // Normalize separators: Convert dots (.) and slashes (/) to dashes (-)
             let cleanStr = dateStr.replace(/[./]/g, '-').trim();
             let parts = cleanStr.split('-');
             
             let y, m, d;
-
             if (parts.length !== 3) return new Date().toISOString().split('T')[0];
 
-            // Case 1: YYYY-MM-DD (e.g. 2025-11-29)
-            if (parts[0].length === 4) {
-                y = parts[0];
-                m = parts[1];
-                d = parts[2];
-            } 
-            // Case 2: DD-MM-YYYY (e.g. 29-11-2025)
-            else if (parts[2].length === 4) {
-                y = parts[2];
-                m = parts[1];
-                d = parts[0];
-            } 
-            // Case 3: DD-MM-YY (e.g. 29-11-25) <--- NEW LOGIC
-            else if (parts[2].length === 2) {
-                y = "20" + parts[2]; // Assume 2000s
-                m = parts[1];
-                d = parts[0];
-            }
-            else {
-                return new Date().toISOString().split('T')[0];
-            }
+            // Case 1: YYYY-MM-DD
+            if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; } 
+            // Case 2: DD-MM-YYYY
+            else if (parts[2].length === 4) { y = parts[2]; m = parts[1]; d = parts[0]; } 
+            // Case 3: DD-MM-YY (Auto-add "20")
+            else if (parts[2].length === 2) { y = "20" + parts[2]; m = parts[1]; d = parts[0]; }
+            else { return new Date().toISOString().split('T')[0]; }
 
-            // STRICT PADDING (Ensure 01, 05, etc.)
+            // Pad single digits (6 -> 06)
             m = m.padStart(2, '0');
             d = d.padStart(2, '0');
 
             return `${y}-${m}-${d}`; // HTML5 Input Standard
         } catch (e) {
-            console.error("Date parsing error", e);
             return new Date().toISOString().split('T')[0];
         }
     };
@@ -3806,11 +3789,9 @@ function processStaffCSV(csvText) {
         const line = lines[i].trim();
         if (!line) continue;
         
-        // Handle quoted values logic (e.g., "Doe, John")
-        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/; // Handle commas in quotes
         const row = line.split(regex).map(val => val.trim().replace(/^"|"$/g, '')); 
         
-        // Extract
         const name = row[nameIdx];
         const email = row[emailIdx];
         
@@ -3838,7 +3819,6 @@ function processStaffCSV(csvText) {
     // Analyze Conflicts
     tempStaffData = parsedData;
     const existingEmails = new Set(staffData.map(s => s.email.toLowerCase()));
-    
     tempUniqueStaff = parsedData.filter(s => !existingEmails.has(s.email.toLowerCase()));
 
     // Show Modal
@@ -3849,7 +3829,7 @@ function processStaffCSV(csvText) {
     window.openModal('staff-conflict-modal');
 }
 
-// 5. Action Listeners
+// 5. Modal Button Listeners
 document.getElementById('btn-staff-merge').addEventListener('click', async () => {
     if (tempUniqueStaff.length === 0) {
         alert("No new unique staff to add.");
@@ -3860,8 +3840,10 @@ document.getElementById('btn-staff-merge').addEventListener('click', async () =>
     staffData = [...staffData, ...tempUniqueStaff];
     await syncStaffToCloud();
     
-    // Grant access to new emails (Optional, if using staff login system)
-    // tempUniqueStaff.forEach(s => addStaffAccess(s.email)); 
+    // Optional: Grant access if using whitelist
+    if (typeof addStaffAccess === 'function') {
+         for (const s of tempUniqueStaff) { await addStaffAccess(s.email); }
+    }
 
     alert(`✅ Successfully added ${tempUniqueStaff.length} new staff members.`);
     window.closeModal('staff-conflict-modal');
@@ -3880,6 +3862,8 @@ document.getElementById('btn-staff-replace').addEventListener('click', async () 
         updateAdminUI();
     }
 });
+
+
 window.clearOldData = async function() {
     const acYear = getCurrentAcademicYear();
     const cutoffDate = acYear.start; // June 1st of Current AY
