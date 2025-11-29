@@ -54,6 +54,7 @@ let isEmailConfigLocked = true; // <--- NEW
 let isRoleLocked = true;
 let isDeptLocked = true;
 let isStaffListLocked = true; // Default to Locked
+let currentSubstituteCandidate = null; // Stores selected staff for substitution
 let currentEmailQueue = []; // Stores the list for bulk sending
 
 // --- DOM ELEMENTS ---
@@ -2097,7 +2098,6 @@ function populateAttendanceSessions() {
         ui.attSessionSelect.appendChild(opt);
     });
 }
-
 window.loadSessionAttendance = function() {
     const key = ui.attSessionSelect.value;
     if (!key) {
@@ -2113,37 +2113,41 @@ window.loadSessionAttendance = function() {
     ui.attPlaceholder.classList.add('hidden');
     ui.attList.innerHTML = '';
     
-    // --- 1. SUPERVISION LOGIC (CS & SAS) ---
-    // A. Find Default Holders (Active Roles in Staff Data)
+    // --- RESET SEARCH ---
+    const searchInput = document.getElementById('att-substitute-search');
+    const searchResults = document.getElementById('att-substitute-results');
+    if (searchInput) {
+        searchInput.value = "";
+        searchInput.disabled = isLocked;
+        if(isLocked) searchInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+        else searchInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+    }
+    if (searchResults) searchResults.classList.add('hidden');
+    currentSubstituteCandidate = null;
+    // --------------------
+
+    // --- 1. SUPERVISION LOGIC ---
     const today = new Date();
     let defaultCS = "";
     let defaultSAS = "";
     
     staffData.forEach(s => {
         if (s.roleHistory) {
-            // Check for active roles on today's date
             const activeRole = s.roleHistory.find(r => 
                 new Date(r.start) <= today && new Date(r.end) >= today && 
                 (r.role === "Chief Superintendent" || r.role === "Exam Chief" || r.role === "Senior Asst. Superintendent")
             );
-            
             if (activeRole) {
-                if (activeRole.role === "Chief Superintendent" || activeRole.role === "Exam Chief") {
-                    defaultCS = s.email;
-                }
-                if (activeRole.role === "Senior Asst. Superintendent") {
-                    defaultSAS = s.email;
-                }
+                if (activeRole.role === "Chief Superintendent" || activeRole.role === "Exam Chief") defaultCS = s.email;
+                if (activeRole.role === "Senior Asst. Superintendent") defaultSAS = s.email;
             }
         }
     });
 
-    // B. Determine Current Selection (Saved Value takes priority over Default)
     const savedSup = slot.supervision || {};
     const currentCS = savedSup.cs || defaultCS;
     const currentSAS = savedSup.sas || defaultSAS;
 
-    // C. Render Dropdowns
     const csSelect = document.getElementById('att-cs-select');
     const sasSelect = document.getElementById('att-sas-select');
     
@@ -2162,37 +2166,22 @@ window.loadSessionAttendance = function() {
     if (csSelect) populateSup(csSelect, currentCS);
     if (sasSelect) populateSup(sasSelect, currentSAS);
 
-    // --- 2. ATTENDANCE LIST RENDERING ---
-    
-    // Start with assigned staff
+    // --- 2. ATTENDANCE LIST ---
     let presentSet = new Set(slot.attendance || slot.assigned || []);
-    
-    // AUTO-MARK: Ensure CS and SAS are marked "Present"
     if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
     if (currentSAS && !presentSet.has(currentSAS)) presentSet.add(currentSAS);
     
-    // Render Rows
     presentSet.forEach(email => {
         addAttendanceRow(email, isLocked);
     });
 
-    // --- 3. SUBSTITUTE DROPDOWN ---
-    ui.attSubSelect.innerHTML = '<option value="">Select Staff...</option>';
-    staffData.forEach(s => {
-        if (!presentSet.has(s.email)) {
-            ui.attSubSelect.innerHTML += `<option value="${s.email}">${s.name}</option>`;
-        }
-    });
-    
-    // --- 4. LOCK STATE UI ---
+    // --- 3. LOCK STATE UI ---
     const addBtn = document.getElementById('btn-att-add');
     const saveBtn = document.getElementById('btn-att-save');
     const lockBtn = document.getElementById('btn-att-lock');
-    const subSelect = document.getElementById('att-substitute-select');
     const statusText = document.getElementById('att-lock-status');
 
     if (isLocked) {
-        subSelect.disabled = true;
         if(addBtn) { addBtn.disabled = true; addBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
         
         if(saveBtn) {
@@ -2209,7 +2198,6 @@ window.loadSessionAttendance = function() {
         if(statusText) statusText.textContent = "Attendance is finalized and locked.";
 
     } else {
-        subSelect.disabled = false;
         if(addBtn) { addBtn.disabled = false; addBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
 
         if(saveBtn) {
@@ -2228,6 +2216,7 @@ window.loadSessionAttendance = function() {
     
     updateAttCount();
 }
+
 
 function addAttendanceRow(email, isLocked) {
     const s = staffData.find(st => st.email === email);
@@ -2254,18 +2243,25 @@ function addAttendanceRow(email, isLocked) {
 }
 
 window.addSubstituteToAttendance = function() {
-    const email = ui.attSubSelect.value;
-    if(!email) return;
+    // Check if a user was selected from search
+    if (!currentSubstituteCandidate) {
+        return alert("Please search and select a faculty member first.");
+    }
+    
+    const email = currentSubstituteCandidate.email;
     
     // Check duplicates
     const existing = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
-    if(existing.includes(email)) return alert("Already in list");
+    if(existing.includes(email)) {
+        return alert("This person is already in the attendance list.");
+    }
     
     addAttendanceRow(email);
     
-    // Remove from dropdown to prevent double adding
-    ui.attSubSelect.querySelector(`option[value="${email}"]`).remove();
-    ui.attSubSelect.value = "";
+    // Reset Search
+    const searchInput = document.getElementById('att-substitute-search');
+    if(searchInput) searchInput.value = "";
+    currentSubstituteCandidate = null;
     
     updateAttCount();
 }
@@ -4094,6 +4090,60 @@ window.toggleEmailConfigLock = function() {
     if(input) input.disabled = isEmailConfigLocked;
     if(btn) updateLockIcon('email-config-lock-btn', isEmailConfigLocked);
 }
+
+// --- SUBSTITUTE SEARCH LOGIC ---
+const subInput = document.getElementById('att-substitute-search');
+const subResults = document.getElementById('att-substitute-results');
+
+if (subInput) {
+    subInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        currentSubstituteCandidate = null; // Reset selection on typing
+        
+        if (query.length < 3) {
+            subResults.classList.add('hidden');
+            return;
+        }
+        
+        // Get currently listed staff to exclude them
+        const presentEmails = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+        
+        const matches = staffData.filter(s => 
+            (s.name.toLowerCase().includes(query) || s.dept.toLowerCase().includes(query)) &&
+            !presentEmails.includes(s.email) && 
+            s.status !== 'archived'
+        );
+        
+        subResults.innerHTML = '';
+        if (matches.length === 0) {
+            subResults.innerHTML = `<div class="p-2 text-xs text-gray-400 italic text-center">No matches found.</div>`;
+        } else {
+            matches.forEach(s => {
+                const div = document.createElement('div');
+                div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition";
+                div.innerHTML = `
+                    <div class="font-bold text-gray-800 text-xs">${s.name}</div>
+                    <div class="text-[10px] text-gray-500 uppercase">${s.dept}</div>
+                `;
+                div.onclick = () => {
+                    subInput.value = s.name;
+                    currentSubstituteCandidate = s;
+                    subResults.classList.add('hidden');
+                };
+                subResults.appendChild(div);
+            });
+        }
+        subResults.classList.remove('hidden');
+    });
+    
+    // Hide results on click outside
+    document.addEventListener('click', function(e) {
+        if (!subInput.contains(e.target) && !subResults.contains(e.target)) {
+            subResults.classList.add('hidden');
+        }
+    });
+}
+
 
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
