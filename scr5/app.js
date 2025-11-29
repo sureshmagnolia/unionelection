@@ -909,6 +909,8 @@ let currentStreamConfig = ["Regular"]; // Default
 // --- (V28) Global var to hold room config map for report generation ---
 let currentRoomConfig = {};
 
+
+let isQPLocked = true; // Default Locked
 // --- (V48) Global var for college name ---
 let currentCollegeName = "University of Calicut";
 
@@ -6428,7 +6430,6 @@ sessionSelectQP.addEventListener('change', () => {
     }
 });
 
-// V92: Renders the QP Code list (Grouped by Stream)
 // V93: Renders the QP Code list (Regular First, then Alphabetical)
 function render_qp_code_list(sessionKey) {
     const [date, time] = sessionKey.split(' | ');
@@ -6475,9 +6476,7 @@ function render_qp_code_list(sessionKey) {
     uniquePairs.forEach(item => {
         // Add Stream Header if it changes
         if (item.stream !== currentStream) {
-            // Add a spacer if it's not the first group
             const marginTop = currentStream ? "mt-6" : "mt-0";
-            
             htmlChunks.push(`
                 <div class="${marginTop} mb-2 bg-indigo-50 p-2 font-bold text-indigo-800 border-b border-indigo-200 rounded-t-md">
                     ${item.stream} Stream
@@ -6486,28 +6485,38 @@ function render_qp_code_list(sessionKey) {
             currentStream = item.stream;
         }
 
-        // Generate Key using Helper (ensure getQpKey exists in your code)
+        // Generate Key
         const base64Key = getQpKey(item.course, item.stream);
         const savedCode = sessionCodes[base64Key] || "";
 
-       htmlChunks.push(`
+        // *** NEW LOCK LOGIC ***
+        const disabledAttr = isQPLocked ? "disabled" : "";
+        const bgClass = isQPLocked ? "bg-gray-50 text-gray-500" : "bg-white";
+
+        htmlChunks.push(`
         <div class="flex items-center gap-3 p-2 border-b border-gray-200 hover:bg-gray-50">
             <label class="font-medium text-gray-700 w-2/3 text-sm">
                 ${item.course}
             </label>
             <input type="text" 
-                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500 ${bgClass}" 
                    value="${savedCode}" 
                    data-course-key="${base64Key}"
-                   placeholder="QP Code">
+                   placeholder="QP Code"
+                   ${disabledAttr}>
         </div>
        `);
     });
     
     qpCodeContainer.innerHTML = htmlChunks.join('');
-    saveQpCodesButton.disabled = false;
-    qpCodeStatus.textContent = '';
-}
+    
+    // Disable Save button if locked
+    saveQpCodesButton.disabled = isQPLocked;
+    if(isQPLocked) {
+        saveQpCodesButton.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        saveQpCodesButton.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
 
 // V89: NEW SAVE STRATEGY
 saveQpCodesButton.addEventListener('click', () => {
@@ -7392,6 +7401,28 @@ saveRoomAllotmentButton.addEventListener('click', () => {
 });
 
 // --- END ROOM ALLOTMENT FUNCTIONALITY ---
+
+// --- NEW: QP Lock Toggle Listener ---
+const toggleQPLockBtn = document.getElementById('toggle-qp-lock-btn');
+if (toggleQPLockBtn) {
+    toggleQPLockBtn.addEventListener('click', () => {
+        isQPLocked = !isQPLocked;
+        
+        // Update Button UI
+        if (isQPLocked) {
+            toggleQPLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Codes Locked</span>`;
+            toggleQPLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm shrink-0 ml-2";
+        } else {
+            toggleQPLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
+            toggleQPLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm shrink-0 ml-2";
+        }
+        
+        // Re-render list to apply disabled state to inputs
+        if (sessionSelectQP.value) {
+            render_qp_code_list(sessionSelectQP.value);
+        }
+    });
+}
 
 // --- ALLOTMENT LIST LOCK TOGGLE ---
 const toggleAllotmentLockBtn = document.getElementById('toggle-allotment-lock-btn');
