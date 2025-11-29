@@ -531,9 +531,23 @@
             <input type="hidden" id="manual-session-key">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
                 <div class="md:col-span-2 flex flex-col min-h-0">
-                    <div class="flex justify-between items-center mb-2 shrink-0"><h4 class="font-bold text-gray-700 text-sm uppercase">Available Staff</h4></div>
+                    <div class="flex flex-col gap-2 mb-2 shrink-0">
+                        <div class="flex justify-between items-center">
+                            <h4 class="font-bold text-gray-700 text-sm uppercase">Available Staff</h4>
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="manual-staff-search" oninput="filterManualStaff()" 
+                                placeholder="Search staff by name or department..." 
+                                class="w-full p-2 pl-8 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                            <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                    </div>
+                    
                     <div class="border border-gray-200 rounded-lg bg-gray-50 flex-1 overflow-y-auto custom-scroll p-2">
-                        <table class="w-full text-sm text-left"><tbody id="manual-available-list" class="divide-y divide-gray-200 bg-white"></tbody></table>
+                        <table class="w-full text-sm text-left">
+                            <tbody id="manual-available-list" class="divide-y divide-gray-200 bg-white"></tbody>
+                        </table>
+                        <p id="manual-no-results" class="hidden text-center text-gray-400 text-xs py-4 italic">No matches found.</p>
                     </div>
                 </div>
                 <div class="flex flex-col gap-4 min-h-0">
