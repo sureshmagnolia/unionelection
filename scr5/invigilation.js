@@ -3117,7 +3117,6 @@ window.viewActivityLogs = async function() {
 // ==========================================
 // 📢 MESSAGING & ALERTS SYSTEM
 // ==========================================
-
 window.openWeeklyNotificationModal = function(monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const title = document.getElementById('notif-modal-title');
@@ -3125,10 +3124,14 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
     const preview = document.getElementById('notif-message-preview');
     
     title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
-    subtitle.textContent = "Send schedule via WhatsApp, SMS, or Auto-Email.";
+    subtitle.textContent = "Send detailed professional emails & instant alerts.";
     list.innerHTML = '';
     
+    // Clear Queue
+    currentEmailQueue = [];
+
     const facultyDuties = {}; 
+
     Object.keys(invigilationSlots).forEach(key => {
         const date = parseDate(key);
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -3143,7 +3146,12 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
             
             slot.assigned.forEach(email => {
                 if (!facultyDuties[email]) facultyDuties[email] = [];
-                facultyDuties[email].push({ date: dStr, day: dayName, session: sessionCode });
+                facultyDuties[email].push({
+                    date: dStr,
+                    day: dayName,
+                    session: sessionCode,
+                    time: tStr // Added time for template
+                });
             });
         }
     });
@@ -3154,69 +3162,88 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
         return;
     }
 
+    // Preview (WhatsApp Style)
     const sampleName = "Abdul Raheem MK";
     preview.textContent = generateWeeklyMessage(sampleName, "(01/12-Mon-FN)...");
 
+    // ADD BULK BUTTON
+    list.innerHTML = `
+        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
+            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(facultyDuties).length}</b> faculty members.</div>
+            <button id="btn-bulk-email-week" onclick="sendBulkEmails('btn-bulk-email-week')" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Send Bulk Emails
+            </button>
+        </div>
+    `;
+
     const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
-    sortedEmails.forEach(email => {
+    sortedEmails.forEach((email, index) => {
         const duties = facultyDuties[email];
         duties.sort((a, b) => a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join('')));
+
+        // String for WhatsApp
         const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
         
+        // Data for Email
         const staff = staffData.find(s => s.email === email);
         const fullName = staff ? staff.name : email;
-        const firstName = getFirstName(fullName); // Uses Helper
+        const firstName = getFirstName(fullName);
         const staffEmail = staff ? staff.email : "";
         
-        // Phone Prep
         let phone = staff ? (staff.phone || "") : "";
         phone = phone.replace(/\D/g, ''); 
         if (phone.length === 10) phone = "91" + phone;
 
-        // 1. WhatsApp (Full Name)
+        // 1. Prepare Professional Email
+        const emailSubject = `Invigilation Duty Schedule: Week ${weekNum} (${monthStr})`;
+        const emailBody = generateProfessionalEmail(fullName, duties, "Upcoming Invigilation Duties");
+        
+        // 2. Add to Queue
+        const btnId = `email-btn-${index}`;
+        if (staffEmail) {
+            currentEmailQueue.push({
+                email: staffEmail,
+                name: fullName,
+                subject: emailSubject,
+                body: emailBody,
+                btnId: btnId
+            });
+        }
+
+        // 3. WhatsApp/SMS Links (Existing Logic)
         const waMsg = generateWeeklyMessage(fullName, dutyString);
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
-        
-        // 2. SMS (First Name + Short)
         const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
         const smsMsg = `${firstName}: Duty ${shortDutyStr}. Check Portal. -CS GVC`;
         const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
 
-        // 3. Email (Full Name + Subject)
-        const emailSubject = `Invigilation Duty: Week ${weekNum} (${monthStr})`;
-        const safeName = fullName.replace(/'/g, "\\'");
-        const safeSubject = emailSubject.replace(/'/g, "\\'");
-        const safeBody = waMsg.replace(/'/g, "\\'").replace(/\n/g, "\\n"); 
-
+        // UI Props
         const phoneDisabled = phone ? "" : "disabled";
         const emailDisabled = staffEmail ? "" : "disabled";
-        const noPhoneWarning = phone ? "" : `<span class="text-red-500 text-xs ml-2">(No Phone)</span>`;
         const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
 
+        // Escape for Onclick
+        const safeName = fullName.replace(/'/g, "\\'");
+        const safeSubject = emailSubject.replace(/'/g, "\\'");
+        // For single button, we pass the HTML body. We must escape it properly.
+        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ''); 
+
         list.innerHTML += `
-            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition">
+            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
                 <div class="flex-1 min-w-0 pr-2">
-                    <div class="font-bold text-gray-800 truncate">${fullName} ${noPhoneWarning} ${noEmailWarning}</div>
+                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
                     <div class="text-xs text-gray-500 mt-1 font-mono truncate">${dutyString}</div>
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled}
-                       class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send Auto-Email">
-                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled}
+                       class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send Professional Email">
                        Mail
                     </button>
-                    <a href="${smsLink}" target="_blank" ${phoneDisabled}
-                       class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send SMS (First Name)">
-                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                       SMS
-                    </a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled}
-                       onclick="markAsSent(this)"
-                       class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send WhatsApp (Full Name)">
-                       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                       WA
-                    </a>
+                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
+                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA</a>
                 </div>
             </div>
         `;
@@ -3225,79 +3252,127 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
     window.openModal('notification-modal');
 }
 
+
 window.openSlotReminderModal = function(key) {
     const list = document.getElementById('notif-list-container');
     const title = document.getElementById('notif-modal-title');
     const subtitle = document.getElementById('notif-modal-subtitle');
     const preview = document.getElementById('notif-message-preview');
     
-    const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this slot.");
-
-    title.textContent = `🔔 Daily Reminder: ${key}`;
-    subtitle.textContent = "Send previous-day reminder via WhatsApp, SMS, or Auto-Email.";
+    // 1. Identify Target Date
+    const [targetDateStr] = key.split(' | ');
+    
+    title.textContent = `🔔 Daily Reminder: ${targetDateStr}`;
+    subtitle.textContent = "Send reminders for ALL duties on this day.";
     list.innerHTML = '';
+    currentEmailQueue = [];
 
-    const [dateStr, timeStr] = key.split(' | ');
-    const reportTime = calculateReportTime(timeStr); 
+    // 2. Find ALL Sessions for this Date
+    const dailyDuties = {}; // email -> [{ session, time }]
+    
+    Object.keys(invigilationSlots).forEach(slotKey => {
+        if (slotKey.startsWith(targetDateStr)) {
+            const slot = invigilationSlots[slotKey];
+            const [d, t] = slotKey.split(' | ');
+            const isAN = (t.includes("PM") || t.startsWith("12"));
+            const sessionCode = isAN ? "AN" : "FN";
+            
+            slot.assigned.forEach(email => {
+                if (!dailyDuties[email]) dailyDuties[email] = [];
+                dailyDuties[email].push({
+                    date: d,
+                    time: t,
+                    session: sessionCode
+                });
+            });
+        }
+    });
 
-    preview.textContent = generateDailyMessage("Faculty Name", dateStr, timeStr, reportTime);
+    if (Object.keys(dailyDuties).length === 0) return alert("No duties assigned for this date.");
 
-    slot.assigned.forEach(email => {
+    // Preview
+    const reportTime = calculateReportTime(key.split(' | ')[1]);
+    preview.textContent = generateDailyMessage("Faculty Name", targetDateStr, "FN/AN", reportTime);
+
+    // ADD BULK BUTTON
+    list.innerHTML = `
+        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
+            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(dailyDuties).length}</b> faculty.</div>
+            <button id="btn-bulk-email-day" onclick="sendBulkEmails('btn-bulk-email-day')" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Send Bulk Emails
+            </button>
+        </div>
+    `;
+
+    // 3. Render List
+    const sortedEmails = Object.keys(dailyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
+
+    sortedEmails.forEach((email, index) => {
+        const duties = dailyDuties[email];
+        // Sort FN before AN
+        duties.sort((a, b) => a.time.localeCompare(b.time));
+        
         const staff = staffData.find(s => s.email === email);
         const fullName = staff ? staff.name : email;
-        const firstName = getFirstName(fullName); // Uses Helper
+        const firstName = getFirstName(fullName);
         const staffEmail = staff ? staff.email : "";
         
-        // Phone Prep
         let phone = staff ? (staff.phone || "") : "";
         phone = phone.replace(/\D/g, ''); 
         if (phone.length === 10) phone = "91" + phone;
 
-        // 1. WhatsApp (Full)
-        const waMsg = generateDailyMessage(fullName, dateStr, timeStr, reportTime);
+        // 1. Professional Email
+        const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
+        const emailBody = generateProfessionalEmail(fullName, duties, "Duty Reminder");
+        
+        // Add to Queue
+        const btnId = `email-btn-${index}`;
+        if (staffEmail) {
+            currentEmailQueue.push({
+                email: staffEmail,
+                name: fullName,
+                subject: emailSubject,
+                body: emailBody,
+                btnId: btnId
+            });
+        }
+
+        // 2. WhatsApp/SMS (Consolidated)
+        // "FN, AN" or just "FN"
+        const sessionsStr = duties.map(d => d.session).join(' & ');
+        const firstTime = duties[0].time;
+        const reportTime = calculateReportTime(firstTime);
+        
+        const waMsg = generateDailyMessage(fullName, targetDateStr, sessionsStr, reportTime);
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
 
-        // 2. SMS (Short)
-        const shortDate = dateStr.slice(0, 5); 
-        const sessionShort = timeStr.includes("AM") || timeStr.startsWith("09") ? "FN" : "AN";
-        const smsMsg = `${firstName}: Duty ${shortDate} ${sessionShort}. Report ${reportTime}. -CS GVC`;
+        const shortDate = targetDateStr.slice(0, 5);
+        const smsMsg = `${firstName}: Duty ${shortDate} (${sessionsStr}). Report ${reportTime}. -CS GVC`;
         const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
-        
-        // 3. Email (Full)
-        const emailSubject = `Exam Duty Reminder: ${dateStr} (${sessionShort})`;
-        const safeName = fullName.replace(/'/g, "\\'");
-        const safeSubject = emailSubject.replace(/'/g, "\\'");
-        const safeBody = waMsg.replace(/'/g, "\\'").replace(/\n/g, "\\n"); 
 
         const phoneDisabled = phone ? "" : "disabled";
         const emailDisabled = staffEmail ? "" : "disabled";
-        const noPhoneWarning = phone ? "" : `<span class="text-red-500 text-xs ml-2">(No Phone)</span>`;
         const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
 
+        const safeName = fullName.replace(/'/g, "\\'");
+        const safeSubject = emailSubject.replace(/'/g, "\\'");
+        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
+
         list.innerHTML += `
-            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition">
+            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
                 <div class="flex-1 min-w-0 pr-2">
-                    <div class="font-bold text-gray-800 truncate">${fullName} ${noPhoneWarning} ${noEmailWarning}</div>
-                    <div class="text-xs text-gray-500 mt-1">Report: <span class="font-bold text-red-600">${reportTime}</span></div>
+                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
+                    <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: ${sessionsStr}</div>
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled}
-                       class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send Auto-Email">
-                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled}
+                       class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">
                        Mail
                     </button>
-                    <a href="${smsLink}" target="_blank" ${phoneDisabled}
-                       class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send SMS (First Name)">
-                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                       SMS
-                    </a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled}
-                       onclick="markAsSent(this)"
-                       class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1" title="Send WhatsApp (Full Name)">
-                       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                       WA
-                    </a>
+                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
+                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this)" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">Remind</a>
                 </div>
             </div>
         `;
@@ -3655,6 +3730,58 @@ window.editStaff = function(index) {
 
     document.getElementById('staff-modal-title').textContent = "Edit Staff Profile";
     window.openModal('add-staff-modal');
+}
+
+// --- HELPER: Professional Email Template ---
+function generateProfessionalEmail(name, dutiesArray, title) {
+    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+    
+    let rows = dutiesArray.map(d => {
+        // Calculate Report Time
+        const reportTime = calculateReportTime(d.time);
+        return `
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;">${d.date}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${d.session} (${d.time})</td>
+            <td style="padding: 8px; border: 1px solid #ddd; color: #c0392b; font-weight: bold;">${reportTime}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+    <div style="font-family: Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px;">
+        <p>Dear <b>${name}</b>,</p>
+        <p>This is an official intimation regarding your ${title} at <b>${collegeName}</b>.</p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
+            <thead>
+                <tr style="background-color: #f8f9fa; text-align: left;">
+                    <th style="padding: 8px; border: 1px solid #ddd;">Date</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Session</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Reporting Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        </table>
+
+        <div style="background-color: #eef2ff; padding: 10px; border-radius: 5px; margin: 20px 0; font-size: 13px;">
+            <strong>Instructions:</strong><br>
+            Please report to the Chief Superintendent's office 30 minutes prior to the commencement of the examination.<br>
+            <a href="https://bit.ly/gvc-exam" style="color: #4f46e5;">View General Instructions</a>
+        </div>
+
+        <p style="font-size: 13px; color: #666;">
+            <em>For any adjustments, please request via the <a href="http://www.gvc.ac.in/exam" style="color: #666;">Exam Portal</a> and inform the SAS/Exam Chief in advance.</em>
+        </p>
+        
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #999;">
+            <b>Exam Cell, ${collegeName}</b><br>
+            <i>This is an automated system alert. Please do not reply directly to this email.</i>
+        </p>
+    </div>
+    `;
 }
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
