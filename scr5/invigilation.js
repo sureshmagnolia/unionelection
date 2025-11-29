@@ -4771,7 +4771,15 @@ window.switchAdminTab = function(tabName) {
         }
     });
 }
-
+// --- MANUAL ALLOCATION HELPER: Unselect All ---
+window.unselectAllManualStaff = function() {
+    const checkboxes = document.querySelectorAll('.manual-chk');
+    checkboxes.forEach(chk => {
+        chk.checked = false;
+    });
+    // Update the "Selected/Required" counter immediately
+    window.updateManualCounts();
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
