@@ -7761,7 +7761,9 @@ async function findAvailableRooms(sessionKey) {
 window.openScribeRoomModal = async function(regNo, studentName) {
     studentToAllotScribeRoom = regNo;
     scribeRoomModalTitle.textContent = `Select Room for ${studentName} (${regNo})`;
-    
+    / NEW: Clear previous search
+    const searchInput = document.getElementById('scribe-room-search');
+    if(searchInput) searchInput.value = "";
     const sessionKey = allotmentSessionSelect.value; // MODIFIED: Use main allotment selector
 
     // --- NEW: Calculate current scribe room counts ---
@@ -7836,6 +7838,24 @@ scribeCloseRoomModal.addEventListener('click', () => {
     studentToAllotScribeRoom = null;
 });
 
+// --- NEW: Scribe Room Search Filter Listener ---
+const scribeRoomSearchInput = document.getElementById('scribe-room-search');
+if (scribeRoomSearchInput) {
+    scribeRoomSearchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        const items = document.getElementById('scribe-room-selection-list').children;
+        
+        Array.from(items).forEach(item => {
+            // Filter based on text content (Room Name)
+            const text = item.textContent.toLowerCase();
+            if (text.includes(query)) {
+                item.classList.remove('hidden');
+            } else {
+                item.classList.add('hidden');
+            }
+        });
+    });
+}
 // **********************************
 
 // --- Helper function to disable all report buttons ---
