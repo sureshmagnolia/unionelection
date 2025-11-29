@@ -1349,7 +1349,7 @@ window.volunteer = async function(key, email) {
     
     const me = staffData.find(s => s.email === email);
     if(me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
-    
+    logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
     await syncSlotsToCloud();
     await syncStaffToCloud();
     window.closeModal('day-detail-modal');
@@ -1373,6 +1373,7 @@ window.cancelDuty = async function(key, email, isLocked) {
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
         const me = staffData.find(s => s.email === email);
         if(me && me.dutiesAssigned > 0) me.dutiesAssigned--;
+        logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
         await syncSlotsToCloud();
         await syncStaffToCloud();
         window.closeModal('day-detail-modal');
@@ -1394,6 +1395,7 @@ window.setAvailability = async function(key, email, isAvailable) {
     if (isAvailable) {
         if(confirm("Mark available?")) {
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+            logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
             await syncSlotsToCloud();
             window.closeModal('day-detail-modal');
         }
