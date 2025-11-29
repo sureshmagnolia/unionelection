@@ -2668,7 +2668,9 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         });
 
         const sortedStreamNames = Object.keys(dataByStream).sort((a, b) => {
+            // Fix: Explicitly handle both sides to ensure Regular is always first
             if (a === "Regular") return -1;
+            if (b === "Regular") return 1; 
             return a.localeCompare(b);
         });
 
