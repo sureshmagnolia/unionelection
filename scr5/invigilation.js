@@ -3641,7 +3641,7 @@ window.sendSessionSMS = function(key) {
     window.location.href = `sms:${phones.join(',')}?body=${encodeURIComponent(msg)}`;
 }
 
-// --- YEARLY ATTENDANCE CSV EXPORT ---
+// --- YEARLY ATTENDANCE CSV EXPORT (Updated Status) ---
 window.downloadAttendanceCSV = function() {
     if (!confirm("Download the full attendance register for the current Academic Year?")) return;
 
@@ -3683,16 +3683,16 @@ window.downloadAttendanceCSV = function() {
             const desig = staff ? staff.designation : "N/A";
             const phone = staff ? (staff.phone || "") : "";
 
-            // Determine Role
+            // Determine Role (Updated Abbreviations)
             let status = "Invigilator";
-            if (email === csEmail) status = "Chief Superintendent";
-            else if (email === sasEmail) status = "Senior Asst. Supt.";
+            if (email === csEmail) status = "CS";
+            else if (email === sasEmail) status = "SAS";
 
             // Add Row
             rows.push([
                 dateStr,
                 sessionType,
-                `"${examName}"`, // Quote to handle commas
+                `"${examName}"`, 
                 `"${name}"`,
                 `"${dept}"`,
                 `"${desig}"`,
@@ -4338,6 +4338,129 @@ window.handleMasterRestore = function(input) {
     reader.readAsText(file);
 }
 
+
+// ==========================================
+// 📥 BULK ATTENDANCE UPLOAD LOGIC
+// ==========================================
+
+// 1. Download Template
+window.downloadAttendanceTemplate = function() {
+    const headers = ["Date (DD-MM-YY)", "Session (FN/AN)", "Staff Email", "Duty Role (Invigilator/CS/SAS)"];
+    const sample = ["01-12-25,FN,teacher@gmail.com,Invigilator", "01-12-25,FN,chief@gmail.com,CS"];
+    
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sample.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "Attendance_Upload_Template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 2. Handle Upload
+window.handleAttendanceCSVUpload = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        processAttendanceCSV(text);
+        input.value = ''; 
+    };
+    reader.readAsText(file);
+}
+
+// 3. Process CSV
+async function processAttendanceCSV(csvText) {
+    const lines = csvText.split('\n');
+    if (lines.length < 2) return alert("CSV is empty or invalid.");
+
+    // Headers: Date, Session, Email, Role
+    // We assume standard order or simple checking
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const dateIdx = headers.findIndex(h => h.includes('date'));
+    const sessIdx = headers.findIndex(h => h.includes('session'));
+    const emailIdx = headers.findIndex(h => h.includes('email'));
+    const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('status'));
+
+    if (dateIdx === -1 || sessIdx === -1 || emailIdx === -1) {
+        return alert("Error: CSV must have Date, Session, and Staff Email columns.");
+    }
+
+    let updatedCount = 0;
+    let errorCount = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const row = line.split(',').map(v => v.trim());
+        const rawDate = row[dateIdx];
+        const sessionType = row[sessIdx].toUpperCase(); // FN or AN
+        const email = row[emailIdx];
+        const role = roleIdx !== -1 ? row[roleIdx].toUpperCase() : "INVIGILATOR";
+
+        if (!rawDate || !sessionType || !email) continue;
+
+        // 1. Normalize Date (DD-MM-YY -> DD.MM.YYYY)
+        let dateStr = "";
+        try {
+            let cleanStr = rawDate.replace(/[./]/g, '-');
+            let parts = cleanStr.split('-');
+            if (parts.length === 3) {
+                let y = parts[2].length === 2 ? "20" + parts[2] : parts[2];
+                dateStr = `${parts[0].padStart(2,'0')}.${parts[1].padStart(2,'0')}.${y}`;
+            }
+        } catch (e) { continue; }
+
+        // 2. Find Matching Slot
+        // We look for a slot starting with "DD.MM.YYYY" and matching Session Type
+        const matchingKey = Object.keys(invigilationSlots).find(key => {
+            if (!key.startsWith(dateStr)) return false;
+            const tStr = key.split(' | ')[1].toUpperCase();
+            const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
+            const slotSession = isAN ? "AN" : "FN";
+            return slotSession === sessionType;
+        });
+
+        if (matchingKey) {
+            const slot = invigilationSlots[matchingKey];
+            
+            // Initialize arrays if missing
+            if (!slot.attendance) slot.attendance = [];
+            if (!slot.supervision) slot.supervision = { cs: "", sas: "" };
+
+            // Add to Attendance
+            if (!slot.attendance.includes(email)) {
+                slot.attendance.push(email);
+            }
+
+            // Update Role
+            if (role === "CS" || role === "CHIEF") slot.supervision.cs = email;
+            if (role === "SAS" || role === "SENIOR") slot.supervision.sas = email;
+
+            updatedCount++;
+        } else {
+            errorCount++;
+            console.warn(`Slot not found for ${dateStr} ${sessionType}`);
+        }
+    }
+
+    if (updatedCount > 0) {
+        await syncSlotsToCloud();
+        alert(`✅ Bulk Upload Complete.\nUpdated records for ${updatedCount} staff.\n(Skipped/Errors: ${errorCount})`);
+        populateAttendanceSessions(); // Refresh dropdown
+        
+        // Refresh list if a session is currently selected
+        if (ui.attSessionSelect && ui.attSessionSelect.value) {
+            loadSessionAttendance();
+        }
+    } else {
+        alert("No matching sessions found to update.");
+    }
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -4410,6 +4533,8 @@ window.toggleEmailConfigLock = toggleEmailConfigLock;
 window.toggleGlobalTargetLock = toggleGlobalTargetLock;
 window.downloadMasterBackup = downloadMasterBackup;
 window.handleMasterRestore = handleMasterRestore;
+window.downloadAttendanceTemplate = downloadAttendanceTemplate;
+window.handleAttendanceCSVUpload = handleAttendanceCSVUpload;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
