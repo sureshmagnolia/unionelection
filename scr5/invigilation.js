@@ -2693,71 +2693,82 @@ function renderAdminTodayStats() {
     container.classList.remove('hidden');
     container.innerHTML = '';
 
-    // --- A. TODAY'S EXAMS (Print & SMS) ---
+    // --- PART 1: TODAY'S EXAMS (Print & Bulk SMS) ---
     if (todaySessions.length > 0) {
         todaySessions.sort();
         let buttonsHtml = '';
         todaySessions.forEach(key => {
             const timePart = key.split(' | ')[1];
             buttonsHtml += `
-                <div class="flex items-center gap-1 bg-white/20 p-1 rounded">
-                    <button onclick="printSessionReport('${key}')" class="bg-white text-indigo-700 hover:bg-indigo-50 font-bold py-2 px-3 rounded shadow-sm text-sm flex items-center gap-2 transition border border-indigo-100" title="Print Report">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                        ${timePart}
+                <div class="flex items-center gap-2 bg-white/10 p-2 rounded-lg border border-white/20">
+                    <span class="text-white text-sm font-bold mr-1">${timePart}</span>
+                    
+                    <button onclick="printSessionReport('${key}')" class="bg-white text-indigo-700 hover:bg-indigo-50 font-bold py-1.5 px-3 rounded shadow-sm text-xs flex items-center gap-1 transition" title="Print Invigilator List">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                        Print List
                     </button>
-                    <button onclick="sendSessionSMS('${key}')" class="bg-green-600 text-white hover:bg-green-700 font-bold py-2 px-3 rounded shadow-sm text-sm flex items-center gap-1 transition border border-green-700" title="Send Bulk SMS to Invigilators">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                        SMS
+                    
+                    <button onclick="sendSessionSMS('${key}')" class="bg-green-500 text-white hover:bg-green-600 font-bold py-1.5 px-3 rounded shadow-sm text-xs flex items-center gap-1 transition" title="Send Bulk SMS to All Staff in this Session">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                        Bulk SMS
                     </button>
                 </div>
             `;
         });
 
         container.innerHTML += `
-            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-md p-4 text-white flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-                <div class="flex items-center gap-3">
-                    <div class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            <div class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg shadow-md p-4 text-white mb-4">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold leading-tight">Exams Today (${todayStr})</h2>
+                            <p class="text-indigo-100 text-xs font-medium">${todaySessions.length} Session(s) Active</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 class="text-lg font-bold leading-tight">Exam Scheduled Today</h2>
-                        <p class="text-indigo-100 text-xs font-medium">${todayStr} &nbsp;|&nbsp; ${todaySessions.length} Session(s)</p>
+                    <div class="flex flex-wrap gap-2 justify-center md:justify-end">
+                        ${buttonsHtml}
                     </div>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    ${buttonsHtml}
                 </div>
             </div>
         `;
     }
 
-    // --- B. TOMORROW'S REMINDERS (Send Alerts) ---
+    // --- PART 2: TOMORROW'S EXAMS (Notifications) ---
     if (tomorrowSessions.length > 0) {
         tomorrowSessions.sort();
         let buttonsHtml = '';
         tomorrowSessions.forEach(key => {
             const timePart = key.split(' | ')[1];
             buttonsHtml += `
-                <button onclick="openSlotReminderModal('${key}')" class="bg-white text-orange-700 hover:bg-orange-50 font-bold py-2 px-4 rounded shadow-sm text-sm flex items-center gap-2 transition border border-orange-200">
-                    <span>🔔</span>
-                    Alert ${timePart}
-                </button>
+                <div class="flex items-center gap-2 bg-white/10 p-2 rounded-lg border border-white/20">
+                    <span class="text-white text-sm font-bold mr-1">${timePart}</span>
+                    
+                    <button onclick="openSlotReminderModal('${key}')" class="bg-white text-orange-700 hover:bg-orange-50 font-bold py-1.5 px-3 rounded shadow-sm text-xs flex items-center gap-1 transition" title="Send Alerts (Email, WhatsApp, SMS)">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                        Notify / Remind
+                    </button>
+                </div>
             `;
         });
 
         container.innerHTML += `
-            <div class="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg shadow-md p-4 text-white flex flex-col md:flex-row justify-between items-center gap-4">
-                <div class="flex items-center gap-3">
-                    <div class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+            <div class="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg shadow-md p-4 text-white">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold leading-tight">Exams Tomorrow (${tomorrowStr})</h2>
+                            <p class="text-orange-100 text-xs font-medium">${tomorrowSessions.length} Session(s) Scheduled</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 class="text-lg font-bold leading-tight">Upcoming Exams (Tomorrow)</h2>
-                        <p class="text-orange-100 text-xs font-medium">${tomorrowStr} &nbsp;|&nbsp; ${tomorrowSessions.length} Session(s)</p>
+                    <div class="flex flex-wrap gap-2 justify-center md:justify-end">
+                        ${buttonsHtml}
                     </div>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    ${buttonsHtml}
                 </div>
             </div>
         `;
