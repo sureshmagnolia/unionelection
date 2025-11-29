@@ -4743,6 +4743,35 @@ window.saveManualAllocation = async function() {
         renderSlotsGridAdmin();
     }
 }
+window.switchAdminTab = function(tabName) {
+    const tabs = ['staff', 'slots', 'attendance'];
+    
+    tabs.forEach(t => {
+        const content = document.getElementById(`tab-content-${t}`);
+        const btn = document.getElementById(`tab-btn-${t}`);
+        
+        if (t === tabName) {
+            // --- ACTIVE STATE ---
+            if(content) content.classList.remove('hidden');
+            if(btn) {
+                // Remove Inactive Classes
+                btn.classList.remove('font-medium', 'text-gray-500', 'border-transparent', 'hover:text-gray-700');
+                // Add Active Classes
+                btn.classList.add('font-bold', 'text-indigo-600', 'border-b-2', 'border-indigo-600');
+            }
+        } else {
+            // --- INACTIVE STATE ---
+            if(content) content.classList.add('hidden');
+            if(btn) {
+                // Remove Active Classes
+                btn.classList.remove('font-bold', 'text-indigo-600', 'border-indigo-600');
+                // Add Inactive Classes
+                btn.classList.add('font-medium', 'text-gray-500', 'border-transparent', 'hover:text-gray-700', 'border-b-2');
+            }
+        }
+    });
+}
+
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
