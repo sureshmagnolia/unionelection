@@ -3626,6 +3626,14 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
         // SMS (Shortest Possible)
         const smsMsg = generateWeeklySMS(firstName, duties);
         const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
+        // *** NEW: Update Preview Box (Show 1st person's message) ***
+        if (index === 0) {
+            const previewEl = document.getElementById('notif-message-preview');
+            if (previewEl) {
+                previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
+            }
+        }
+        
         const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
         
 
@@ -3749,6 +3757,13 @@ window.openSlotReminderModal = function(key) {
         // SMS (Shortest Possible)
         const smsMsg = generateDailySMS(firstName, targetDateStr, duties);
         const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
+        // *** NEW: Update Preview Box (Show 1st person's message) ***
+        if (index === 0) {
+            const previewEl = document.getElementById('notif-message-preview');
+            if (previewEl) {
+                previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
+            }
+        }
         const shortDate = targetDateStr.slice(0, 5);
         
 
