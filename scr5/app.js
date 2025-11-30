@@ -11024,7 +11024,7 @@ function loadInitialData() {
         }).join('');
 
         const html = `
-            <div class="bg-white border-2 border-gray-800 shadow-xl p-8 print-page mb-8 relative text-black">
+            <div class="bg-white border-2 border-black p-8 print-page mb-8 relative text-black">
                 <div class="text-center border-b-2 border-black pb-4 mb-4">
                     <h2 class="text-xl font-bold uppercase leading-tight text-black">${currentCollegeName}</h2>
                     <h3 class="text-lg font-semibold mt-1 text-black">Remuneration Bill: ${bill.title}</h3>
