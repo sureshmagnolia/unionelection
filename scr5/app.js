@@ -10616,7 +10616,6 @@ window.real_disable_all_report_buttons = function(disabled) {
     if(btn) btn.disabled = disabled;
 };
 // ==========================================
-const btnInvigilation = document.getElementById('btn-invigilation-portal');
 // ==========================================
 // ☢️ NUKE & SETTINGS MANAGER
 // ==========================================
