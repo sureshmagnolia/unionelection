@@ -922,8 +922,10 @@ tr.scribe-row-highlight td.signature-col {
     padding: 1px 2px; /* <--- MATCH THE PRINT SETTING */
     text-align: left;
     word-wrap: break-word;
-}
-/* --- END OF  Search Result Modal Styles --- */
+} /* <--- THIS CLOSING BRACE WAS LIKELY MISSING OR MISPLACED */
+
+/* --- END OF Search Result Modal Styles --- */
+
 /* Mobile Table Wrapper */
 .table-responsive {
     display: block;
@@ -1007,7 +1009,7 @@ tr.scribe-row-highlight td.signature-col {
     body.printing-bill .no-print {
         display: none !important;
     }
-    /* --- ADD THIS NEW BLOCK HERE --- */
+
     /* Force hide specific Remuneration View elements when printing bill */
     body.printing-bill #view-remuneration h1,
     body.printing-bill #view-remuneration .bg-blue-50, 
@@ -1015,8 +1017,8 @@ tr.scribe-row-highlight td.signature-col {
     body.printing-bill #view-remuneration .border-t > .bg-gray-100 {
         display: none !important;
     }
-    
 }
+
 /* --- REMUNERATION BILL MOBILE OPTIMIZATIONS --- */
 
 /* Ensure the bill container fits on mobile screens */
