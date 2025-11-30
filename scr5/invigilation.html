@@ -300,20 +300,24 @@
                         </button>
                     </div>
                 </div>
-            </div>
+        </div>
 
-            <div class="flex justify-between items-center mt-4 border-t pt-4">
-                <div id="att-lock-status" class="text-xs font-bold text-gray-400 italic"></div>
-                <div class="flex gap-3">
-                    <button id="btn-att-lock" class="bg-gray-100 text-gray-600 border border-gray-300 px-4 py-2 rounded shadow-sm hover:bg-gray-200 font-bold text-sm flex items-center gap-2 transition">
+            <div class="flex flex-col sm:flex-row justify-between items-center mt-4 border-t pt-4 gap-3">
+                
+                <div id="att-lock-status" class="text-xs font-bold text-gray-400 italic w-full sm:w-auto text-center sm:text-left order-2 sm:order-1"></div>
+                
+                <div class="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto order-1 sm:order-2">
+                    <button id="btn-att-lock" class="justify-center bg-gray-100 text-gray-600 border border-gray-300 px-3 py-2 rounded shadow-sm hover:bg-gray-200 font-bold text-xs flex items-center gap-2 transition">
                         <span>🔒</span> Lock
                     </button>
-                    <button id="btn-att-save" onclick="saveAttendance()" class="bg-green-600 text-white px-6 py-2 rounded shadow hover:bg-green-700 font-bold flex items-center gap-2 transition">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                        Confirm & Update Counts
+                    
+                    <button id="btn-att-save" onclick="saveAttendance()" class="justify-center bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 font-bold text-xs flex items-center gap-2 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        Confirm & Update
                     </button>
                 </div>
             </div>
+            
         </div>
         
         <div id="attendance-placeholder" class="text-center py-10 text-gray-400 italic">
