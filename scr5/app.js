@@ -596,7 +596,7 @@ function syncDataFromCloud(collegeId) {
             // 3. Refresh UI
             updateSyncStatus("Synced", "success");
             loadInitialData();
-            
+            if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
             if (typeof viewRoomAllotment !== 'undefined' && !viewRoomAllotment.classList.contains('hidden') && allotmentSessionSelect.value) {
                  allotmentSessionSelect.dispatchEvent(new Event('change'));
             }
