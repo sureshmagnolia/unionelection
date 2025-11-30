@@ -11089,8 +11089,66 @@ function loadInitialData() {
         `;
         container.insertAdjacentHTML('beforeend', html);
     }
-    
-    // --- NEW: Restore Last Active Tab ---
+
+
+// --- STUDENT PORTAL LINK LOGIC ---
+
+function updateStudentPortalLink() {
+    const linkInput = document.getElementById('student-portal-link');
+    if (!linkInput) return;
+
+    if (currentCollegeId) {
+        // 1. Get the current base URL (e.g., https://mysite.com/app/index.html)
+        let currentUrl = window.location.href;
+        
+        // 2. Strip the filename to get the directory
+        let baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
+        
+        // 3. Construct Student URL
+        // It assumes student.html is in the same folder as index.html
+        const studentUrl = `${baseUrl}/student.html?id=/public_seating/${currentCollegeId}`;
+        
+        linkInput.value = studentUrl;
+        linkInput.classList.remove('text-gray-400', 'italic');
+        linkInput.classList.add('text-gray-700');
+    } else {
+        linkInput.value = "Please log in to generate your unique link.";
+        linkInput.classList.add('text-gray-400', 'italic');
+    }
+}
+
+// Attach to Settings Tab Click
+if (navSettings) {
+    navSettings.addEventListener('click', updateStudentPortalLink);
+}
+
+// Copy Button Logic
+const btnCopyPortal = document.getElementById('copy-portal-btn');
+if (btnCopyPortal) {
+    btnCopyPortal.addEventListener('click', () => {
+        const linkInput = document.getElementById('student-portal-link');
+        if (!linkInput || !linkInput.value.startsWith('http')) return; // Don't copy placeholder text
+
+        linkInput.select();
+        linkInput.setSelectionRange(0, 99999); // For mobile
+        navigator.clipboard.writeText(linkInput.value).then(() => {
+            const originalText = btnCopyPortal.innerHTML;
+            btnCopyPortal.innerHTML = `✅ Copied!`;
+            btnCopyPortal.classList.remove('bg-teal-600');
+            btnCopyPortal.classList.add('bg-green-600');
+            
+            setTimeout(() => {
+                btnCopyPortal.innerHTML = originalText;
+                btnCopyPortal.classList.add('bg-teal-600');
+                btnCopyPortal.classList.remove('bg-green-600');
+            }, 2000);
+        });
+    });
+}
+
+// Initial Call (in case we start on settings page or refresh)
+updateStudentPortalLink();
+// --- NEW: Restore Last Active Tab ---
     function restoreActiveTab() {
         const savedViewId = localStorage.getItem('lastActiveViewId');
         const savedNavId = localStorage.getItem('lastActiveNavId');
