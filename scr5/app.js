@@ -9871,7 +9871,30 @@ async function findMyCollege(user) {
         updateSyncStatus("Auth Error", "error");
     }
 }
-
+// 7. SWITCH COLLEGE (SUPER ADMIN)
+const btnAdminSwitch = document.getElementById('btn-admin-switch-college');
+if (btnAdminSwitch) {
+    btnAdminSwitch.addEventListener('click', () => {
+        const select = document.getElementById('admin-college-select');
+        const newCollegeId = select.value;
+        
+        if (!newCollegeId) return alert("Please select a college to access.");
+        
+        if (confirm(`Switch dashboard to view data for this college?\nID: ${newCollegeId}`)) {
+            // 1. Update Global ID
+            currentCollegeId = newCollegeId;
+            
+            // 2. Trigger Sync
+            syncDataFromCloud(newCollegeId);
+            
+            // 3. Close Modal
+            const modal = document.getElementById('super-admin-modal');
+            if(modal) modal.classList.add('hidden');
+            
+            alert("✅ Switched! Loading data...");
+        }
+    });
+}
 // --- Helper: Generate Unique Key for Comparison ---
     // We compare only Date, Time, and Register Number (User Requirement)
     function getRecordKey(row) {
