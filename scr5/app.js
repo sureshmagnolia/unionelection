@@ -11373,40 +11373,39 @@ function renderDashboardInvigilation() {
     const container = document.getElementById('dashboard-invigilation-buttons');
     if (!wrapper || !container) return;
 
-    // 1. Get Data from Local Storage
     const slotsJson = localStorage.getItem('examInvigilationSlots');
-    if (!slotsJson) {
-        wrapper.classList.add('hidden');
-        return;
-    }
+    if (!slotsJson) { wrapper.classList.add('hidden'); return; }
 
     const slots = JSON.parse(slotsJson);
+    
+    // --- FIX: Robust Date Matching (Padded & Unpadded) ---
     const today = new Date();
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const yyyy = today.getFullYear();
-    const todayStr = `${dd}.${mm}.${yyyy}`;
+    const d = today.getDate();
+    const m = today.getMonth() + 1;
+    const y = today.getFullYear();
 
-    // 2. Find Today's Sessions
-    const todayKeys = Object.keys(slots).filter(k => k.startsWith(todayStr));
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayStrPadded = `${pad(d)}.${pad(m)}.${y}`; // e.g. 01.12.2025
+    const todayStrSimple = `${d}.${m}.${y}`;           // e.g. 1.12.2025
+
+    const todayKeys = Object.keys(slots).filter(k => 
+        k.startsWith(todayStrPadded) || k.startsWith(todayStrSimple)
+    );
+    // -----------------------------------------------------
     
     if (todayKeys.length === 0) {
         wrapper.classList.add('hidden');
         return;
     }
 
-    // 3. Render Buttons
     container.innerHTML = '';
-    todayKeys.sort(); // Sort AM/PM
+    todayKeys.sort();
 
     todayKeys.forEach(key => {
         const timePart = key.split(' | ')[1];
         const btn = document.createElement('button');
         btn.className = "bg-white text-indigo-700 hover:bg-indigo-50 font-bold py-2 px-4 rounded shadow-sm text-xs flex items-center gap-2 transition";
-        btn.innerHTML = `
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-            Print ${timePart}
-        `;
+        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg> Print ${timePart}`;
         btn.onclick = () => printDashboardSession(key, slots[key]);
         container.appendChild(btn);
     });
