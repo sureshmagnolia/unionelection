@@ -332,6 +332,7 @@ const syncStatusDisplay = document.getElementById('sync-status');
 
 // Admin UI Elements
 const adminBtn = document.getElementById('admin-btn');
+const btnInvigilation = document.getElementById('btn-invigilation-portal'); // <--- ADD THIS
 const adminModal = document.getElementById('admin-modal');
 const closeAdminModal = document.getElementById('close-admin-modal');
 const newUserEmailInput = document.getElementById('new-user-email');
@@ -499,15 +500,24 @@ function syncDataFromCloud(collegeId) {
             const mainData = docSnap.data();
             currentCollegeData = mainData; 
 
-            // Admin Permission Check
+           // Admin & Team Permission Check
             const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
-            
-            if (isAdminUser) {
-                if(adminBtn) adminBtn.classList.remove('hidden');
-                if(btnInvigilation) btnInvigilation.classList.remove('hidden'); // <--- SHOW PORTAL BUTTON
-            } else {
-                if(adminBtn) adminBtn.classList.add('hidden');
-                if(btnInvigilation) btnInvigilation.classList.add('hidden'); // <--- HIDE PORTAL BUTTON
+            const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
+
+            // Show Admin Button (Admins Only)
+            if (adminBtn) {
+                if (isAdminUser) adminBtn.classList.remove('hidden');
+                else adminBtn.classList.add('hidden');
+            }
+
+            // Show Invigilation Button (Admins + Staff)
+            // Anyone in the 'allowedUsers' list can access the portal
+            if (btnInvigilation) {
+                if (isAdminUser || isTeamMember) {
+                    btnInvigilation.classList.remove('hidden');
+                } else {
+                    btnInvigilation.classList.add('hidden');
+                }
             }
 
             // === TIMESTAMP CHECK ===
