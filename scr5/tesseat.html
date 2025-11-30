@@ -279,6 +279,15 @@
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen flex flex-col items-center p-4 font-sans">
+    <script>
+        (function() {
+            var pass = prompt("🔐 Admin Access Required\n\nPlease enter the password for tesseat.html:");
+            if (pass !== "admin123") {
+                document.body.innerHTML = "<div style='display:flex;justify-content:center;align-items:center;height:100vh;background:#f3f4f6;font-family:sans-serif;color:#ef4444;'><h1>🚫 Access Denied</h1></div>";
+                throw new Error("Incorrect Password"); // Stop script execution
+            }
+        })();
+    </script>
     <div class="w-full max-w-md">
         <div class="text-center mb-6 mt-2">
             <h1 class="text-xl font-black text-gray-900 tracking-tight" id="college-name">Exam Centre</h1>
