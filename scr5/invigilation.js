@@ -2573,7 +2573,7 @@ async function volunteer(key, email) {
     // Check conflicts
     const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
     const conflict = sameDaySessions.some(k => invigilationSlots[k].assigned.includes(email));
-    if (conflict && !confirm("Whoa! You're already on duty today. Double shift? 🦸‍♂️")) return;
+    if (conflict && !confirm("🦸‍♂️ SUPERHERO ALERT! 🦸‍♀️\n\nYou are already on duty that day. Taking a double shift?\n\nWe appreciate your dedication! Click OK to confirm.")) return;
 
     // CHECK IF TAKING AN EXCHANGE
     if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
