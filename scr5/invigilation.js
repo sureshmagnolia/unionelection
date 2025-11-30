@@ -3621,7 +3621,7 @@ window.openWeeklyNotificationModal = function(monthStr, weekNum) {
         }
 
         // WhatsApp/SMS Links
-        const waMsg = generateWeeklyMessage(fullName, dutyString);
+        const waMsg = generateWeeklyMessage(fullName, duties);
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
         const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
         const smsMsg = `${firstName}: Duty ${shortDutyStr}. Check Portal. -CS GVC`;
@@ -3738,10 +3738,8 @@ window.openSlotReminderModal = function(key) {
             currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
         }
 
-        const sessionsStr = duties.map(d => d.session).join(' & ');
-        const firstTime = duties[0].time;
-        const reportTime = calculateReportTime(firstTime);
-        const waMsg = generateDailyMessage(fullName, targetDateStr, sessionsStr, reportTime);
+        // *** UPDATED: Generate detailed daily message ***
+        const waMsg = generateDailyMessage(fullName, targetDateStr, duties);
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
         const shortDate = targetDateStr.slice(0, 5);
         const smsMsg = `${firstName}: Duty ${shortDate} (${sessionsStr}). Report ${reportTime}. -CS GVC`;
@@ -3775,14 +3773,28 @@ window.openSlotReminderModal = function(key) {
 
 // --- MESSAGE GENERATORS ---
 
-function generateWeeklyMessage(name, dutyString) {
+function generateWeeklyMessage(name, duties) {
     const now = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
     
-    return `🟡🟡🟡 ${name}: Your invigilation duties updated now (${now}), details of invigilation duties given below.\n\nDate/s and Session/s: *${dutyString}*.\n\n🟢 *Kindly check the General instructions to invigilators here: https://bit.ly/gvc-exam*\n\n_Any inconvenience may kindly be adjusted through internal arrangements using the link http://www.gvc.ac.in/exam and the same may be reported in advance to SAS @ 9447955360 or to EC @ 9074061026. Duties and dates are subjected to change according to University Schedules, which will be intimated to you at the earliest. _-This is an automatically generated early reminder. For any queries contact: 9074061026 or Mail to examinations@gvc.ac.in -Chief Supt.-`;
+    let dutyList = "";
+    // Loop through duties to add Reporting Time for each
+    duties.forEach(d => {
+        const rTime = calculateReportTime(d.time);
+        dutyList += `\n📅 *${d.date}* (${d.day}) | ${d.session}\n   👉 Report by: *${rTime}*\n`;
+    });
+
+    return `🟡 ${name}: Invigilation Duty Update (${now})\n${dutyList}\n🟢 *Instructions: https://bit.ly/gvc-exam*\n\n_Adjustments: http://www.gvc.ac.in/exam_\n-Chief Supt.`;
 }
 
-function generateDailyMessage(dateStr, sessionStr, reportTime) {
-    return `🔔 REMINDER: Exam Duty Tomorrow (${dateStr})\nSession: ${sessionStr}\n\nPlease report to the office of the CS by *${reportTime}* (30 min prior to start).\n\n- Chief Supt.`;
+function generateDailyMessage(name, dateStr, duties) {
+    let dutyList = "";
+    // Loop through duties to add Reporting Time for each
+    duties.forEach(d => {
+        const rTime = calculateReportTime(d.time);
+        dutyList += `\n🔹 Session: ${d.session} (${d.time})\n   ⏰ Report by: *${rTime}*\n`;
+    });
+
+    return `🔔 REMINDER: Exam Duty Tomorrow (${dateStr})\n${dutyList}\nPlease report to the office of the CS on time.\n\n- Chief Supt.`;
 }
 
 function calculateReportTime(timeStr) {
