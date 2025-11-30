@@ -6279,6 +6279,7 @@ function saveAbsenteeList(sessionKey) {
     localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(allAbsentees));
 }
 
+// Render Absentee List (Responsive: Card on Mobile, Row on PC)
 function renderAbsenteeList() {
     getRoomCapacitiesFromStorage();
     const sessionKey = sessionSelect.value;
@@ -6293,7 +6294,7 @@ function renderAbsenteeList() {
     currentAbsenteeListDiv.innerHTML = "";
     
     if (currentAbsenteeList.length === 0) {
-        currentAbsenteeListDiv.innerHTML = `<em class="text-gray-500">No absentees marked for this session.</em>`;
+        currentAbsenteeListDiv.innerHTML = `<div class="text-center py-6 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 text-gray-400 text-xs italic">No absentees marked for this session.</div>`;
         return;
     }
 
@@ -6306,7 +6307,7 @@ function renderAbsenteeList() {
             room: s['Room No'], 
             isScribe: s.isScribe, 
             stream: s.Stream,
-            name: s.Name // Capture name for deletion confirmation
+            name: s.Name 
         };
         return map;
     }, {});
@@ -6321,29 +6322,48 @@ function renderAbsenteeList() {
         
         const strm = roomData.stream || "Regular";
 
-        // 2. Determine Button State based on Lock
-        const btnDisabled = isAbsenteeListLocked ? 'disabled' : '';
-        const btnClass = isAbsenteeListLocked 
-            ? 'text-gray-300 cursor-not-allowed' 
-            : 'text-red-600 hover:text-red-800 cursor-pointer';
-
         const item = document.createElement('div');
-        item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
+        // Mobile: Column (Card), Desktop: Row
+        item.className = 'group flex flex-col md:flex-row justify-between items-start md:items-center p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition mb-2 gap-3 md:gap-4';
+
+        // 2. Determine Button State
+        const isLocked = isAbsenteeListLocked;
+        const btnDisabled = isLocked ? 'disabled' : '';
         
+        const btnBase = "text-xs font-bold px-3 py-1.5 rounded border transition w-full md:w-auto text-center flex items-center justify-center gap-1";
+        const btnStyle = isLocked 
+            ? "bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed" 
+            : "bg-white text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 cursor-pointer";
+            
+        const btnIcon = isLocked ? '' : '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+        const btnText = isLocked ? "Locked" : "Remove";
+
         item.innerHTML = `
-            <div class="flex items-center gap-2">
-                <span class="font-medium">${regNo}</span>
-                <span class="text-xs text-gray-600 hidden sm:inline">(${roomData.name})</span>
-                <span class="text-[10px] uppercase font-bold text-purple-700 bg-purple-50 px-1.5 rounded border border-purple-100">${strm}</span>
+            <div class="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-4 w-full min-w-0">
+                <div class="flex items-center justify-between md:justify-start gap-2">
+                    <span class="font-mono font-bold text-gray-800 text-sm bg-gray-100 px-2 py-0.5 rounded md:bg-transparent md:p-0">${regNo}</span>
+                    <span class="text-[10px] uppercase font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 tracking-wide">${strm}</span>
+                </div>
+                
+                <div class="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-3 min-w-0">
+                    <div class="text-xs text-gray-800 font-medium truncate pl-1 md:pl-0" title="${roomData.name}">
+                        ${roomData.name}
+                    </div>
+                    <div class="text-xs text-gray-400 pl-1 md:pl-0 truncate" title="${roomDisplay}">
+                         ${roomDisplay}
+                    </div>
+                </div>
             </div>
-            <div class="flex items-center gap-3">
-                <span class="text-sm text-gray-500">${roomDisplay}</span>
-                <button class="text-xs font-medium ${btnClass}" ${btnDisabled}>&times; Remove</button>
+            
+            <div class="w-full md:w-auto md:shrink-0 pt-2 md:pt-0 border-t md:border-0 border-gray-100">
+                <button class="${btnBase} ${btnStyle}" ${btnDisabled}>
+                    ${btnIcon} ${btnText}
+                </button>
             </div>
         `;
         
         // 3. Attach Delete Event with Name
-        if (!isAbsenteeListLocked) {
+        if (!isLocked) {
             item.querySelector('button').onclick = () => removeAbsentee(regNo, roomData.name);
         }
         
