@@ -10270,32 +10270,7 @@ window.handlePythonExtraction = function(jsonString) {
         // Also expose this function globally if needed by remuneration.js init
     window.populateRemunerationDropdowns = populateStreamDropdowns;
 
-    // --- Stream Lock Toggle Logic ---
-    const toggleStreamLockBtn = document.getElementById('toggle-stream-lock-btn');
-    const streamInputGroup = document.getElementById('stream-input-group');
-
-    if (toggleStreamLockBtn) {
-        toggleStreamLockBtn.addEventListener('click', () => {
-            isStreamSettingsLocked = !isStreamSettingsLocked;
-            
-            // Update UI based on state
-            if (isStreamSettingsLocked) {
-                // LOCKED STATE
-                toggleStreamLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>List Locked</span>`;
-                toggleStreamLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm";
-                
-                if(streamInputGroup) streamInputGroup.classList.add('hidden'); // Hide Add inputs
-            } else {
-                // UNLOCKED STATE
-                toggleStreamLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
-                toggleStreamLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm";
-                
-                if(streamInputGroup) streamInputGroup.classList.remove('hidden'); // Show Add inputs
-            }
-            
-            renderStreamSettings(); // Re-render list to show/hide delete buttons
-        });
-    }
+    
     // Add Stream
     if (addStreamBtn) {
         addStreamBtn.addEventListener('click', () => {
@@ -10506,7 +10481,32 @@ if (generateRoomSummaryButton) {
         }
     });
 }
+// --- Stream Lock Toggle Logic ---
+    const toggleStreamLockBtn = document.getElementById('toggle-stream-lock-btn');
+    const streamInputGroup = document.getElementById('stream-input-group');
 
+    if (toggleStreamLockBtn) {
+        toggleStreamLockBtn.addEventListener('click', () => {
+            isStreamSettingsLocked = !isStreamSettingsLocked;
+            
+            // Update UI based on state
+            if (isStreamSettingsLocked) {
+                // LOCKED STATE
+                toggleStreamLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>List Locked</span>`;
+                toggleStreamLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm";
+                
+                if(streamInputGroup) streamInputGroup.classList.add('hidden'); // Hide Add inputs
+            } else {
+                // UNLOCKED STATE
+                toggleStreamLockBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
+                toggleStreamLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm";
+                
+                if(streamInputGroup) streamInputGroup.classList.remove('hidden'); // Show Add inputs
+            }
+            
+            renderStreamSettings(); // Re-render list to show/hide delete buttons
+        });
+    }
 // Also update real_disable_all_report_buttons to include the new button
 const originalDisableFuncV2 = window.real_disable_all_report_buttons;
 window.real_disable_all_report_buttons = function(disabled) {
