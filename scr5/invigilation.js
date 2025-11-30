@@ -3105,7 +3105,12 @@ function renderAdminTodayStats() {
                     
                     <button onclick="openSlotReminderModal('${key}')" class="bg-white text-orange-700 hover:bg-orange-50 font-bold py-1.5 px-3 rounded shadow-sm text-xs flex items-center gap-1 transition" title="Send Alerts (Email, WhatsApp, SMS)">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                        Notify / Remind
+                        Notify
+                    </button>
+
+                    <button onclick="printDutyNotification('${key}')" class="bg-blue-600 text-white hover:bg-blue-700 font-bold py-1.5 px-3 rounded shadow-sm text-xs flex items-center gap-1 transition" title="Download Official Notification PDF">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        PDF
                     </button>
                 </div>
             `;
@@ -3130,7 +3135,6 @@ function renderAdminTodayStats() {
             </div>
         `;
     }
-}
 window.openCompletedDutiesModal = function(email) {
     const list = document.getElementById('completed-duties-list');
     if (!list) return;
@@ -5574,6 +5578,149 @@ window.addEventListener('online', () => {
 window.addEventListener('offline', () => {
     updateSyncStatus("No Internet", "error");
 });
+
+// ==========================================
+// 📄 OFFICIAL NOTIFICATION PDF GENERATOR
+// ==========================================
+
+window.printDutyNotification = function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
+
+    // 1. DATA PREPARATION
+    const [dateStr, timeStr] = key.split(' | ');
+    const [d, m, y] = dateStr.split('.');
+    const examDate = new Date(`${y}-${m}-${d}`);
+    
+    // Calculate Excel Serial Date (Days since Dec 30, 1899)
+    // 28/11/2025 -> 45989
+    const excelBaseDate = new Date(1899, 11, 30);
+    const dayDiff = Math.floor((examDate - excelBaseDate) / (1000 * 60 * 60 * 24));
+    
+    // Session Code (FN/AN)
+    const isAN = (timeStr.includes("PM") || timeStr.startsWith("12:") || timeStr.startsWith("12."));
+    const sessionCode = isAN ? "AN" : "FN";
+    
+    // Reporting Time (30 mins before)
+    const reportTime = calculateReportTime(timeStr);
+
+    // LOGO URL (Replace this when you have the link)
+    // Defaulting to local 'logo.png' for now. 
+    // If you have a cloud URL, replace 'logo.png' with 'https://...'
+    const logoUrl = "logo.png"; 
+
+    // 2. GENERATE ROWS
+    let rowsHtml = "";
+    slot.assigned.forEach((email, index) => {
+        const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "", phone: "" };
+        rowsHtml += `
+            <tr>
+                <td style="text-align: center;">${index + 1}</td>
+                <td>
+                    <div style="font-weight: bold;">${staff.name}</div>
+                    <div style="font-size: 11px; color: #444;">${staff.dept}</div>
+                </td>
+                <td style="text-align: center;">${staff.phone || "-"}</td>
+                <td style="text-align: center;"></td> </tr>
+        `;
+    });
+
+    // 3. GENERATE PDF WINDOW
+    const w = window.open('', '_blank');
+    w.document.write(`
+        <html>
+        <head>
+            <title>Duty Notification - ${dateStr}</title>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
+                body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; line-height: 1.4; }
+                @page { size: A4 portrait; margin: 15mm; }
+                
+                .header { text-align: center; margin-bottom: 30px; position: relative; }
+                .header img { height: 70px; width: auto; margin-bottom: 10px; }
+                .college-name { font-size: 16pt; font-weight: bold; text-transform: uppercase; }
+                .address { font-size: 10pt; }
+                .meta { font-size: 10pt; font-weight: bold; margin-top: 5px; }
+                
+                .title-section { margin-bottom: 20px; }
+                .designation { font-weight: bold; font-size: 12pt; }
+                .doc-number { margin-top: 15px; font-weight: bold; font-size: 11pt; }
+                
+                .body-text { font-size: 11pt; text-align: justify; margin-bottom: 15px; }
+                .highlight-box { font-weight: bold; margin: 15px 0; font-size: 11pt; }
+                
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
+                th, td { border: 1px solid black; padding: 8px; vertical-align: middle; }
+                th { background-color: #f0f0f0; text-align: center; font-weight: bold; }
+                
+                .footer { margin-top: 50px; text-align: right; font-weight: bold; }
+                .signature-line { border-top: 1px solid black; display: inline-block; width: 200px; padding-top: 5px; margin-top: 40px; text-align: center; }
+                
+                /* Print settings */
+                @media print {
+                    .no-print { display: none; }
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <img src="${logoUrl}" alt="College Logo" onerror="this.style.display='none'"> 
+                
+                <div class="college-name">GOVERNMENT VICTORIA COLLEGE, PALAKKAD</div>
+                <div class="address">Kerala, India, PIN 678001</div>
+                <div class="address">Affiliation: University of Calicut | NAAC: A Grade (3.2, 4th Cycle)</div>
+                <div class="meta">
+                    <span>📞 0491 2576773</span> | 
+                    <span>✉️ victoriapkd@gmail.com</span> | 
+                    <span>🌐 www.gvc.ac.in</span>
+                </div>
+            </div>
+
+            <div class="title-section">
+                <div class="designation">Chief Superintendent,</div>
+                <div class="designation">University Examinations</div>
+                
+                <div class="doc-number">EXAM/${dayDiff}${sessionCode}</div>
+            </div>
+
+            <div class="body-text">
+                The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations as detailed below. Invigilators are requested to report to the Chief Superintendent 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators should arrange for a substitute and inform the Chief Superintendent (CS) or the Senior Assistant Superintendent (SAS) accordingly.
+            </div>
+
+            <div class="highlight-box">
+                Date: ${dateStr} &nbsp;&nbsp; ${sessionCode} Exam Time: ${timeStr} &nbsp;&nbsp; (Reporting Time: ${reportTime})
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">SL. NO</th>
+                        <th>Name and Department of the Invigilator</th>
+                        <th style="width: 120px;">Mobile</th>
+                        <th style="width: 100px;">Signature</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <div class="footer">
+                <div class="signature-line">
+                    Chief Superintendent
+                </div>
+            </div>
+
+            <script>
+                window.onload = function() { setTimeout(() => window.print(), 800); };
+            </script>
+        </body>
+        </html>
+    `);
+    w.document.close();
+}
+    
 // Initialize Listeners
 setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
 setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
