@@ -1854,9 +1854,7 @@ function initCalendar() {
     }
 }
 
-// --- Calendar Render Logic (Optimized: Slices + Blue Center + Smart Tooltip) ---
-
-// --- Calendar Render Logic (Optimized: Explicit Requirements in Tooltips) ---
+// --- Calendar Render Logic (Optimized for Mobile Overflow) ---
 function renderCalendar() {
     const grid = document.getElementById('calendar-days-grid');
     const title = document.getElementById('cal-month-display');
@@ -1915,64 +1913,79 @@ function renderCalendar() {
         const data = monthData[day];
         const isToday = (day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear());
         
+        // --- NEW: Calculate Grid Position to prevent Overflow ---
         const cellIndex = firstDayIndex + day - 1;
         const rowIndex = Math.floor(cellIndex / 7);
+        const colIndex = cellIndex % 7; // 0=Sun, 6=Sat
         const isTopRow = rowIndex === 0; 
 
-        // --- FIX: Responsive Classes (Small on Mobile, Big on Desktop) ---
-    const baseClass = "min-h-[60px] md:min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col items-center justify-center relative hover:bg-blue-50 transition group";
-    
-    // Changed: w-10 h-10 text-sm (Mobile) -> md:w-20 md:h-20 md:text-3xl (Desktop)
-    let circleClass = "w-10 h-10 text-sm md:w-20 md:h-20 md:text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-gray-700 bg-transparent border border-transparent overflow-hidden";
-    
-    let circleStyle = "";
-    let tooltipHtml = "";
+        // 1. Tooltip Positioning Logic (Smart Anchoring)
+        // Mobile: Anchor Left for first 2 cols, Right for last 2 cols, Center for middle
+        // Desktop (md): Always Center
+        let tooltipPosClass = "left-1/2 -translate-x-1/2"; // Default Center
+        let arrowPosClass = "left-1/2 -translate-x-1/2";   // Default Arrow Center
 
-    let dateNumberHtml = `<span class="z-10">${day}</span>`;
-    if (isToday) {
-        // Changed: w-8 h-8 text-sm (Mobile) -> md:w-12 md:h-12 md:text-2xl (Desktop)
-        dateNumberHtml = `<span class="w-8 h-8 md:w-12 md:h-12 flex items-center justify-center rounded-full bg-blue-600 text-white shadow-md z-20 text-sm md:text-2xl">${day}</span>`;
-    }
+        if (colIndex <= 1) { 
+            // Left Edge (Sun/Mon): Align Tooltip Left, Arrow Left
+            tooltipPosClass = "left-[-4px] md:left-1/2 md:-translate-x-1/2"; 
+            arrowPosClass = "left-6 -translate-x-1/2 md:left-1/2"; 
+        } else if (colIndex >= 5) { 
+            // Right Edge (Fri/Sat): Align Tooltip Right, Arrow Right
+            tooltipPosClass = "right-[-4px] md:left-1/2 md:-translate-x-1/2 md:right-auto md:left-auto"; 
+            arrowPosClass = "right-6 translate-x-1/2 md:left-1/2 md:-translate-x-1/2 md:right-auto md:left-auto";
+        }
+        // --------------------------------------------------------
 
-    if (data) {
-        const hasFN = data.am.students > 0;
-        const hasAN = data.pm.students > 0;
+        const baseClass = "min-h-[60px] md:min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col items-center justify-center relative hover:bg-blue-50 transition group";
         
-        if (hasFN || hasAN) {
-            // Update the colored circle class too
-            circleClass = "w-10 h-10 text-sm md:w-20 md:h-20 md:text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-red-900 border border-red-200 overflow-hidden shadow-sm";
+        // Adjusted circle size for better mobile visibility
+        let circleClass = "w-8 h-8 text-sm md:w-20 md:h-20 md:text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-gray-700 bg-transparent border border-transparent overflow-hidden";
+        
+        let circleStyle = "";
+        let tooltipHtml = "";
+
+        let dateNumberHtml = `<span class="z-10">${day}</span>`;
+        if (isToday) {
+            dateNumberHtml = `<span class="w-8 h-8 md:w-12 md:h-12 flex items-center justify-center rounded-full bg-blue-600 text-white shadow-md z-20 text-sm md:text-2xl">${day}</span>`;
+        }
+
+        if (data) {
+            const hasFN = data.am.students > 0;
+            const hasAN = data.pm.students > 0;
+            
+            if (hasFN || hasAN) {
+                circleClass = "w-8 h-8 text-sm md:w-20 md:h-20 md:text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-red-900 border border-red-200 overflow-hidden shadow-sm";
                 const cLight = "#fee2e2"; 
                 const cDark = "#fca5a5"; 
 
                 if (hasFN && hasAN) {
                     circleStyle = `background: linear-gradient(to bottom, ${cDark} 0%, ${cDark} 35%, ${cLight} 35%, ${cLight} 65%, ${cDark} 65%, ${cDark} 100%);`;
                     dateNumberHtml = `
-                        <span class="absolute top-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">FN</span>
+                        <span class="absolute top-0.5 text-[8px] md:text-[9px] text-red-900 font-extrabold leading-none opacity-80">FN</span>
                         ${dateNumberHtml}
-                        <span class="absolute bottom-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">AN</span>
+                        <span class="absolute bottom-0.5 text-[8px] md:text-[9px] text-red-900 font-extrabold leading-none opacity-80">AN</span>
                     `;
                 } else if (hasFN) {
                     circleStyle = `background: linear-gradient(to bottom, ${cDark} 0%, ${cDark} 35%, ${cLight} 35%, ${cLight} 100%);`;
                     dateNumberHtml = `
-                        <span class="absolute top-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">FN</span>
+                        <span class="absolute top-0.5 text-[8px] md:text-[9px] text-red-900 font-extrabold leading-none opacity-80">FN</span>
                         ${dateNumberHtml}
                     `;
                 } else if (hasAN) {
                     circleStyle = `background: linear-gradient(to bottom, ${cLight} 0%, ${cLight} 65%, ${cDark} 65%, ${cDark} 100%);`;
                     dateNumberHtml = `
                         ${dateNumberHtml}
-                        <span class="absolute bottom-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">AN</span>
+                        <span class="absolute bottom-0.5 text-[8px] md:text-[9px] text-red-900 font-extrabold leading-none opacity-80">AN</span>
                     `;
                 }
             }
 
-            // Tooltip Generation (Explicit Requirements & Total)
+            // Tooltip Content Generation
             if (hasFN) {
                 const regReq = Math.ceil(data.am.regCount / 30);
                 const othReq = Math.ceil(data.am.othCount / 30);
                 const scribeReq = Math.ceil(data.am.scribeCount / 5);
                 const totalReq = regReq + othReq + scribeReq;
-                
                 let details = `Reg: ${regReq}`;
                 if(othReq > 0) details += ` | Oth: ${othReq}`;
                 if(scribeReq > 0) details += ` | Scr: ${scribeReq}`;
@@ -1981,14 +1994,14 @@ function renderCalendar() {
                     <div class='mb-2 pb-2 border-b border-gray-200'>
                         <div class="flex justify-between items-center">
                             <strong class='text-red-600 uppercase text-[10px]'>Morning (FN)</strong>
-                            <span class='text-gray-900 font-bold text-[10px]'>${data.am.students} Students</span>
+                            <span class='text-gray-900 font-bold text-[10px]'>${data.am.students}</span>
                         </div>
                         <div class="mt-1 bg-gray-50 p-1 rounded border border-gray-100">
                             <div class="flex justify-between text-[10px] font-bold text-gray-700">
-                                <span>Est. Rooms/Inv:</span>
+                                <span>Invigs:</span>
                                 <span class="text-blue-700 text-[11px]">${totalReq}</span>
                             </div>
-                            <div class="text-[9px] text-gray-400 text-right font-normal">${details}</div>
+                            <div class="text-[9px] text-gray-400 text-right font-normal leading-tight">${details}</div>
                         </div>
                     </div>`;
             }
@@ -1997,7 +2010,6 @@ function renderCalendar() {
                 const othReq = Math.ceil(data.pm.othCount / 30);
                 const scribeReq = Math.ceil(data.pm.scribeCount / 5);
                 const totalReq = regReq + othReq + scribeReq;
-                
                 let details = `Reg: ${regReq}`;
                 if(othReq > 0) details += ` | Oth: ${othReq}`;
                 if(scribeReq > 0) details += ` | Scr: ${scribeReq}`;
@@ -2006,30 +2018,30 @@ function renderCalendar() {
                     <div>
                         <div class="flex justify-between items-center">
                             <strong class='text-red-600 uppercase text-[10px]'>Afternoon (AN)</strong>
-                            <span class='text-gray-900 font-bold text-[10px]'>${data.pm.students} Students</span>
+                            <span class='text-gray-900 font-bold text-[10px]'>${data.pm.students}</span>
                         </div>
                         <div class="mt-1 bg-gray-50 p-1 rounded border border-gray-100">
                             <div class="flex justify-between text-[10px] font-bold text-gray-700">
-                                <span>Est. Rooms/Inv:</span>
+                                <span>Invigs:</span>
                                 <span class="text-blue-700 text-[11px]">${totalReq}</span>
                             </div>
-                            <div class="text-[9px] text-gray-400 text-right font-normal">${details}</div>
+                            <div class="text-[9px] text-gray-400 text-right font-normal leading-tight">${details}</div>
                         </div>
                     </div>`;
             }
         } else if (isToday) {
-            // Update the "Empty Today" circle class
-            circleClass = "w-10 h-10 text-sm md:w-20 md:h-20 md:text-3xl rounded-full flex flex-col items-center justify-center relative font-bold bg-blue-600 text-white shadow-md overflow-hidden";
+            circleClass = "w-8 h-8 text-sm md:w-20 md:h-20 md:text-3xl rounded-full flex flex-col items-center justify-center relative font-bold bg-blue-600 text-white shadow-md overflow-hidden";
             dateNumberHtml = `<span class="z-10">${day}</span>`;
         }
 
+        // Apply Vertical Position (Top/Bottom) logic
         const posClass = isTopRow ? "top-full mt-2" : "bottom-full mb-2";
-        const arrowClass = isTopRow ? "bottom-full border-b-white" : "top-full border-t-white";
+        const arrowVerticalClass = isTopRow ? "bottom-full border-b-white" : "top-full border-t-white";
 
         const tooltip = tooltipHtml ? `
-            <div class="absolute ${posClass} left-1/2 transform -translate-x-1/2 w-56 bg-white text-gray-800 text-xs rounded-lg p-3 shadow-xl z-50 hidden group-hover:block pointer-events-none border border-red-200 ring-1 ring-red-100">
+            <div class="absolute ${posClass} ${tooltipPosClass} w-48 md:w-56 bg-white text-gray-800 text-xs rounded-lg p-3 shadow-xl z-[100] hidden group-hover:block pointer-events-none border border-red-200 ring-1 ring-red-100">
                 ${tooltipHtml}
-                <div class="absolute ${arrowClass} left-1/2 transform -translate-x-1/2 border-4 border-transparent"></div>
+                <div class="absolute ${arrowVerticalClass} ${arrowPosClass} border-4 border-transparent"></div>
             </div>
         ` : "";
 
@@ -2044,6 +2056,7 @@ function renderCalendar() {
     }
     grid.innerHTML = html;
 }
+
 // Add initialization call to your existing loadInitialData or updateDashboard
 // For now, we'll trigger it once the DOM is ready in app.js logic
 setTimeout(initCalendar, 1000);
