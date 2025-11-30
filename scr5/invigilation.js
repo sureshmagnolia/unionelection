@@ -3742,6 +3742,7 @@ window.openSlotReminderModal = function(key) {
 
         // *** UPDATED: Generate detailed daily message ***
         // WhatsApp (Elaborate & Detailed)
+        const sessionsStr = duties.map(d => d.session).join(' & ');
         const waMsg = generateDailyWhatsApp(fullName, targetDateStr, duties);
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
 
