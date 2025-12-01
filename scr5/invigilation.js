@@ -168,7 +168,7 @@ function setupLiveSync(collegeId, mode) {
     
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
-            updateSyncStatus("Synced", "success"); // <--- ADD THIS
+            updateSyncStatus("Synced", "success");
             collegeData = docSnap.data();
             
             // CONFIGS
@@ -177,24 +177,23 @@ function setupLiveSync(collegeId, mode) {
             rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
             googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
             departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
-            globalDutyTarget = parseInt(collegeData.invigGlobalTarget || 2);
             
             // DATA
             staffData = JSON.parse(collegeData.examStaffData || '[]');
             invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
-            
-            // NEW: Load Advance Unavailability
             advanceUnavailability = JSON.parse(collegeData.invigAdvanceUnavailability || '{}');
-            // *** FIX: LOAD GLOBAL TARGET (Was Missing) ***
+            
+            // LOAD GLOBAL TARGET
             if (collegeData.invigGlobalTarget !== undefined) {
                 globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
             } else {
-                globalDutyTarget = 2; // Default if not set
+                globalDutyTarget = 2; // Default
             }
-            // *** ADD THIS LINE ***
+
             googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
             
             if (mode === 'admin') {
+                // --- ADMIN MODE ---
                 if (document.getElementById('view-admin').classList.contains('hidden') && 
                     document.getElementById('view-staff').classList.contains('hidden')) {
                     initAdminDashboard();
@@ -202,19 +201,20 @@ function setupLiveSync(collegeId, mode) {
                     updateAdminUI();
                     renderSlotsGridAdmin();
                     renderAdminTodayStats();
+                    
+                    // Update "View as Staff" Live
                     if (!document.getElementById('view-staff').classList.contains('hidden')) {
                          const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                          if(me) { 
                              renderStaffCalendar(me.email); 
                              renderStaffRankList(me.email);
                              if(typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
-                             if(typeof renderStaffUpcomingSummary === "function") {
-                                 renderStaffUpcomingSummary(me.email);
+                             if(typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
                          }
                     }
                 }
             } else {
-                // STAFF MODE
+                // --- STAFF MODE ---
                 const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                 if (me) {
                     if (document.getElementById('view-staff').classList.contains('hidden')) {
@@ -224,12 +224,11 @@ function setupLiveSync(collegeId, mode) {
                         renderStaffCalendar(me.email);
                         renderStaffRankList(me.email);
                         if(typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
-                        if(typeof renderStaffUpcomingSummary === "function") {
-                            renderStaffUpcomingSummary(me.email);
-                        }
-                        // --- UPDATE STATS LIVE ---
+                        if(typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
+                        
+                        // UPDATE STATS
                         const done = getDutiesDoneCount(me.email);
-                        const pending = Math.max(0, calculateStaffTarget(me) - done); // FIX: No negative
+                        const pending = Math.max(0, calculateStaffTarget(me) - done); 
                         
                         document.getElementById('staff-view-pending').textContent = pending;
                         const completedEl = document.getElementById('staff-view-completed');
