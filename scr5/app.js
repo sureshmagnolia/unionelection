@@ -8027,6 +8027,18 @@ const modalCancelBtn = document.getElementById('modal-cancel-student');
 // 1. Session selection (Updated: Splits Course by Stream)
 editSessionSelect.addEventListener('change', () => {
     currentEditSession = editSessionSelect.value;
+    const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
+    if (sessionOpsContainer) {
+        if (currentEditSession) {
+            sessionOpsContainer.classList.remove('hidden');
+            // Reset Lock on change
+            isSessionOpsLocked = true;
+            updateSessionOpsLockUI();
+        } else {
+            sessionOpsContainer.classList.add('hidden');
+        }
+    }
+ 
     editDataContainer.innerHTML = '';
     editPaginationControls.classList.add('hidden');
     editSaveSection.classList.add('hidden');
@@ -11566,7 +11578,127 @@ function printDashboardSession(key, slot) {
     `);
     printWindow.document.close();
 }
-// Initial Call (in case we start on settings page or refresh)
+// ==========================================
+// 🗓️ BULK SESSION OPERATIONS (Reschedule/Delete)
+// ==========================================
+
+let isSessionOpsLocked = true;
+
+const btnSessionLock = document.getElementById('btn-session-ops-lock');
+const sessionOpsControls = document.getElementById('session-ops-controls');
+const sessionDateInput = document.getElementById('session-new-date');
+const sessionTimeInput = document.getElementById('session-new-time');
+const btnSessionReschedule = document.getElementById('btn-session-reschedule');
+const btnSessionDelete = document.getElementById('btn-session-delete');
+
+// 1. Toggle Lock
+if (btnSessionLock) {
+    btnSessionLock.addEventListener('click', () => {
+        isSessionOpsLocked = !isSessionOpsLocked;
+        updateSessionOpsLockUI();
+    });
+}
+
+function updateSessionOpsLockUI() {
+    if (!btnSessionLock || !sessionOpsControls) return;
+    
+    if (isSessionOpsLocked) {
+        // LOCKED STATE
+        btnSessionLock.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Locked</span>`;
+        btnSessionLock.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-200 transition shadow-sm";
+        
+        sessionOpsControls.classList.add('opacity-50', 'pointer-events-none');
+        [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete].forEach(el => el.disabled = true);
+        
+    } else {
+        // UNLOCKED STATE
+        btnSessionLock.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
+        btnSessionLock.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 transition shadow-sm font-bold";
+        
+        sessionOpsControls.classList.remove('opacity-50', 'pointer-events-none');
+        [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete].forEach(el => el.disabled = false);
+    }
+}
+
+// 2. Reschedule Logic
+if (btnSessionReschedule) {
+    btnSessionReschedule.addEventListener('click', async () => {
+        const rawDate = sessionDateInput.value;
+        const rawTime = sessionTimeInput.value;
+        const currentSession = editSessionSelect.value;
+
+        if (!currentSession) return alert("No session selected.");
+        if (!rawDate || !rawTime) return alert("Please select both New Date and New Time.");
+
+        // Format New Values
+        const [y, m, d] = rawDate.split('-');
+        const newDate = `${d}.${m}.${y}`;
+
+        const [h, min] = rawTime.split(':');
+        let hours = parseInt(h);
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
+        
+        const [oldDate, oldTime] = currentSession.split(' | ');
+
+        // Confirmation
+        const msg = `⚠️ RESCHEDULE CONFIRMATION ⚠️\n\nMove ALL students from:\n${oldDate} (${oldTime})\n\nTo:\n${newDate} (${newTime})?\n\nThis will update student records immediately.`;
+        
+        if (!confirm(msg)) return;
+        
+        const check = prompt("Type 'CHANGE' to confirm this bulk update:");
+        if (check !== 'CHANGE') return alert("Cancelled. Incorrect code.");
+
+        // Execute
+        let count = 0;
+        allStudentData.forEach(s => {
+            if (s.Date === oldDate && s.Time === oldTime) {
+                s.Date = newDate;
+                s.Time = newTime;
+                count++;
+            }
+        });
+
+        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+        alert(`✅ Successfully moved ${count} students to ${newDate} | ${newTime}.`);
+        
+        if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+        window.location.reload();
+    });
+}
+
+// 3. Delete Logic
+if (btnSessionDelete) {
+    btnSessionDelete.addEventListener('click', async () => {
+        const currentSession = editSessionSelect.value;
+        if (!currentSession) return alert("No session selected.");
+        
+        const [oldDate, oldTime] = currentSession.split(' | ');
+        
+        // Count targets
+        const targets = allStudentData.filter(s => s.Date === oldDate && s.Time === oldTime);
+        
+        const msg = `🛑 CRITICAL WARNING: DELETE SESSION 🛑\n\nYou are about to delete the ENTIRE session:\n${currentSession}\n\nThis will remove ${targets.length} student records permanently.\n\nAre you sure?`;
+        
+        if (!confirm(msg)) return;
+        
+        const check = prompt("Type 'DELETE' to confirm permanent deletion:");
+        if (check !== 'DELETE') return alert("Cancelled. Incorrect code.");
+        
+        // Execute
+        allStudentData = allStudentData.filter(s => !(s.Date === oldDate && s.Time === oldTime));
+        
+        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+        alert(`✅ Deleted ${targets.length} records. The session is removed.`);
+        
+        if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+        window.location.reload();
+    });
+}
+    
+    // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
 // --- NEW: Restore Last Active Tab ---
     function restoreActiveTab() {
