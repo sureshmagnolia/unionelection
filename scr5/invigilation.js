@@ -1334,10 +1334,11 @@ window.toggleAdvance = async function(dateStr, email, session) {
             await saveAdvanceUnavailability();
             renderStaffCalendar(email);
             
-            // *** FIX: Update List Live ***
+            // 1. Update List Live
             if(typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
             
-            openDayModal(dateStr, email); // Keep open on remove (User might want to add again)
+            // 2. CLOSE MODAL (Updated)
+            window.closeModal('day-detail-modal'); 
         }
     } else {
         // ADD (Open Modal for Reason)
@@ -1376,13 +1377,17 @@ window.toggleWholeDay = async function(dateStr, email) {
         if(confirm("Clear unavailability for the WHOLE DAY?")) {
             advanceUnavailability[dateStr].FN = fnList.filter(u => u.email !== email);
             advanceUnavailability[dateStr].AN = anList.filter(u => u.email !== email);
+            
+            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from Whole Day ${dateStr}.`);
+
             await saveAdvanceUnavailability();
             renderStaffCalendar(email);
             
-            // *** FIX: Update List Live ***
+            // 1. Update List Live
             if(typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
             
-            openDayModal(dateStr, email);
+            // 2. CLOSE MODAL (Updated)
+            window.closeModal('day-detail-modal');
         }
     } else {
         // MARK BOTH
