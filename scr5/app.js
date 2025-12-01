@@ -7761,7 +7761,7 @@ function loadScribeAllotment(sessionKey) {
 }
 
 
-// Render the list of scribe students for the selected session (WITH SERIAL NUMBER)
+// Render the list of scribe students for the selected session (Responsive Card View)
 function renderScribeAllotmentList(sessionKey) {
     const [date, time] = sessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -7772,7 +7772,7 @@ function renderScribeAllotmentList(sessionKey) {
 
     scribeAllotmentList.innerHTML = '';
     if (sessionScribeStudents.length === 0) {
-        scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm">No students from the global scribe list are in this session.</p>';
+        scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4 italic">No students from the global scribe list are in this session.</p>';
         return;
     }
 
@@ -7787,45 +7787,44 @@ function renderScribeAllotmentList(sessionKey) {
     
     uniqueSessionScribeStudents.sort((a,b) => a['Register Number'].localeCompare(b['Register Number']));
 
-    // --- NEW: Update Count Header with Badge ---
+    // Update Count Header with Badge
     const headerEl = document.getElementById('scribe-session-header');
     if (headerEl) {
-        headerEl.innerHTML = `Scribe Students for this Session: <span class="ml-2 bg-orange-100 text-orange-800 text-sm font-bold px-2 py-0.5 rounded-full border border-orange-200">${uniqueSessionScribeStudents.length}</span>`;
+        headerEl.innerHTML = `Scribe Students: <span class="ml-2 bg-orange-100 text-orange-800 text-xs font-bold px-2 py-0.5 rounded-full border border-orange-200">${uniqueSessionScribeStudents.length}</span>`;
     }
-    // -------------------------------------------
-    // --- NEW: Get Serial Map (Needed to look up serial number when rendering) ---
+
+    // Get Serial Map
     const roomSerialMap = getRoomSerialMap(sessionKey);
-    // ---------------------------------------------------------------------------
 
     uniqueSessionScribeStudents.forEach(student => {
         const regNo = student['Register Number'];
         const allottedRoom = currentScribeAllotment[regNo];
         
         const item = document.createElement('div');
-        item.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4 flex justify-between items-center';
+        // RESPONSIVE: Stack vertically on mobile (flex-col), Horizontal on desktop (md:flex-row)
+        item.className = 'bg-white border border-gray-200 rounded-lg p-3 shadow-sm mb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:shadow-md transition';
         
-        let roomHtml = '';
+        let actionContent = '';
+        
         if (allottedRoom) {
-            // --- NEW: Format Room Display with Serial Number ---
             const serialNo = roomSerialMap[allottedRoom] || '-';
             const roomInfo = currentRoomConfig[allottedRoom];
-            const location = (roomInfo && roomInfo.location) ? ` (${roomInfo.location})` : '';
-            const displayRoom = `${serialNo} | ${allottedRoom}${location}`;
-            // ----------------------------------------------------
+            const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
+            const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
 
-            roomHtml = `
-                <div>
-                    <span class="text-sm font-medium text-gray-700">Allotted Room:</span>
-                    <span class="font-bold text-blue-600 ml-2">${displayRoom}</span>
+            actionContent = `
+                <div class="w-full md:w-auto bg-green-50 border border-green-100 rounded p-2 md:bg-transparent md:border-0 md:p-0 flex flex-col md:flex-row md:items-center gap-2">
+                    <div class="text-xs text-gray-500 uppercase font-bold md:hidden">Allotted Room</div>
+                    <div class="text-sm font-bold text-green-700 md:text-gray-800 md:mr-4">${displayRoom}</div>
+                    <button class="w-full md:w-auto inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-1.5 px-3 text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50"
+                            onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
+                        Change
+                    </button>
                 </div>
-                <button class="ml-4 inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                        onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
-                    Change
-                </button>
             `;
         } else {
-            roomHtml = `
-                <button class="inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+            actionContent = `
+                <button class="w-full md:w-auto inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
                     Assign Room
                 </button>
@@ -7833,18 +7832,23 @@ function renderScribeAllotmentList(sessionKey) {
         }
         
         item.innerHTML = `
-            <div>
-                <h4 class="font-semibold text-gray-800">${regNo}</h4>
-                <p class="text-sm text-gray-600">${student.Name}</p>
+            <div class="flex items-center gap-3 w-full md:w-auto">
+                <div class="h-10 w-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs shrink-0 border border-orange-200">
+                    Scr
+                </div>
+                <div class="min-w-0">
+                    <h4 class="font-bold text-gray-800 text-sm font-mono">${regNo}</h4>
+                    <p class="text-xs text-gray-600 truncate font-medium">${student.Name}</p>
+                </div>
             </div>
-            <div class="flex items-center">
-                ${roomHtml}
+            
+            <div class="w-full md:w-auto border-t md:border-0 border-gray-100 pt-2 md:pt-0 mt-1 md:mt-0">
+                ${actionContent}
             </div>
         `;
         scribeAllotmentList.appendChild(item);
     });
 }
-
 // Find available rooms for scribes
 async function findAvailableRooms(sessionKey) {
     
