@@ -5241,7 +5241,6 @@ window.saveManualAllocation = async function() {
         renderSlotsGridAdmin();
     }
 }
-
 window.switchAdminTab = function(tabName) {
     const tabs = ['staff', 'slots', 'attendance'];
     
@@ -5250,26 +5249,21 @@ window.switchAdminTab = function(tabName) {
         const btn = document.getElementById(`tab-btn-${t}`);
         
         if (t === tabName) {
-            // --- ACTIVE STATE ---
+            // --- ACTIVE STATE (White Card + Shadow) ---
             if(content) content.classList.remove('hidden');
             if(btn) {
-                // Remove Inactive Classes
-                btn.classList.remove('font-medium', 'text-gray-500', 'border-transparent', 'hover:text-gray-700');
-                // Add Active Classes
-                btn.classList.add('font-bold', 'text-indigo-600', 'border-b-2', 'border-indigo-600');
+                btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition shadow bg-white text-indigo-600 text-center";
             }
         } else {
-            // --- INACTIVE STATE ---
+            // --- INACTIVE STATE (Gray + No Shadow) ---
             if(content) content.classList.add('hidden');
             if(btn) {
-                // Remove Active Classes
-                btn.classList.remove('font-bold', 'text-indigo-600', 'border-indigo-600');
-                // Add Inactive Classes
-                btn.classList.add('font-medium', 'text-gray-500', 'border-transparent', 'hover:text-gray-700', 'border-b-2');
+                btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center";
             }
         }
     });
 }
+
 // --- MANUAL ALLOCATION HELPER: Unselect All ---
 window.unselectAllManualStaff = function() {
     const checkboxes = document.querySelectorAll('.manual-chk');
