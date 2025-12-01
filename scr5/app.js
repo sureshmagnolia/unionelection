@@ -8097,7 +8097,11 @@ editSessionSelect.addEventListener('change', () => {
 editCourseSelect.addEventListener('change', () => {
     const selectedValue = editCourseSelect.value; // "CourseName|StreamName"
     editCurrentPage = 1;
-    hasUnsavedEdits = false; 
+    if(typeof setUnsavedChanges === 'function') {
+        setUnsavedChanges(false); 
+    } else {
+        hasUnsavedEdits = false;
+    }
 
     let countDisplay = document.getElementById('edit-student-count');
     if (!countDisplay && addNewStudentBtn) {
@@ -8516,13 +8520,30 @@ saveEditDataButton.addEventListener('click', () => {
     }
 });
 
-// 11. Helper function to manage "unsaved" status (Unchanged)
+// 11. Helper function to manage "unsaved" status (Auto-Disable Button)
 function setUnsavedChanges(status) {
     hasUnsavedEdits = status;
+    const btn = document.getElementById('save-edit-data-button');
+    const statusText = document.getElementById('edit-data-status');
+    
     if (status) {
-        editDataStatus.textContent = 'You have unsaved changes. Click "Save All Changes" to commit.';
+        // STATE: CHANGES DETECTED -> ENABLE BUTTON
+        if(statusText) statusText.textContent = 'You have unsaved changes.';
+        if(btn) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+            btn.classList.add('bg-green-600', 'hover:bg-green-700');
+            btn.textContent = "Save All Changes to Local Storage";
+        }
     } else {
-        editDataStatus.textContent = 'All changes saved.'; // Give clear feedback
+        // STATE: NO CHANGES -> DISABLE BUTTON
+        if(statusText) statusText.textContent = 'No unsaved changes.';
+        if(btn) {
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+            btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+            btn.textContent = "No Changes to Save";
+        }
     }
 }
 // ==========================================
