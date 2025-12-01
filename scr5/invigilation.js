@@ -648,6 +648,7 @@ function renderSlotsGridAdmin() {
     // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
+// --- RENDER STAFF LIST (Responsive + Scroll Spacer) ---
 function renderStaffTable() {
     if(!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
@@ -753,6 +754,13 @@ function renderStaffTable() {
         `;
         ui.staffTableBody.appendChild(row);
     });
+
+    // --- MOBILE SPACER ROW ---
+    // Adds a 32 (8rem) empty block at the bottom ONLY on mobile
+    const spacer = document.createElement('tr');
+    spacer.className = "block md:hidden h-32 border-none bg-transparent pointer-events-none";
+    spacer.innerHTML = `<td class="block border-none p-0"></td>`;
+    ui.staffTableBody.appendChild(spacer);
 }
 function renderStaffRankList(myEmail) {
     // Target BOTH lists (Desktop & Mobile)
