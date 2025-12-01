@@ -494,7 +494,7 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
         btn.classList.add('bg-red-600');
     });
 }
-// --- RENDER ADMIN SLOTS (Tidy Mobile View + Scroll Fix) ---
+// --- RENDER ADMIN SLOTS (Responsive Header + Scroll Fix) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
@@ -504,20 +504,20 @@ function renderSlotsGridAdmin() {
     const currentMonthStr = monthNames[currentAdminDate.getMonth()];
     const currentYear = currentAdminDate.getFullYear();
 
-    // --- NAVIGATION BAR (Sticky Top) ---
+    // --- NAVIGATION BAR (Compact for Mobile) ---
     const navHtml = `
-        <div class="col-span-full flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200 shadow-sm mb-2 sticky top-0 z-30 mx-1 mt-1">
-            <button onclick="changeAdminMonth(-1)" class="px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded border border-gray-300 flex items-center gap-1 transition">
+        <div class="col-span-full flex justify-between items-center bg-white p-2 md:p-3 rounded-lg border border-gray-200 shadow-sm mb-2 sticky top-0 z-30 mx-1 mt-1">
+            <button onclick="changeAdminMonth(-1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded border border-gray-300 flex items-center gap-1 transition">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-                Prev
+                <span class="hidden md:inline">Prev</span>
             </button>
             
-            <h3 class="text-sm md:text-lg font-black text-indigo-800 uppercase tracking-wide flex items-center gap-2">
-                <span>📅</span> ${currentMonthStr} '${String(currentYear).slice(-2)}
+            <h3 class="text-sm md:text-lg font-black text-indigo-800 uppercase tracking-wide flex items-center gap-1 md:gap-2 whitespace-nowrap">
+                <span>📅</span> ${currentMonthStr} <span class="text-gray-500 text-xs md:text-lg">'${String(currentYear).slice(-2)}</span>
             </h3>
             
-            <button onclick="changeAdminMonth(1)" class="px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded border border-gray-300 flex items-center gap-1 transition">
-                Next
+            <button onclick="changeAdminMonth(1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded border border-gray-300 flex items-center gap-1 transition">
+                <span class="hidden md:inline">Next</span>
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
             </button>
         </div>
