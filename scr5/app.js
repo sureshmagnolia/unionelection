@@ -1143,6 +1143,29 @@ const restoreStatus = document.getElementById('restore-status');
 const toggleButton = document.getElementById('sidebar-toggle');
 const sidebar = document.getElementById('main-nav');
 
+// --- INJECT DOWNLOAD BUTTON ---
+const btnDownloadReport = document.createElement('button');
+btnDownloadReport.id = 'download-report-pdf-btn';
+btnDownloadReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700";
+btnDownloadReport.innerHTML = `⬇️ Download PDF`;
+// Insert it next to the Print button
+if (finalPrintButton && finalPrintButton.parentNode) {
+    finalPrintButton.parentNode.insertBefore(btnDownloadReport, finalPrintButton.nextSibling);
+}
+
+// Attach Listener
+btnDownloadReport.addEventListener('click', () => {
+    const content = document.getElementById('report-output-area').innerHTML;
+    if (!content.trim()) return alert("No report generated.");
+    
+    // Determine filename based on global state or default
+    const filename = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
+                     ? lastGeneratedReportType 
+                     : "ExamFlow_Report";
+                     
+    openPdfPreview(content, filename);
+});
+    
 if (toggleButton && sidebar) {
     toggleButton.addEventListener('click', () => {
         // Check if we are on Mobile (window width < 768px)
@@ -11169,87 +11192,13 @@ function loadInitialData() {
         });
     }
 
-   // --- UPDATED PRINT LOGIC: Open Clean Window ---
+   // --- UPDATED BILL PRINT: Uses Unified PDF Preview ---
     if (btnPrintBill) {
         btnPrintBill.addEventListener('click', () => {
-            // 1. Get the bill content only
             const billContent = document.getElementById('remuneration-output').innerHTML;
-            if (!billContent.trim()) return alert("No bill generated to print.");
-
-            // 2. Open a new blank window
-            const printWindow = window.open('', '_blank');
+            if (!billContent.trim()) return alert("No bill generated.");
             
-            // 3. Write the clean HTML structure
-            printWindow.document.write(`
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Print Bill</title>
-                    <script src="https://cdn.tailwindcss.com"><\/script>
-                    <style>
-                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-                        body { 
-                            font-family: 'Inter', sans-serif; 
-                            background: white; 
-                        }
-
-                        /* PRINT STYLES (A4 Portrait) */
-                        @media print {
-                            @page { 
-                                size: A4 portrait; 
-                                margin: 15mm; 
-                            }
-                            body { 
-                                margin: 0; 
-                                padding: 0; 
-                                -webkit-print-color-adjust: exact; 
-                            }
-                            /* Reset container styles for print */
-                            .print-page { 
-                                border: none !important; 
-                                shadow: none !important; 
-                                width: 100% !important; 
-                                max-width: 100% !important;
-                                margin: 0 !important; 
-                                padding: 0 !important; 
-                                page-break-after: always; 
-                            }
-                            .print-page:last-child { 
-                                page-break-after: auto; 
-                            }
-                            /* Hide any accidental UI elements */
-                            button, .no-print { 
-                                display: none !important; 
-                            }
-                        }
-
-                        /* SCREEN PREVIEW STYLES (Inside the pop-up) */
-                        .print-page {
-                            max-width: 210mm;
-                            margin: 20px auto;
-                            padding: 40px;
-                            border: 1px solid #ddd;
-                            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                        }
-                    </style>
-                </head>
-                <body>
-                    ${billContent}
-                    <script>
-                        // Auto-print when loaded
-                        window.onload = function() { 
-                            setTimeout(() => {
-                                window.print();
-                                // Optional: window.close(); 
-                            }, 500);
-                        };
-                    <\/script>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
+            openPdfPreview(billContent, "Remuneration_Bill");
         });
     }
 
@@ -11718,7 +11667,114 @@ if (btnSessionDelete) {
         window.location.reload();
     });
 }
-    
+// ==========================================
+// 📄 PDF PREVIEW & DOWNLOADER (Global Helper)
+// ==========================================
+window.openPdfPreview = function(contentHtml, filenamePrefix) {
+    // 1. PREPARE CONTENT
+    // We strip any existing fixed-height styles to prevent blank pages
+    const cleanContent = contentHtml.replace(/min-height:\s*297mm/g, 'min-height: auto');
+    const dateStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+    const filename = `${filenamePrefix}_${dateStr}.pdf`;
+
+    const w = window.open('', '_blank');
+    w.document.write(`
+        <html>
+        <head>
+            <title>${filename}</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+                @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
+                
+                body { font-family: 'Inter', sans-serif; background: #f3f4f6; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+                
+                /* CONTROL BAR */
+                #controls {
+                    margin-bottom: 20px; background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                    position: sticky; top: 10px; z-index: 50;
+                }
+                .btn {
+                    padding: 10px 20px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin: 0 5px;
+                }
+                .btn-print { background-color: #374151; color: white; }
+                .btn-download { background-color: #2563eb; color: white; }
+                .btn:hover { opacity: 0.9; }
+
+                /* DOCUMENT CONTAINER */
+                #pdf-content {
+                    width: 210mm; /* A4 Width */
+                    background: white;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                }
+
+                /* RESET PAGE STYLES FOR PDF */
+                /* This ensures pages flow naturally without forcing extra blank ones */
+                .print-page, .print-page-daywise, .print-page-sticker {
+                    width: 100% !important;
+                    height: auto !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 15mm !important; /* Uniform Padding */
+                    border: none !important;
+                    box-shadow: none !important;
+                    page-break-after: always;
+                    box-sizing: border-box;
+                }
+                
+                /* Hide last page break */
+                .print-page:last-child { page-break-after: auto; }
+
+                /* TABLE STYLES */
+                table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+                th, td { border: 1px solid #000; padding: 6px; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+
+                /* PRINT HIDING */
+                @media print {
+                    body { background: white; padding: 0; }
+                    #controls { display: none !important; }
+                    #pdf-content { box-shadow: none; width: 100%; }
+                    @page { margin: 0; } /* We handle margins in padding */
+                }
+            </style>
+        </head>
+        <body>
+            <div id="controls">
+                <button class="btn btn-print" onclick="window.print()">🖨️ Print</button>
+                <button class="btn btn-download" onclick="downloadPDF()">⬇️ Download PDF</button>
+            </div>
+
+            <div id="pdf-content">
+                ${cleanContent}
+            </div>
+
+            <script>
+                function downloadPDF() {
+                    const element = document.getElementById('pdf-content');
+                    const btn = document.querySelector('.btn-download');
+                    btn.textContent = "Generating...";
+                    btn.disabled = true;
+
+                    const opt = {
+                        margin: 0, // We use padding inside .print-page instead
+                        filename: '${filename}',
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                    };
+
+                    html2pdf().set(opt).from(element).save().then(() => {
+                        btn.textContent = "✅ Downloaded";
+                        setTimeout(() => { btn.textContent = "⬇️ Download PDF"; btn.disabled = false; }, 2000);
+                    });
+                }
+            <\/script>
+        </body>
+        </html>
+    `);
+    w.document.close();
+}    
     // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
 // --- NEW: Restore Last Active Tab ---
