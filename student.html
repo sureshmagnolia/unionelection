@@ -210,6 +210,17 @@
         </div>
     </div>
 
+            <div id="captcha-box" class="max-w-md mx-auto bg-gray-100 p-4 rounded-lg mb-4 text-center border border-gray-300">
+                <label class="block text-gray-700 font-bold mb-2">Security Check</label>
+                <div class="flex justify-center items-center gap-3">
+                    <span class="text-xl font-mono bg-white px-3 py-1 rounded border">
+                        <span id="math-q">5 + 3</span> = ?
+                    </span>
+                    <input type="number" id="math-a" class="w-20 p-1 border rounded text-center font-bold" placeholder="Ans">
+                </div>
+                <small class="text-gray-500">Solve this to enable submission</small>
+            </div>
+
     <div id="btn-print-group" class="text-center mt-8 space-x-4 border-t pt-6">
         <button id="btn-edit" onclick="window.App.Student.editForm()" class="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600">Edit Details</button>
         <button id="btn-submit" onclick="window.App.Student.finalSubmit()" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-bold shadow-lg">Confirm & Submit</button>
