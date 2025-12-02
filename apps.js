@@ -457,65 +457,284 @@ const App = {
             win.print();
         },
 
-      
-        // --- MODULE D: TEAM ---
-        loadTeam: () => {
-            if(unsubTeam) unsubTeam();
-            unsubTeam = onSnapshot(collection(db, "admins"), (snapshot) => {
-                const list = document.getElementById('admin-list');
-                if(!list) return;
-                list.innerHTML = `<li class="list-group-item active">sureshmagnolia@gmail.com (Super)</li>`;
-                snapshot.forEach(doc => {
-                    if(doc.id !== 'sureshmagnolia@gmail.com') {
-                        list.innerHTML += `<li class="list-group-item d-flex justify-content-between">${doc.id} <button class="btn btn-sm btn-danger" onclick="window.App.Admin.removeTeamMember('${doc.id}')">X</button></li>`;
+      // ------------------------------------------------
+        // MODULE: BOOTHS & ROOMS (Logistics Engine)
+        // ------------------------------------------------
+        
+        // 1. Generate Sequential Booths (Booth 1, Booth 2...)
+        generateBooths: async () => {
+            const count = parseInt(document.getElementById('gen-count').value);
+            if (!count || count < 1) return alert("Enter a valid number");
+            
+            if(!confirm(`This will create ${count} new booths. Existing booths will be kept. Continue?`)) return;
+
+            const batch = writeBatch(db);
+            
+            for(let i = 1; i <= count; i++) {
+                // ID: booth_1, Name: Booth 1
+                const docRef = doc(db, "booths", `booth_${i}`);
+                batch.set(docRef, {
+                    name: `Booth ${i}`,
+                    roomId: "",      // Empty initially
+                    roomName: "Not Assigned",
+                    location: "",
+                    voterCount: 0,
+                    assignedDepts: [],
+                    assignedClasses: []
+                }, { merge: true }); // Merge ensures we don't wipe existing voter data if we re-run
+            }
+
+            try {
+                await batch.commit();
+                alert(`Created ${count} Booths successfully.`);
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        },
+
+        // 2. Room Inventory Management
+        addRoom: async () => {
+            const num = document.getElementById('r-no').value;
+            const loc = document.getElementById('r-loc').value;
+            if(!num || !loc) return;
+
+            await addDoc(collection(db, "rooms"), { number: num, location: loc });
+            document.getElementById('r-no').value = '';
+            document.getElementById('r-loc').value = '';
+        },
+
+        deleteRoom: async (id) => {
+            if(confirm("Remove this room from inventory?")) await deleteDoc(doc(db, "rooms", id));
+        },
+
+        // 3. Load Data (Booths + Rooms)
+        loadBooths: () => {
+            // A. Listen to ROOMS first (to populate dropdowns)
+            onSnapshot(collection(db, "rooms"), (roomSnap) => {
+                const rooms = [];
+                roomSnap.forEach(doc => rooms.push({ id: doc.id, ...doc.data() }));
+                
+                // Render Room List (Top Right Box)
+                const roomTbody = document.getElementById('rooms-tbody');
+                if(roomTbody) {
+                    roomTbody.innerHTML = rooms.map(r => `
+                        <tr>
+                            <td>${r.number}</td>
+                            <td>${r.location}</td>
+                            <td><button class="btn btn-sm btn-link text-danger p-0" onclick="window.App.Admin.deleteRoom('${r.id}')">×</button></td>
+                        </tr>
+                    `).join('');
+                }
+
+                // B. Listen to BOOTHS
+                onSnapshot(collection(db, "booths"), (boothSnap) => {
+                    const booths = [];
+                    boothSnap.forEach(doc => booths.push({ id: doc.id, ...doc.data() }));
+                    
+                    // Sort naturally: Booth 1, Booth 2, Booth 10 (not Booth 1, Booth 10, Booth 2)
+                    booths.sort((a,b) => {
+                        const numA = parseInt(a.name.replace('Booth ', ''));
+                        const numB = parseInt(b.name.replace('Booth ', ''));
+                        return numA - numB;
+                    });
+
+                    const boothTbody = document.getElementById('booths-tbody');
+                    if(boothTbody) {
+                        if(booths.length === 0) {
+                            boothTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No booths generated yet. Use "Define Scale" above.</td></tr>';
+                            return;
+                        }
+
+                        boothTbody.innerHTML = booths.map(b => {
+                            // Create Dropdown Options
+                            let options = `<option value="">-- Select Room --</option>`;
+                            rooms.forEach(r => {
+                                const isSelected = b.roomId === r.id ? 'selected' : '';
+                                options += `<option value="${r.id}" ${isSelected}>${r.number} - ${r.location}</option>`;
+                            });
+
+                            return `
+                                <tr>
+                                    <td class="fw-bold fs-5">${b.name}</td>
+                                    <td>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="badge bg-primary rounded-pill">${b.voterCount || 0} Voters</span>
+                                        </div>
+                                        <div class="small text-muted mt-1" style="line-height:1.2; font-size: 0.75rem;">
+                                            ${b.assignedDepts ? b.assignedDepts.join(', ') : '-'}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <select class="form-select" onchange="window.App.Admin.assignRoom('${b.id}', this.value)">
+                                            ${options}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-dark w-100" onclick="window.App.Admin.printBoothReport('${b.id}')">🖨 Print</button>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
                     }
                 });
             });
         },
-        addTeamMember: async () => {
-            const email = document.getElementById('new-admin-email').value.trim().toLowerCase();
-            if(email) await setDoc(doc(db, "admins", email), { role: "admin" });
+
+        // 4. Assign Room Logic (Updates DB when dropdown changes)
+        assignRoom: async (boothId, roomId) => {
+            if(!roomId) {
+                // Clear assignment
+                await setDoc(doc(db, "booths", boothId), { roomId: "", roomName: "Not Assigned", location: "" }, { merge: true });
+                return;
+            }
+
+            // Get Room Details
+            const roomSnap = await getDoc(doc(db, "rooms", roomId));
+            const room = roomSnap.data();
+
+            // Update Booth
+            await setDoc(doc(db, "booths", boothId), { 
+                roomId: roomId, 
+                roomName: room.number, 
+                location: room.location 
+            }, { merge: true });
         },
-        removeTeamMember: async (email) => {
-            if(confirm("Remove admin?")) await deleteDoc(doc(db, "admins", email));
-        },
 
-        // --- MODULE E: BOOTHS ---
-        loadBooths: () => {
-            const tbody = document.getElementById('booths-tbody');
-            if(!tbody) return;
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
-            onSnapshot(collection(db, "booths"), (snapshot) => {
-                const booths = [];
-                snapshot.forEach(doc => booths.push({ id: doc.id, ...doc.data() }));
-                booths.sort((a,b) => a.name.localeCompare(b.name));
+        // 5. HYBRID LOAD BALANCER (Kept as requested)
+        autoAssignBooths: async () => {
+            if(!confirm("⚠️ START HYBRID ALLOCATION?")) return;
+            const statusEl = document.getElementById('student-count');
+            statusEl.innerText = "Analyzing data...";
 
-                tbody.innerHTML = '';
-                if(booths.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center">No booths created yet.</td></tr>'; return; }
+            const boothSnap = await getDocs(collection(db, "booths"));
+            const booths = [];
+            boothSnap.forEach(doc => booths.push({ id: doc.id, ...doc.data(), currentLoad: 0, assignedUnits: [], studentUpdates: [] }));
 
-                booths.forEach(b => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td><span class="fw-bold">${b.name}</span><br><small class="text-muted">${b.location}</small></td>
-                        <td><span class="badge bg-primary fs-6">${b.voterCount || 0}</span><div class="small text-muted mt-1" style="max-width:200px; overflow:hidden;">${b.assignedDepts ? b.assignedDepts.join(', ') : '-'}</div></td>
-                        <td><small>Start: <strong>${b.serialStart || '-'}</strong></small><br><small>End: <strong>${b.serialEnd || '-'}</strong></small></td>
-                        <td><button class="btn btn-sm btn-outline-dark" onclick="window.App.Admin.printBoothReport('${b.id}')">🖨</button><button class="btn btn-sm btn-danger" onclick="window.App.Admin.deleteBooth('${b.id}')">X</button></td>
-                    `;
-                    tbody.appendChild(tr);
-                });
+            if(booths.length === 0) return alert("Generate booths first!");
+
+            const studentSnap = await getDocs(collection(db, "students"));
+            const allStudents = [];
+            studentSnap.forEach(doc => allStudents.push(doc.data()));
+
+            // Group by Dept
+            const deptMap = {};
+            allStudents.forEach(s => {
+                const d = s.dept.trim().toUpperCase(); 
+                if(!deptMap[d]) deptMap[d] = [];
+                deptMap[d].push(s);
             });
+
+            // Find Giant
+            let largestDeptName = "";
+            let maxCount = 0;
+            for (const d in deptMap) {
+                if (deptMap[d].length > maxCount) {
+                    maxCount = deptMap[d].length;
+                    largestDeptName = d;
+                }
+            }
+
+            const allocationUnits = [];
+            for (const deptName in deptMap) {
+                const students = deptMap[deptName];
+                if (deptName === largestDeptName) {
+                    // Split Giant
+                    const classMap = {};
+                    students.forEach(s => {
+                        const classKey = `${s.dept} ${s.year} ${s.stream}`.toUpperCase();
+                        if(!classMap[classKey]) classMap[classKey] = [];
+                        classMap[classKey].push(s);
+                    });
+                    for(const cKey in classMap) {
+                        allocationUnits.push({ name: cKey, students: classMap[cKey], count: classMap[cKey].length });
+                    }
+                } else {
+                    allocationUnits.push({ name: deptName, students: students, count: students.length });
+                }
+            }
+
+            allocationUnits.sort((a, b) => b.count - a.count);
+
+            allocationUnits.forEach(unit => {
+                booths.sort((a, b) => a.currentLoad - b.currentLoad);
+                const target = booths[0];
+                target.assignedUnits.push(unit.name);
+                target.currentLoad += unit.count;
+                target.studentUpdates.push(...unit.students);
+            });
+
+            statusEl.innerText = "Saving allocations...";
+            try {
+                const batchSize = 450;
+                let batch = writeBatch(db);
+                let opCount = 0;
+
+                for (const b of booths) {
+                    const bRef = doc(db, "booths", b.id);
+                    batch.update(bRef, { voterCount: b.currentLoad, assignedDepts: b.assignedUnits });
+                    opCount++;
+                }
+
+                for (const b of booths) {
+                    for (const s of b.studentUpdates) {
+                        const sRef = doc(db, "students", s.admNo.toString());
+                        batch.update(sRef, { boothId: b.id, boothName: b.name });
+                        opCount++;
+                        if (opCount >= batchSize) { await batch.commit(); batch = writeBatch(db); opCount = 0; }
+                    }
+                }
+                if (opCount > 0) await batch.commit();
+                alert(`Allocation Complete! Giant Dept (${largestDeptName}) was split.`);
+                statusEl.innerText = "Allocation Finished.";
+            } catch(e) { alert("Error: " + e.message); }
         },
-        addBooth: async () => {
-            const name = document.getElementById('b-name').value;
-            const loc = document.getElementById('b-loc').value;
-            if(!name || !loc) return;
-            await addDoc(collection(db, "booths"), { name: name, location: loc, voterCount: 0, assignedDepts: [] });
-            document.getElementById('b-name').value = '';
-            document.getElementById('b-loc').value = '';
-        },
-        deleteBooth: async (id) => {
-            if(confirm("Delete this booth?")) await deleteDoc(doc(db, "booths", id));
-        },
+
+        // 6. Print Report (Updated to show Room Info)
+        printBoothReport: async (boothId) => {
+            const bSnap = await getDoc(doc(db, "booths", boothId));
+            const booth = bSnap.data();
+            const q = await getDocs(collection(db, "students"));
+            const voters = [];
+            q.forEach(doc => { const s = doc.data(); if(s.boothId === boothId) voters.push(s); });
+            voters.sort((a,b) => a.dept.localeCompare(b.dept) || a.year - b.year || a.name.localeCompare(b.name));
+            
+            if(voters.length === 0) return alert("No voters assigned.");
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Booth Report - ${booth.name}</title>
+                    <style>
+                        body { font-family: sans-serif; padding: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th, td { border: 1px solid black; padding: 5px; font-size: 12px; }
+                        .header { text-align: center; margin-bottom: 20px; }
+                        .stats { margin-top: 20px; border: 1px solid black; padding: 10px; background: #f0f0f0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>Presiding Officer's Report</h2>
+                        <h1>${booth.name}</h1>
+                        <h3>Location: ${booth.roomName || 'Not Assigned'} (${booth.location || 'Unknown'})</h3>
+                    </div>
+                    <div class="stats">
+                        <strong>Assigned Groups:</strong> ${booth.assignedDepts ? booth.assignedDepts.join(', ') : 'None'}<br>
+                        <strong>Total Voters:</strong> ${voters.length}<br>
+                        <strong>Ballot Range:</strong> From ______ To ______
+                    </div>
+                    <h3>Voter List</h3>
+                    <table><thead><tr><th>Sl</th><th>Adm</th><th>Name</th><th>Class</th><th>Sign</th></tr></thead>
+                    <tbody>
+                        ${voters.map((v, i) => `<tr><td>${i+1}</td><td>${v.admNo}</td><td>${v.name}</td><td>${v.dept} ${v.year} ${v.stream}</td><td></td></tr>`).join('')}
+                    </tbody></table>
+                </body></html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+        
         // ----------------------------------------------------------------
         // HYBRID LOAD BALANCER: Split Only Largest Dept
         // ----------------------------------------------------------------
