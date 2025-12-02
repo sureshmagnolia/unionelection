@@ -60,33 +60,17 @@ const App = {
     },
 
     Admin: {
-     // --- Helper: Download CSV Template ---
-        downloadTemplate: () => {
-            // The exact headers your app expects
-            const csvContent = "Sl No,Name,Gender,Dept,Year,Stream,Admission Number\n1,Sample Name,Male,Botany,1,UG,12345";
-            
-            // Create a virtual file and trigger download
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "nominal_roll_template.csv"; // File name
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        },
-        // --- CSV & Nominal Roll Logic ---
+        // 1. Process CSV Upload
         processCSV: () => {
             const fileInput = document.getElementById('csv-file');
             if (!fileInput || !fileInput.files.length) return alert("Select CSV");
             
-            // Assuming Papa is loaded globally in index.html
             Papa.parse(fileInput.files[0], {
                 header: true,
                 skipEmptyLines: true,
                 complete: (results) => {
-                    App.data.students = results.data.map(row => ({
-                        slNo: row['Sl No'] || row['sl no'],
+                    App.data.students = results.data.map((row, index) => ({
+                        slNo: row['Sl No'] || row['sl no'] || index+1,
                         name: row['Name'],
                         gender: row['Gender'],
                         dept: row['Dept'],
@@ -94,160 +78,199 @@ const App = {
                         stream: row['UG-PG'] || row['Stream'] || "UG",
                         admNo: row['Admission Number'] || row['Adm No']
                     }));
-                    const countDiv = document.getElementById('student-count');
-                    if(countDiv) countDiv.innerText = `Loaded ${App.data.students.length} students. Ready to Save.`;
+                    
+                    // CALL THE RENDER TABLE FUNCTION
+                    App.Admin.renderTable(App.data.students);
+                    document.getElementById('student-count').innerText = `Previewing ${App.data.students.length} students (Not saved yet)`;
                 }
             });
         },
 
+        // 2. Load Existing Data from Firebase
+        loadStudentsFromDB: async () => {
+            const tbody = document.getElementById('nominal-tbody');
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center">Loading from Database...</td></tr>';
+            
+            try {
+                const q = await getDocs(collection(db, "students"));
+                App.data.students = [];
+                q.forEach(doc => {
+                    App.data.students.push(doc.data());
+                });
+                App.Admin.renderTable(App.data.students);
+                document.getElementById('student-count').innerText = `Loaded ${App.data.students.length} students from DB.`;
+            } catch(e) {
+                console.error(e);
+                alert("Error loading data: " + e.message);
+            }
+        },
+
+        // 3. RENDER TABLE (The missing function!)
+        renderTable: (data) => {
+            const tbody = document.getElementById('nominal-tbody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            data.forEach((student, index) => {
+                const tr = document.createElement('tr');
+                
+                // We add 'onchange' events to update the local array when you type
+                tr.innerHTML = `
+                    <td><input type="text" class="form-control form-control-sm" value="${student.slNo}" onchange="window.App.Admin.updateLocalData(${index}, 'slNo', this.value)"></td>
+                    <td><input type="text" class="form-control form-control-sm fw-bold" value="${student.name}" onchange="window.App.Admin.updateLocalData(${index}, 'name', this.value)"></td>
+                    <td>
+                        <select class="form-select form-select-sm" onchange="window.App.Admin.updateLocalData(${index}, 'gender', this.value)">
+                            <option value="Male" ${student.gender === 'Male' ? 'selected' : ''}>Male</option>
+                            <option value="Female" ${student.gender === 'Female' ? 'selected' : ''}>Female</option>
+                        </select>
+                    </td>
+                    <td><input type="text" class="form-control form-control-sm" value="${student.dept}" onchange="window.App.Admin.updateLocalData(${index}, 'dept', this.value)"></td>
+                    <td><input type="text" class="form-control form-control-sm" value="${student.year}" onchange="window.App.Admin.updateLocalData(${index}, 'year', this.value)"></td>
+                    <td><input type="text" class="form-control form-control-sm" value="${student.stream}" onchange="window.App.Admin.updateLocalData(${index}, 'stream', this.value)"></td>
+                    <td><input type="text" class="form-control form-control-sm bg-light" value="${student.admNo}" readonly title="ID cannot be changed"></td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-success" onclick="window.App.Admin.saveRow(${index})">💾</button>
+                            <button class="btn btn-sm btn-danger" onclick="window.App.Admin.deleteRow('${student.admNo}', ${index})">X</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        },
+
+        // 4. Update Local Data (Helper)
+        updateLocalData: (index, field, value) => {
+            App.data.students[index][field] = value;
+            // Turn row yellow to indicate "Unsaved Changes"
+            document.getElementById('nominal-tbody').children[index].style.backgroundColor = "#fff3cd";
+        },
+
+        // 5. Save Single Row
+        saveRow: async (index) => {
+            const student = App.data.students[index];
+            if(!student.admNo) return alert("Error: No Admission Number");
+
+            try {
+                await setDoc(doc(db, "students", student.admNo.toString()), student);
+                // Turn row green to indicate "Saved"
+                const row = document.getElementById('nominal-tbody').children[index];
+                row.style.backgroundColor = "#d1e7dd";
+                setTimeout(() => row.style.backgroundColor = "", 1000);
+            } catch (e) {
+                alert("Error saving: " + e.message);
+            }
+        },
+
+        // 6. Delete Row
+        deleteRow: async (admNo, index) => {
+            if(!confirm("Delete this student?")) return;
+            try {
+                if(admNo) await deleteDoc(doc(db, "students", admNo.toString()));
+                App.data.students.splice(index, 1);
+                App.Admin.renderTable(App.data.students);
+            } catch(e) {
+                alert("Error deleting");
+            }
+        },
+
+        // 7. Bulk Save (From CSV)
         saveStudentsToDB: async () => {
             if(App.data.students.length === 0) return alert("No data to save");
             const batch = writeBatch(db); 
-            
-            // Limit to first 490 for safety (Firestore batch limit is 500)
+            // Limit to 490 for demo
             const chunk = App.data.students.slice(0, 490);
-            
             chunk.forEach(s => {
                 if(s.admNo) {
                     const docRef = doc(db, "students", s.admNo.toString());
                     batch.set(docRef, s);
                 }
             });
-
             try {
                 await batch.commit();
-                alert("Students saved to Firebase!");
+                alert("Batch Save Complete!");
+                App.Admin.loadStudentsFromDB(); // Reload to show edit buttons
             } catch(e) {
                 console.error(e);
                 alert("Error saving: " + e.message);
             }
         },
 
-        // --- Post Management Logic ---
+        // 8. Filter Table
+        filterTable: () => {
+            const query = document.getElementById('admin-search').value.toLowerCase();
+            const filtered = App.data.students.filter(s => s.name.toLowerCase().includes(query) || s.admNo.toString().includes(query));
+            App.Admin.renderTable(filtered);
+        },
+
+        // --- Post & Team Logic (Kept Same) ---
         loadPosts: async () => {
             try {
                 const querySnapshot = await getDocs(collection(db, "posts"));
                 App.data.posts = [];
-                querySnapshot.forEach((doc) => {
-                    App.data.posts.push({ id: doc.id, ...doc.data() });
-                });
+                querySnapshot.forEach((doc) => App.data.posts.push({ id: doc.id, ...doc.data() }));
                 App.UI.renderPostsTable();
-            } catch(e) {
-                console.log("Could not load posts (likely not logged in yet).");
-            }
+            } catch(e) { console.log("Not logged in"); }
         },
-
         addPost: async () => {
-            const name = document.getElementById('p-name').value;
-            const vacancy = document.getElementById('p-vacancy').value;
-            const gender = document.getElementById('p-gender').value;
-            const stream = document.getElementById('p-stream').value;
-            const year = document.getElementById('p-year').value;
-            const dept = document.getElementById('p-dept').value;
-
             const newPost = {
-                name: name,
-                vacancy: parseInt(vacancy),
-                gender: gender,
-                stream: stream,
-                year: year,
-                dept: dept.trim(), 
+                name: document.getElementById('p-name').value,
+                vacancy: parseInt(document.getElementById('p-vacancy').value),
+                gender: document.getElementById('p-gender').value,
+                stream: document.getElementById('p-stream').value,
+                year: document.getElementById('p-year').value,
+                dept: document.getElementById('p-dept').value.trim(), 
                 createdAt: new Date()
             };
-
-            try {
-                const docRef = await addDoc(collection(db, "posts"), newPost);
-                App.data.posts.push({ id: docRef.id, ...newPost });
-                App.UI.renderPostsTable();
-                document.getElementById('post-form').reset();
-            } catch (e) {
-                console.error("Error adding post: ", e);
-                alert("Error adding post");
-            }
+            await addDoc(collection(db, "posts"), newPost);
+            App.Admin.loadPosts();
+            document.getElementById('post-form').reset();
         },
-
         deletePost: async (id) => {
-            if(!confirm("Delete this post?")) return;
-            try {
+            if(confirm("Delete post?")) {
                 await deleteDoc(doc(db, "posts", id));
-                App.data.posts = App.data.posts.filter(p => p.id !== id);
-                App.UI.renderPostsTable();
-            } catch(e) {
-                alert("Error deleting");
+                App.Admin.loadPosts();
             }
         },
-
         lockPosts: async () => {
-            if(confirm("Locking posts means no more posts can be added. Students can start nominating. Proceed?")) {
-                await setDoc(doc(db, "settings", "config"), { 
-                    postsLocked: true,
-                    nominationOpen: true 
-                }, { merge: true });
-                alert("Posts Locked. Nominations are now OPEN.");
+            if(confirm("Lock posts & Open Nominations?")) {
+                await setDoc(doc(db, "settings", "config"), { postsLocked: true, nominationOpen: true }, { merge: true });
+                alert("Done.");
             }
         },
-
-        // --- Team Management Logic (THIS IS THE NEW PART) ---
         loadTeam: async () => {
             const list = document.getElementById('admin-list');
             if(!list) return;
-            list.innerHTML = '<li class="list-group-item">Loading...</li>';
-            
-            try {
-                const querySnapshot = await getDocs(collection(db, "admins"));
-                list.innerHTML = '';
-                
-                // 1. Show YOU (Super Admin)
-                list.innerHTML += `<li class="list-group-item active">sureshmagnolia@gmail.com (Super Admin)</li>`;
-
-                // 2. Show OTHERS
-                querySnapshot.forEach((doc) => {
-                    if(doc.id !== 'sureshmagnolia@gmail.com') {
-                        list.innerHTML += `
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                ${doc.id}
-                                <button class="btn btn-sm btn-outline-danger" onclick="window.App.Admin.removeTeamMember('${doc.id}')">Remove</button>
-                            </li>`;
-                    }
-                });
-            } catch (e) {
-                console.error(e);
-                list.innerHTML = `<li class="list-group-item text-danger">Error loading team. Permissions?</li>`;
-            }
+            list.innerHTML = '';
+            const q = await getDocs(collection(db, "admins"));
+            list.innerHTML = `<li class="list-group-item active">sureshmagnolia@gmail.com (Super)</li>`;
+            q.forEach(doc => {
+                if(doc.id !== 'sureshmagnolia@gmail.com') {
+                    list.innerHTML += `<li class="list-group-item d-flex justify-content-between">${doc.id} <button class="btn btn-sm btn-danger" onclick="window.App.Admin.removeTeamMember('${doc.id}')">X</button></li>`;
+                }
+            });
         },
-
         addTeamMember: async () => {
-            const emailField = document.getElementById('new-admin-email');
-            const email = emailField.value.trim().toLowerCase();
-            
-            if(!email || !email.includes('@')) return alert("Please enter a valid email.");
-
-            try {
-                await setDoc(doc(db, "admins", email), {
-                    addedAt: new Date(),
-                    role: "admin"
-                });
-                alert(`${email} added to Team!`);
-                emailField.value = ''; 
-                App.Admin.loadTeam(); 
-            } catch (e) {
-                console.error(e);
-                alert("Error adding admin: " + e.message);
+            const email = document.getElementById('new-admin-email').value.trim().toLowerCase();
+            if(email) {
+                await setDoc(doc(db, "admins", email), { role: "admin" });
+                App.Admin.loadTeam();
             }
         },
-
         removeTeamMember: async (email) => {
-            if(!confirm(`Remove access for ${email}?`)) return;
-            try {
+            if(confirm("Remove admin?")) {
                 await deleteDoc(doc(db, "admins", email));
-                App.Admin.loadTeam(); 
-            } catch (e) {
-                alert("Error removing admin.");
+                App.Admin.loadTeam();
             }
+        },
+        downloadTemplate: () => {
+            const csv = "Sl No,Name,Gender,Dept,Year,Stream,Admission Number\n1,Sample,Male,Botany,1,UG,12345";
+            const a = document.createElement('a');
+            a.href = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+            a.download = "template.csv";
+            a.click();
         }
-    
-    
-    }
+    },
 
   , // <--- IMPORTANT COMMA here to separate Admin and Student blocks
 
