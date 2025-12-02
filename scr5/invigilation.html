@@ -38,6 +38,11 @@
         .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
     </style>
+<link rel="preconnect" href="https://fonts.googleapis.com/css2">
+<link href="https://fonts.googleapis.com/css2?family=Anek+Malayalam:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+    .font-malayalam { font-family: 'Anek Malayalam', sans-serif; }
+</style>
 </head>
 <body class="bg-gray-50 text-gray-800 h-screen flex flex-col overflow-hidden">
 
@@ -897,134 +902,86 @@
     </div>
 
 
-<div id="help-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex justify-center items-center z-50 p-4 backdrop-blur-sm">
-    <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden border border-gray-200">
+<div id="help-modal" class="hidden fixed inset-0 bg-gray-900/60 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 backdrop-blur-sm transition-opacity">
+    <div class="bg-white w-full max-w-2xl h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col overflow-hidden animate-slide-up sm:animate-none">
         
-        <div class="flex justify-between items-center p-4 border-b border-gray-200 bg-gray-50 shrink-0">
-            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <span class="text-xl">🎓</span> Invigilator Guide / സഹായം
-            </h3>
-            <button onclick="closeModal('help-modal')" class="text-gray-400 hover:text-gray-600 transition p-1 hover:bg-gray-200 rounded-full">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <div class="flex justify-between items-center p-4 border-b border-gray-100 bg-white shrink-0">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <span class="bg-indigo-100 text-indigo-600 w-8 h-8 rounded-full flex items-center justify-center text-lg">💡</span> 
+                    Help & Guide
+                </h3>
+                <p class="text-xs text-gray-500 ml-10 -mt-1">User Instructions / നിർദ്ദേശങ്ങൾ</p>
+            </div>
+            <button onclick="closeModal('help-modal')" class="bg-gray-100 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
         </div>
         
-        <div class="p-6 overflow-y-auto custom-scroll text-sm text-gray-700 leading-relaxed space-y-8">
+        <div class="p-4 sm:p-6 overflow-y-auto custom-scroll space-y-6 bg-gray-50/50">
             
-            <section>
-                <h4 class="text-xs font-bold text-indigo-700 uppercase tracking-widest mb-3 border-b border-indigo-100 pb-1">English Instructions</h4>
-                
-                <div class="space-y-5">
-                    <div>
-                        <strong class="block text-gray-900 mb-1 flex items-center gap-2">
-                            <span class="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-xs">1</span> Login & Access
-                        </strong>
-                        <ul class="list-disc list-inside pl-7 space-y-1 text-gray-600">
-                            <li>Open the portal link provided by the Exam Cell.</li>
-                            <li>Click the <b>"Sign in with Google"</b> button.</li>
-                            <li>Select your official/registered email address to log in.</li>
-                        </ul>
-                    </div>
+            <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <h4 class="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span> English
+                </h4>
+                <ul class="space-y-3 text-sm text-gray-600 leading-relaxed">
+                    <li class="flex gap-3">
+                        <span class="font-bold text-gray-800 shrink-0">1.</span>
+                        <span><b>Login:</b> Use the "Sign in with Google" button and select your official email.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-gray-800 shrink-0">2.</span>
+                        <span><b>Dashboard:</b> Check "Pending" duties vs "Completed" duties. Your rank in the Priority List shows your workload status.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-gray-800 shrink-0">3.</span>
+                        <span><b>Calendar:</b> <span class="text-green-600 font-bold">Green</span> = Vacancy, <span class="text-blue-600 font-bold">Blue</span> = Your Duty, <span class="text-red-500 font-bold">Red</span> = Unavailable.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-gray-800 shrink-0">4.</span>
+                        <span><b>Action:</b> Click a date to <b>Volunteer</b> (if open) or <b>Mark Unavailable</b> (Leave/OD).</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-gray-800 shrink-0">5.</span>
+                        <span><b>Exchange:</b> Click your Blue slot to "Post for Exchange". You remain responsible until someone accepts it.</span>
+                    </li>
+                </ul>
+            </div>
 
-                    <div>
-                        <strong class="block text-gray-900 mb-1 flex items-center gap-2">
-                            <span class="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-xs">2</span> Dashboard Overview
-                        </strong>
-                        <ul class="list-disc list-inside pl-7 space-y-1 text-gray-600">
-                            <li><b>Pending:</b> Duties remaining to meet your monthly/yearly target.</li>
-                            <li><b>Completed:</b> Duties finished. <i>Click to view history.</i></li>
-                            <li><b>Duty Priority List:</b> Shows your rank. Higher rank = More pending duties.</li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <strong class="block text-gray-900 mb-1 flex items-center gap-2">
-                            <span class="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-xs">3</span> Using the Calendar
-                        </strong>
-                        <div class="grid grid-cols-2 gap-2 text-xs mt-2 pl-7">
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-blue-600"></span> <b>Blue:</b> Assigned Duty</div>
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-green-500"></span> <b>Green:</b> Vacancy (Volunteer)</div>
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-red-500"></span> <b>Red:</b> Unavailable (Leave)</div>
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-purple-500"></span> <b>Purple:</b> Exchange Available</div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <strong class="block text-gray-900 mb-1 flex items-center gap-2">
-                            <span class="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-xs">4</span> Manage Duties
-                        </strong>
-                        <ul class="list-disc list-inside pl-7 space-y-1 text-gray-600">
-                            <li><b>Volunteer:</b> Click a Green date &rarr; Click "Volunteer".</li>
-                            <li><b>Mark Unavailable (Leave/OD):</b> Click a date &rarr; Select "Mark Unavailable" (FN/AN/Whole Day) &rarr; Choose Reason.</li>
-                            <li><i>Note: You cannot mark unavailability on days you are already assigned. Use Exchange instead.</i></li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <strong class="block text-gray-900 mb-1 flex items-center gap-2">
-                            <span class="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-xs">5</span> Duty Exchange
-                        </strong>
-                        <ul class="list-disc list-inside pl-7 space-y-1 text-gray-600">
-                            <li><b>To Give Up Duty:</b> Click your Blue slot &rarr; "♻️ Post for Exchange". (You remain responsible until accepted).</li>
-                            <li><b>To Accept Duty:</b> Check "Exchange Basket" or Purple slots &rarr; Click "Accept".</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-            <section class="bg-green-50 p-5 rounded-xl border border-green-100">
-                <h4 class="text-xs font-bold text-green-700 uppercase tracking-widest mb-3 border-b border-green-200 pb-1">മലയാളം നിർദ്ദേശങ്ങൾ</h4>
-                
-                <div class="space-y-5 font-sans">
-                    <div>
-                        <strong class="block text-gray-900 mb-1">1. ലോഗിൻ ചെയ്യാം</strong>
-                        <ul class="list-disc list-inside pl-2 space-y-1 text-gray-700">
-                            <li>എക്സാം സെൽ നൽകിയ ലിങ്ക് തുറക്കുക.</li>
-                            <li><b>"Sign in with Google"</b> ബട്ടൺ ക്ലിക്ക് ചെയ്ത് ഔദ്യോഗിക ഇമെയിൽ വഴി ലോഗിൻ ചെയ്യുക.</li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <strong class="block text-gray-900 mb-1">2. ഡാഷ്ബോർഡ്</strong>
-                        <ul class="list-disc list-inside pl-2 space-y-1 text-gray-700">
-                            <li><b>Pending:</b> ടാർഗറ്റ് പൂർത്തിയാക്കാൻ ഇനി എത്ര ഡ്യൂട്ടികൾ ബാക്കിയുണ്ട്.</li>
-                            <li><b>Completed:</b> പൂർത്തിയാക്കിയ ഡ്യൂട്ടികൾ (ക്ലിക്ക് ചെയ്താൽ ഹിസ്റ്ററി കാണാം).</li>
-                            <li><b>Priority List:</b> ലിസ്റ്റിൽ മുകളിൽ ആണെങ്കിൽ, നിങ്ങൾ കൂടുതൽ ഡ്യൂട്ടി ചെയ്യാൻ ബാക്കിയുണ്ട്.</li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <strong class="block text-gray-900 mb-1">3. കലണ്ടർ സൂചിക</strong>
-                        <div class="grid grid-cols-2 gap-2 text-xs mt-1 pl-2 font-medium">
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-600"></span> <b>നീല:</b> ഡ്യൂട്ടി ഉണ്ട്</div>
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-green-500"></span> <b>പച്ച:</b> ഒഴിവുണ്ട് (Volunteer)</div>
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-red-500"></span> <b>ചുവപ്പ്:</b> അവധി (Leave/OD)</div>
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-purple-500"></span> <b>പർപ്പിൾ:</b> എക്സ്ചേഞ്ച് (Exchange)</div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <strong class="block text-gray-900 mb-1">4. ഡ്യൂട്ടി മാനേജ്മെന്റ്</strong>
-                        <ul class="list-disc list-inside pl-2 space-y-1 text-gray-700">
-                            <li><b>ഡ്യൂട്ടി ഏറ്റെടുക്കാൻ:</b> പച്ച സ്ലോട്ടിൽ ക്ലിക്ക് ചെയ്ത് "Volunteer" അമർത്തുക.</li>
-                            <li><b>അസൗകര്യം അറിയിക്കാൻ:</b> തിയതി ക്ലിക്ക് ചെയ്ത് "Mark Unavailable" (FN/AN) അമർത്തുക. കാരണം രേഖപ്പെടുത്തുക.</li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <strong class="block text-gray-900 mb-1">5. ഡ്യൂട്ടി എക്സ്ചേഞ്ച് (കൈമാറ്റം)</strong>
-                        <ul class="list-disc list-inside pl-2 space-y-1 text-gray-700">
-                            <li><b>ഡ്യൂട്ടി മാറ്റാൻ:</b> നിങ്ങളുടെ സ്ലോട്ടിൽ (നീല) ക്ലിക്ക് ചെയ്ത് "♻️ Post for Exchange" അമർത്തുക.</li>
-                            <li><b>ഡ്യൂട്ടി ഏറ്റെടുക്കാൻ:</b> "Exchange Basket"-ൽ കാണുന്ന ഡ്യൂട്ടിക്ക് നേരെ "Accept" ക്ലിക്ക് ചെയ്യുക.</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
+            <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-sm font-malayalam">
+                <h4 class="text-sm font-bold text-indigo-800 mb-3 flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-800"></span> മലയാളം
+                </h4>
+                <ul class="space-y-3 text-sm sm:text-base text-gray-800 leading-relaxed">
+                    <li class="flex gap-3">
+                        <span class="font-bold text-indigo-600 shrink-0">1.</span>
+                        <span><b>ലോഗിൻ:</b> "Sign in with Google" ക്ലിക്ക് ചെയ്ത് ഔദ്യോഗിക ഇമെയിൽ വഴി ലോഗിൻ ചെയ്യുക.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-indigo-600 shrink-0">2.</span>
+                        <span><b>ഡാഷ്ബോർഡ്:</b> 'Pending' എന്നത് ചെയ്യാൻ ബാക്കിയുള്ള ഡ്യൂട്ടിയും 'Completed' എന്നത് പൂർത്തിയാക്കിയവയുമാണ്.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-indigo-600 shrink-0">3.</span>
+                        <span><b>കലണ്ടർ:</b> <span class="text-blue-700 font-bold">നീല</span> = നിങ്ങൾക്ക് ഡ്യൂട്ടി ഉണ്ട്, <span class="text-green-600 font-bold">പച്ച</span> = ഒഴിവുണ്ട്, <span class="text-red-600 font-bold">ചുവപ്പ്</span> = നിങ്ങൾ ലീവാണ്.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-indigo-600 shrink-0">4.</span>
+                        <span><b>അസൗകര്യം:</b> ലീവ് ആണെങ്കിൽ തീയതി ക്ലിക്ക് ചെയ്ത് "Mark Unavailable" അമർത്തുക. ഡ്യൂട്ടി ഉള്ള ദിവസം ലീവ് മാർക്ക് ചെയ്യാൻ പറ്റില്ല; പകരം Exchange ചെയ്യണം.</span>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="font-bold text-indigo-600 shrink-0">5.</span>
+                        <span><b>കൈമാറ്റം:</b> ഡ്യൂട്ടി മാറ്റാൻ, ആ സ്ലോട്ടിൽ ക്ലിക്ക് ചെയ്ത് "Post for Exchange" കൊടുക്കുക. മറ്റൊരാൾ അത് ഏറ്റെടുക്കുന്നത് വരെ ഉത്തരവാദിത്തം നിങ്ങൾക്ക് ആയിരിക്കും.</span>
+                    </li>
+                </ul>
+            </div>
 
         </div>
         
-        <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
-            <button onclick="closeModal('help-modal')" class="bg-gray-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-900 shadow-sm transition transform active:scale-95">Got it / മനസ്സിലായി</button>
+        <div class="p-4 border-t border-gray-200 bg-white shrink-0">
+            <button onclick="closeModal('help-modal')" class="w-full bg-gray-900 text-white py-3 rounded-lg text-sm font-bold shadow-md active:scale-[0.98] transition">
+                OK, I Understand / മനസ്സിലായി
+            </button>
         </div>
     </div>
 </div>
