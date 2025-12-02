@@ -707,22 +707,57 @@ const App = {
         renderCandidateList: async () => {
             const container = document.getElementById('candidate-list-container');
             container.innerHTML = '<p class="text-center">Loading List...</p>';
-            const q = await getDocs(collection(db, "nominations"));
-            const valid = [];
-            q.forEach(doc => { if(doc.data().status === 'Accepted') valid.push(doc.data()); });
 
-            if(valid.length === 0) { container.innerHTML = '<p class="text-center text-muted">No valid nominations yet.</p>'; return; }
+            try {
+                // FIX: Use a Query to fetch ONLY 'Accepted' nominations
+                // This matches the Security Rule, so Firebase allows it.
+                const q = query(collection(db, "nominations"), where("status", "==", "Accepted"));
+                const querySnapshot = await getDocs(q);
+                
+                const valid = [];
+                querySnapshot.forEach(doc => valid.push(doc.data()));
 
-            const grouped = {};
-            valid.forEach(n => { if(!grouped[n.postName]) grouped[n.postName] = []; grouped[n.postName].push(n); });
+                if(valid.length === 0) {
+                    container.innerHTML = '<p class="text-center text-muted">No valid nominations published yet.</p>';
+                    return;
+                }
 
-            let html = '';
-            Object.keys(grouped).sort().forEach(post => {
-                const candidates = grouped[post];
-                candidates.sort((a,b) => a.candidate.name.localeCompare(b.candidate.name));
-                html += `<div class="mb-4"><h5 class="bg-light p-2 border-start border-4 border-success fw-bold">${post}</h5><ul class="list-group list-group-flush">${candidates.map(c => `<li class="list-group-item d-flex justify-content-between align-items-center"><div><span class="fw-bold">${c.candidate.name}</span><br><small class="text-muted">${c.candidate.dept}</small></div><span class="badge bg-secondary rounded-pill">S.No: ${c.serialNo}</span></li>`).join('')}</ul></div>`;
-            });
-            container.innerHTML = html;
+                // Group by Post
+                const grouped = {};
+                valid.forEach(n => {
+                    if(!grouped[n.postName]) grouped[n.postName] = [];
+                    grouped[n.postName].push(n);
+                });
+
+                let html = '';
+                Object.keys(grouped).sort().forEach(post => {
+                    const candidates = grouped[post];
+                    // Sort Alphabetically
+                    candidates.sort((a,b) => a.candidate.name.localeCompare(b.candidate.name));
+
+                    html += `
+                        <div class="mb-4">
+                            <h5 class="bg-light p-2 border-start border-4 border-success fw-bold">${post}</h5>
+                            <ul class="list-group list-group-flush">
+                                ${candidates.map(c => `
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="fw-bold">${c.candidate.name}</span>
+                                            <br><small class="text-muted">${c.candidate.dept}</small>
+                                        </div>
+                                        <span class="badge bg-secondary rounded-pill">S.No: ${c.serialNo}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+
+            } catch(e) {
+                console.error("Permission Error:", e);
+                container.innerHTML = '<p class="text-danger text-center">Unable to load list.</p>';
+            }
         },
 
         openNomination: (postId, postName) => {
