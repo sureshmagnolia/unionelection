@@ -8,8 +8,6 @@
     <style>
         body { background-color: #f4f6f9; }
         .hidden { display: none !important; }
-        /* Blur effect when not logged in */
-        .blurred { filter: blur(5px); pointer-events: none; }
         
         /* Print Styles */
         @media print {
@@ -19,7 +17,9 @@
         }
     </style>
 </head>
-<body class="blurred"> <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">Union Election Admin</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
@@ -33,14 +33,22 @@
                 </ul>
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="btn btn-outline-light btn-sm" href="#" id="btn-auth">Loading...</a>
+                        <button class="btn btn-outline-warning btn-sm fw-bold" id="btn-auth">Login with Google</button>
                     </li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container-fluid mt-4">
+    <div id="login-overlay" class="container mt-5 text-center">
+        <div class="card shadow-lg p-5">
+            <h1 class="text-danger">Admin Access Only</h1>
+            <p class="lead">You must log in with an authorized Google Account to access the Election Management System.</p>
+            <p>If you are the Super Admin, click the Login button in the top right corner.</p>
+        </div>
+    </div>
+
+    <div id="main-content" class="container-fluid mt-4 hidden">
         
         <div id="sec-nominal-roll">
             <div class="card shadow-sm mb-3">
@@ -158,16 +166,19 @@
         const provider = new GoogleAuthProvider();
 
         const btn = document.getElementById('btn-auth');
+        const loginOverlay = document.getElementById('login-overlay');
+        const mainContent = document.getElementById('main-content');
 
         // Handle Button Click
         btn.addEventListener('click', () => {
             if (auth.currentUser) {
-                if(confirm("Logout?")) {
+                if(confirm("Are you sure you want to Logout?")) {
                     signOut(auth).then(() => location.reload());
                 }
             } else {
                 signInWithPopup(auth, provider).then((result) => {
-                    location.reload(); 
+                    // Success - Page will update via onAuthStateChanged
+                    console.log("Logged in");
                 }).catch((error) => {
                     alert("Login Failed: " + error.message);
                 });
@@ -177,23 +188,27 @@
         // Check Login State
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // User is Logged In
-                btn.innerText = "Logout";
-                btn.classList.remove('btn-outline-light');
-                btn.classList.add('btn-danger');
-                document.body.classList.remove('blurred'); // Un-blur screen
+                // LOGGED IN
+                btn.innerText = "Logout (" + user.email + ")";
+                btn.classList.replace('btn-outline-warning', 'btn-danger');
                 
-                // Load Initial Data
+                // Show App, Hide Overlay
+                loginOverlay.classList.add('hidden');
+                mainContent.classList.remove('hidden');
+
+                // Load Data
                 if(window.App && window.App.Admin) {
                     window.App.Admin.loadPosts(); 
                     window.App.Admin.loadTeam();
                 }
             } else {
-                // User is Logged Out
+                // LOGGED OUT
                 btn.innerText = "Login with Google";
-                btn.classList.remove('btn-danger');
-                btn.classList.add('btn-outline-light');
-                // document.body.classList.add('blurred'); // Optional: Keep blurred if strict
+                btn.classList.replace('btn-danger', 'btn-outline-warning');
+
+                // Hide App, Show Overlay
+                loginOverlay.classList.remove('hidden');
+                mainContent.classList.add('hidden');
             }
         });
     </script>
