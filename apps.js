@@ -1,9 +1,10 @@
-// 1. IMPORT FIREBASE (Added 'onSnapshot' for Live Sync)
+// ==========================================
+// 1. FIREBASE IMPORTS & CONFIG
+// ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, doc, deleteDoc, writeBatch, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-analytics.js";
 
-// 2. YOUR CONFIGURATION
 const firebaseConfig = {
   apiKey: "AIzaSyDstlguyk5d3Cr4AqYkH1hMYuvqSNGJ05I",
   authDomain: "unionelection.firebaseapp.com",
@@ -14,18 +15,19 @@ const firebaseConfig = {
   measurementId: "G-Z83NH3ZN11"
 };
 
-// 3. INITIALIZE
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const analytics = getAnalytics(app);
 
-// Global Unsubscribe variables (to stop listeners when needed)
+// Global Listeners (to stop background updates if needed)
 let unsubStudents = null;
 let unsubPosts = null;
 let unsubNominations = null;
 let unsubTeam = null;
 
-// 4. APP LOGIC CONTAINER
+// ==========================================
+// 2. MAIN APP LOGIC
+// ==========================================
 const App = {
     data: {
         students: [],
@@ -39,6 +41,7 @@ const App = {
             const target = document.getElementById(`sec-${id}`);
             if(target) target.classList.remove('hidden');
         },
+        // Helper to render Posts table in Admin Post View
         renderPostsTable: () => {
             const tbody = document.getElementById('posts-tbody');
             if(!tbody) return;
@@ -66,7 +69,10 @@ const App = {
     },
 
     Admin: {
-        // --- CSV Upload ---
+        // ------------------------------------------------
+        // MODULE A: NOMINAL ROLL (CSV, Edit, Save)
+        // ------------------------------------------------
+        
         processCSV: () => {
             const fileInput = document.getElementById('csv-file');
             if (!fileInput || !fileInput.files.length) return alert("Select CSV");
@@ -91,19 +97,18 @@ const App = {
             });
         },
 
-        // --- REAL-TIME: Listen to Students ---
+        // LIVE SYNC: Students
         loadStudentsFromDB: () => {
-            if(unsubStudents) unsubStudents(); // Stop previous listener
+            if(unsubStudents) unsubStudents(); 
             
             const tbody = document.getElementById('nominal-tbody');
-            if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center">Syncing...</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center">Syncing Database...</td></tr>';
 
-            // Start Listening
             unsubStudents = onSnapshot(collection(db, "students"), (snapshot) => {
                 App.data.students = [];
                 snapshot.forEach(doc => App.data.students.push(doc.data()));
                 
-                // Sort by Sl No locally for display
+                // Sort by Sl No
                 App.data.students.sort((a,b) => parseInt(a.slNo) - parseInt(b.slNo));
                 
                 App.Admin.renderTable(App.data.students);
@@ -112,6 +117,7 @@ const App = {
             });
         },
 
+        // RENDER TABLE (With Inputs for Editing)
         renderTable: (data) => {
             const tbody = document.getElementById('nominal-tbody');
             if(!tbody) return;
@@ -146,7 +152,7 @@ const App = {
         updateLocalData: (index, field, value) => {
             App.data.students[index][field] = value;
             const row = document.getElementById('nominal-tbody').children[index];
-            if(row) row.style.backgroundColor = "#fff3cd"; 
+            if(row) row.style.backgroundColor = "#fff3cd"; // Yellow = Unsaved
         },
 
         saveRow: async (index) => {
@@ -157,7 +163,7 @@ const App = {
                 await setDoc(doc(db, "students", student.admNo.toString()), student);
                 const row = document.getElementById('nominal-tbody').children[index];
                 if(row) {
-                    row.style.backgroundColor = "#d1e7dd"; 
+                    row.style.backgroundColor = "#d1e7dd"; // Green = Saved
                     setTimeout(() => row.style.backgroundColor = "", 1000);
                 }
             } catch (e) {
@@ -169,7 +175,7 @@ const App = {
             if(!confirm("Delete this student?")) return;
             try {
                 if(admNo) await deleteDoc(doc(db, "students", admNo.toString()));
-                // No need to splice array, 'onSnapshot' will auto-remove it from UI!
+                // onSnapshot will remove it from UI
             } catch(e) {
                 alert("Error deleting");
             }
@@ -178,6 +184,7 @@ const App = {
         saveStudentsToDB: async () => {
             if(App.data.students.length === 0) return alert("No data to save");
             const batch = writeBatch(db); 
+            // Warning: Limit is 500 ops.
             const chunk = App.data.students.slice(0, 490);
             chunk.forEach(s => {
                 if(s.admNo) {
@@ -188,7 +195,6 @@ const App = {
             try {
                 await batch.commit();
                 alert("Batch Save Complete!");
-                // onSnapshot will update UI automatically
             } catch(e) {
                 console.error(e);
                 alert("Error saving: " + e.message);
@@ -209,7 +215,10 @@ const App = {
             a.click();
         },
 
-        // --- REAL-TIME: Listen to Posts ---
+        // ------------------------------------------------
+        // MODULE B: POSTS
+        // ------------------------------------------------
+        
         loadPosts: () => {
             if(unsubPosts) unsubPosts();
             unsubPosts = onSnapshot(collection(db, "posts"), (snapshot) => {
@@ -241,7 +250,10 @@ const App = {
             }
         },
 
-        // --- REAL-TIME: Listen to Nominations (Scrutiny) ---
+        // ------------------------------------------------
+        // MODULE C: SCRUTINY (Nominations)
+        // ------------------------------------------------
+
         loadNominations: () => {
             if(unsubNominations) unsubNominations();
             
@@ -251,7 +263,6 @@ const App = {
             unsubNominations = onSnapshot(collection(db, "nominations"), (snapshot) => {
                 App.data.nominations = [];
                 snapshot.forEach(doc => App.data.nominations.push({ id: doc.id, ...doc.data() }));
-                // Auto-refresh the view based on current filter
                 App.Admin.refreshScrutinyView();
             });
         },
@@ -263,7 +274,9 @@ const App = {
         },
 
         filterNominations: (status) => {
-            const query = document.getElementById('scrutiny-search') ? document.getElementById('scrutiny-search').value.toLowerCase().trim() : "";
+            const searchEl = document.getElementById('scrutiny-search');
+            const query = searchEl ? searchEl.value.toLowerCase().trim() : "";
+            
             const list = App.data.nominations.filter(n => {
                 const matchesStatus = (n.status === status);
                 const matchesSearch = (n.serialNo.toString().toLowerCase().includes(query) || 
@@ -289,6 +302,7 @@ const App = {
                 return;
             }
 
+            // Sort by Serial No
             list.sort((a, b) => parseInt(a.serialNo) - parseInt(b.serialNo));
 
             list.forEach(n => {
@@ -342,7 +356,9 @@ const App = {
             }, { merge: true });
         },
 
-        // --- REAL-TIME: Listen to Team ---
+        // ------------------------------------------------
+        // MODULE D: TEAM
+        // ------------------------------------------------
         loadTeam: () => {
             if(unsubTeam) unsubTeam();
             unsubTeam = onSnapshot(collection(db, "admins"), (snapshot) => {
@@ -365,6 +381,9 @@ const App = {
         }
     },
 
+    // ==========================================
+    // 3. STUDENT PORTAL LOGIC
+    // ==========================================
     Student: {
         currentStudent: null,
         selectedPost: null,
@@ -407,7 +426,7 @@ const App = {
             const list = document.getElementById('eligible-posts-list');
             list.innerHTML = '<div class="spinner-border text-primary"></div>';
             
-            // Listen to posts for student too (so they see locked posts vanish instantly)
+            // Listen to posts for student too
             onSnapshot(collection(db, "posts"), (snapshot) => {
                 list.innerHTML = '';
                 let eligibleCount = 0;
