@@ -746,11 +746,13 @@ const App = {
 
                 if(snap.exists()) {
                     const data = snap.data();
-                    display.innerHTML = `<span class="text-green-600 font-bold">✔ ${data.name}</span> (${data.dept})`;
+                    // CHANGED: Removed text-green-600, added font-bold and uppercase
+                    display.innerHTML = `<span class="font-bold uppercase">✔ ${data.name}</span> (${data.dept})`;
                     if(type === 'p') App.Student.proposerData = data;
                     if(type === 's') App.Student.seconderData = data;
                 } else {
-                    display.innerHTML = "<span class='text-red-500'>✘ Not Found</span>";
+                    // CHANGED: Removed text-red-500, added font-bold uppercase
+                    display.innerHTML = "<span class='font-bold uppercase'>✘ Not Found</span>";
                     if(type === 'p') App.Student.proposerData = null;
                     if(type === 's') App.Student.seconderData = null;
                 }
