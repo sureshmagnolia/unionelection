@@ -168,10 +168,19 @@
 
 <div id="sec-nominations" class="hidden">
     <div class="card shadow-sm">
+
+
         <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Nomination Scrutiny</h5>
-            <button class="btn btn-sm btn-dark" onclick="window.App.Admin.loadNominations()">🔄 Refresh List</button>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-dark" onclick="window.App.Admin.loadNominations()">🔄 Refresh</button>
+                <button class="btn btn-sm btn-outline-dark" onclick="window.App.Admin.printValidList()">🖨 Print Valid List</button>
+                <button class="btn btn-sm btn-danger" onclick="window.App.Admin.publishValidList()">📢 Publish to Students</button>
+            </div>
         </div>
+
+
+       
         <div class="card-body">
             
             <ul class="nav nav-pills mb-3" id="pills-tab">
