@@ -6,9 +6,15 @@
     <title>Student Election Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #eef2f5; }
+        body { background-color: #eef2f5; padding-bottom: 50px; }
         .hidden { display: none !important; }
         .step-card { border-left: 5px solid #0d6efd; }
+        /* Mobile Tweaks */
+        @media (max-width: 768px) {
+            .mobile-stack { flex-direction: column; text-align: center; }
+            .mobile-stack .text-end { text-align: center !important; margin-top: 10px; }
+            .btn-lg-mobile { width: 100%; padding: 15px; font-size: 1.2rem; }
+        }
     </style>
 </head>
 <body>
@@ -19,15 +25,15 @@
         </div>
     </nav>
 
-    <div class="container mt-4">
+    <div class="container mt-4 px-3">
 
         <div id="sec-search" class="row justify-content-center">
-            <div class="col-md-6">
+            <div class="col-12 col-md-6">
                 <div class="card shadow p-4 text-center">
                     <h4>Find Your Roll</h4>
-                    <p class="text-muted">Enter your Admission Number to start.</p>
+                    <p class="text-muted small">Enter Admission Number to start.</p>
                     <div class="input-group mb-3">
-                        <input type="text" id="search-input" class="form-control form-control-lg" placeholder="e.g., 3452">
+                        <input type="text" id="search-input" class="form-control form-control-lg" placeholder="e.g. 3452">
                         <button class="btn btn-primary" onclick="window.App.Student.search()">Search</button>
                     </div>
                     <div id="search-error" class="text-danger fw-bold"></div>
@@ -39,24 +45,22 @@
             
             <div class="card shadow-sm mb-4 step-card">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between align-items-center mobile-stack">
                         <div>
-                            <h2 id="st-name" class="mb-0">Student Name</h2>
-                            <p class="text-muted mb-0">
-                                <span id="st-dept">Dept</span> | 
-                                <span id="st-year">Year</span> | 
-                                <span id="st-stream">Stream</span>
+                            <h2 id="st-name" class="mb-0 h4">Student Name</h2>
+                            <p class="text-muted mb-0 small">
+                                <span id="st-dept">Dept</span> | <span id="st-year">Year</span> | <span id="st-stream">Stream</span>
                             </p>
                         </div>
                         <div class="text-end">
                             <h5 class="text-primary" id="st-adm">#1234</h5>
-                            <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Exit</button>
+                            <button class="btn btn-sm btn-outline-danger w-100" onclick="location.reload()">Exit</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <h5 class="mb-3">📢 Posts You Can Contest For</h5>
+            <h5 class="mb-3">📢 Available Posts</h5>
             <div id="eligible-posts-list" class="row g-3">
                 </div>
             
@@ -67,57 +71,57 @@
 
         <div id="sec-form" class="hidden">
             <div class="card shadow border-danger">
-                <div class="card-header bg-danger text-white d-flex justify-content-between">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
                     <span>Nomination Form</span>
                     <button class="btn btn-sm btn-light" onclick="window.App.UI.showSection('dashboard')">Cancel</button>
                 </div>
                 <div class="card-body">
-                    <h3 class="text-center mb-4">Post: <span id="form-post-name" class="fw-bold">...</span></h3>
+                    <h5 class="text-center mb-4">Post: <span id="form-post-name" class="fw-bold">...</span></h5>
                     
                     <form onsubmit="event.preventDefault(); window.App.Student.submitNomination();">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Candidate Name</label>
-                                <input type="text" id="frm-c-name" class="form-control bg-light" readonly>
+                        <div class="row mb-2">
+                            <div class="col-6">
+                                <label class="small text-muted">Name</label>
+                                <input type="text" id="frm-c-name" class="form-control bg-light form-control-sm" readonly>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Admission No</label>
-                                <input type="text" id="frm-c-adm" class="form-control bg-light" readonly>
+                            <div class="col-6">
+                                <label class="small text-muted">Adm No</label>
+                                <input type="text" id="frm-c-adm" class="form-control bg-light form-control-sm" readonly>
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Date of Birth</label>
+                            <label class="form-label fw-bold small">Date of Birth</label>
                             <input type="date" id="frm-dob" class="form-control" required onchange="window.App.Student.calcAge()">
                             <small id="age-display" class="text-primary fw-bold"></small>
                         </div>
 
                         <hr>
+                        <p class="small text-muted mb-2">Enter Proposer & Seconder Adm Numbers:</p>
 
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Proposer Adm No</label>
-                                <input type="text" id="frm-p-adm" class="form-control" required placeholder="Enter Adm No">
-                                <small class="text-muted">Must belong to same constituency</small>
+                        <div class="row mb-3 g-2">
+                            <div class="col-6">
+                                <label class="small">Proposer</label>
+                                <input type="text" id="frm-p-adm" class="form-control" required placeholder="Adm No">
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Seconder Adm No</label>
-                                <input type="text" id="frm-s-adm" class="form-control" required placeholder="Enter Adm No">
+                            <div class="col-6">
+                                <label class="small">Seconder</label>
+                                <input type="text" id="frm-s-adm" class="form-control" required placeholder="Adm No">
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-danger w-100 btn-lg">Submit Nomination</button>
+                        <button type="submit" class="btn btn-danger w-100 btn-lg-mobile">Submit Nomination</button>
                     </form>
                 </div>
             </div>
         </div>
-
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
         import { getFirestore } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-        // Import main logic
         import "./apps.js"; 
     </script>
 </body>
