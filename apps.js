@@ -499,18 +499,22 @@ const App = {
             } catch(e) { console.error(e); }
         },
 
+        // 6. Generate Preview
         generatePreview: () => {
-            if(!App.Student.proposerData || !App.Student.seconderData) return alert("Invalid Proposer/Seconder");
+            if(!App.Student.proposerData || !App.Student.seconderData) return alert("Please enter valid Proposer and Seconder Admission Numbers.");
             const dob = document.getElementById('frm-dob').value;
-            if(!dob) return alert("Enter DOB");
+            if(!dob) return alert("Enter Date of Birth");
 
             const c = App.Student.currentStudent;
             const p = App.Student.proposerData;
             const s = App.Student.seconderData;
 
+            // Fill Data
             document.getElementById('prev-post').innerText = App.Student.selectedPost.name;
             document.getElementById('preview-date').innerText = "Date: " + new Date().toLocaleDateString();
+            document.getElementById('prev-serial-display').innerText = "---"; // Reset Serial
 
+            // Candidate
             document.getElementById('prev-c-name').innerText = c.name;
             document.getElementById('prev-c-adm').innerText = c.admNo;
             document.getElementById('prev-c-dept').innerText = c.dept;
@@ -518,19 +522,90 @@ const App = {
             document.getElementById('prev-c-dob').innerText = dob;
             document.getElementById('prev-c-age').innerText = App.Student.calcAge() + " Years";
 
+            // Proposer
             document.getElementById('prev-p-name').innerText = p.name;
             document.getElementById('prev-p-adm').innerText = p.admNo;
             document.getElementById('prev-p-dept').innerText = p.dept;
             document.getElementById('prev-p-year').innerText = p.year + " " + p.stream;
 
+            // Seconder
             document.getElementById('prev-s-name').innerText = s.name;
             document.getElementById('prev-s-adm').innerText = s.admNo;
             document.getElementById('prev-s-dept').innerText = s.dept;
             document.getElementById('prev-s-year').innerText = s.year + " " + s.stream;
 
+            // UI State: SHOW Submit, HIDE Print
+            document.getElementById('btn-edit').classList.remove('hidden');
+            document.getElementById('btn-submit').classList.remove('hidden');
+            document.getElementById('btn-print').classList.add('hidden');
+            document.getElementById('btn-exit').classList.add('hidden');
+
             document.getElementById('sec-form').classList.add('hidden');
             document.getElementById('nomination-preview-container').classList.remove('hidden');
         },
+
+        editForm: () => {
+            document.getElementById('sec-form').classList.remove('hidden');
+            document.getElementById('nomination-preview-container').classList.add('hidden');
+        },
+
+        // 7. Final Submit (With Serial Number Logic)
+        finalSubmit: async () => {
+            if(!confirm("Are you sure? Once submitted, you cannot edit.")) return;
+
+            const submitBtn = document.getElementById('btn-submit');
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Processing...";
+
+            try {
+                let assignedSerial = "";
+
+                await runTransaction(db, async (transaction) => {
+                    const counterRef = doc(db, "settings", "counters");
+                    const counterDoc = await transaction.get(counterRef);
+
+                    let nextSerial = 1;
+                    if (counterDoc.exists()) {
+                        nextSerial = (counterDoc.data().nominationSerial || 0) + 1;
+                    }
+
+                    assignedSerial = nextSerial.toString();
+                    const newNomRef = doc(collection(db, "nominations"));
+
+                    transaction.set(counterRef, { nominationSerial: nextSerial }, { merge: true });
+                    transaction.set(newNomRef, {
+                        serialNo: assignedSerial,
+                        postId: App.Student.selectedPost.id,
+                        postName: App.Student.selectedPost.name,
+                        candidate: App.Student.currentStudent,
+                        proposer: App.Student.proposerData,
+                        seconder: App.Student.seconderData,
+                        dob: document.getElementById('frm-dob').value,
+                        age: App.Student.calcAge(),
+                        status: "Submitted",
+                        timestamp: new Date()
+                    });
+                });
+
+                // SUCCESS: Update UI to "Post-Submission" State
+                alert(`Submission Successful! Serial Number: ${assignedSerial}`);
+                
+                // 1. Inject Serial Number into the Paper
+                document.getElementById('prev-serial-display').innerText = `Serial No: ${assignedSerial}`;
+
+                // 2. Swap Buttons (Hide Edit/Submit, Show Print)
+                document.getElementById('btn-edit').classList.add('hidden');
+                document.getElementById('btn-submit').classList.add('hidden');
+                document.getElementById('btn-print').classList.remove('hidden');
+                document.getElementById('btn-exit').classList.remove('hidden');
+
+            } catch(e) {
+                console.error(e);
+                alert("Error: " + e.message);
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Confirm & Submit";
+            }
+        }
 
         editForm: () => {
             document.getElementById('sec-form').classList.remove('hidden');
