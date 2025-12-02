@@ -251,9 +251,11 @@ const App = {
 
   , // <--- IMPORTANT COMMA here to separate Admin and Student blocks
 
-    Student: {
+  Student: {
         currentStudent: null,
         selectedPost: null,
+        proposerData: null,
+        seconderData: null,
 
         // 1. Search Logic
         search: async () => {
@@ -264,7 +266,6 @@ const App = {
             if(!input) return;
 
             try {
-                // Fetch Student Doc
                 const docRef = doc(db, "students", input);
                 const docSnap = await getDoc(docRef);
 
@@ -280,10 +281,9 @@ const App = {
             }
         },
 
-        // 2. Load Dashboard & Check Eligibility
+        // 2. Load Dashboard
         loadDashboard: async () => {
             const s = App.Student.currentStudent;
-            
             // Fill Profile
             document.getElementById('st-name').innerText = s.name;
             document.getElementById('st-dept').innerText = s.dept;
@@ -291,48 +291,38 @@ const App = {
             document.getElementById('st-stream').innerText = s.stream;
             document.getElementById('st-adm').innerText = s.admNo;
 
-            // Show Dashboard
             App.UI.showSection('dashboard');
             document.getElementById('sec-search').classList.add('hidden');
 
-            // Fetch Posts & Filter
+            // Load Posts
             const list = document.getElementById('eligible-posts-list');
             list.innerHTML = '<div class="spinner-border text-primary"></div>';
             
             const querySnapshot = await getDocs(collection(db, "posts"));
             list.innerHTML = '';
-            
             let eligibleCount = 0;
 
             querySnapshot.forEach((doc) => {
                 const post = { id: doc.id, ...doc.data() };
-                
-                // --- THE LAW: Eligibility Check ---
                 let isEligible = true;
                 
-                // 1. Gender Check
+                // Eligibility Logic
                 if(post.gender !== "Any" && post.gender !== s.gender) isEligible = false;
-                
-                // 2. Stream Check
                 if(post.stream !== "Any" && post.stream !== s.stream) isEligible = false;
-                
-                // 3. Year Check (Ensure comparison handles strings/numbers)
                 if(post.year !== "Any" && String(post.year) !== String(s.year)) isEligible = false;
-                
-                // 4. Dept Check (If post has specific dept)
                 if(post.dept && post.dept !== "" && post.dept !== s.dept) isEligible = false;
 
                 if(isEligible) {
                     eligibleCount++;
                     list.innerHTML += `
                         <div class="col-md-6">
-                            <div class="card h-100 border-primary">
+                            <div class="card h-100 border-primary shadow-sm">
                                 <div class="card-body">
-                                    <h5 class="card-title">${post.name}</h5>
+                                    <h5 class="card-title fw-bold">${post.name}</h5>
                                     <p class="card-text small text-muted">Vacancies: ${post.vacancy}</p>
                                     <button class="btn btn-primary w-100" 
                                         onclick="window.App.Student.openNomination('${post.id}', '${post.name}')">
-                                        Apply for this Post
+                                        Apply Now
                                     </button>
                                 </div>
                             </div>
@@ -340,20 +330,22 @@ const App = {
                 }
             });
 
-            if(eligibleCount === 0) {
-                document.getElementById('no-posts-msg').classList.remove('hidden');
-            }
+            if(eligibleCount === 0) document.getElementById('no-posts-msg').classList.remove('hidden');
         },
 
-        // 3. Open Form
+        // 3. Open Nomination Form
         openNomination: (postId, postName) => {
             App.Student.selectedPost = { id: postId, name: postName };
             
-            document.getElementById('form-post-name').innerText = postName;
+            // UI Switch
+            document.getElementById('sec-dashboard').classList.add('hidden');
+            document.getElementById('sec-form').classList.remove('hidden');
+            document.getElementById('nomination-preview-container').classList.add('hidden');
+
+            // Pre-fill Candidate
+            document.getElementById('display-post-name').innerText = postName;
             document.getElementById('frm-c-name').value = App.Student.currentStudent.name;
             document.getElementById('frm-c-adm').value = App.Student.currentStudent.admNo;
-            
-            App.UI.showSection('form');
         },
 
         // 4. Calculate Age
@@ -365,49 +357,120 @@ const App = {
             const today = new Date();
             let age = today.getFullYear() - dob.getFullYear();
             const m = today.getMonth() - dob.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
-                age--;
-            }
+            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+            
             document.getElementById('age-display').innerText = `Age: ${age} Years`;
+            return age;
         },
 
-        // 5. Submit Nomination
-        submitNomination: async () => {
-            const s = App.Student.currentStudent;
-            const pid = App.Student.selectedPost.id;
-            const pAdm = document.getElementById('frm-p-adm').value;
-            const sAdm = document.getElementById('frm-s-adm').value;
-            const dob = document.getElementById('frm-dob').value;
-
-            // Simple Validation
-            if(!pAdm || !sAdm || !dob) return alert("Fill all fields");
-            if(pAdm === s.admNo || sAdm === s.admNo) return alert("You cannot propose/second yourself!");
+        // 5. Fetch Proposer/Seconder Details (AJAX style)
+        fetchStudentDetails: async (type) => {
+            const inputId = type === 'p' ? 'frm-p-adm' : 'frm-s-adm';
+            const detailsId = type === 'p' ? 'p-details' : 's-details';
+            const admNo = document.getElementById(inputId).value.trim();
+            const display = document.getElementById(detailsId);
+            
+            if(!admNo) { display.innerText = ""; return; }
+            if(admNo === App.Student.currentStudent.admNo) {
+                display.innerHTML = "<span class='text-red-500'>Cannot match Candidate</span>";
+                return;
+            }
 
             try {
-                // Generate Serial No (Time based)
-                const serial = "NOM-" + Date.now().toString().slice(-6);
+                display.innerText = "Checking DB...";
+                const docRef = doc(db, "students", admNo);
+                const snap = await getDoc(docRef);
 
+                if(snap.exists()) {
+                    const data = snap.data();
+                    display.innerHTML = `<span class="text-green-600 font-bold">✔ ${data.name}</span> (${data.dept}, ${data.year} Yr)`;
+                    // Store for later
+                    if(type === 'p') App.Student.proposerData = data;
+                    if(type === 's') App.Student.seconderData = data;
+                } else {
+                    display.innerHTML = "<span class='text-red-500 font-bold'>✘ Student Not Found</span>";
+                    if(type === 'p') App.Student.proposerData = null;
+                    if(type === 's') App.Student.seconderData = null;
+                }
+            } catch(e) { console.error(e); }
+        },
+
+        // 6. Generate Preview
+        generatePreview: () => {
+            // Validation
+            if(!App.Student.proposerData || !App.Student.seconderData) return alert("Please enter valid Proposer and Seconder Admission Numbers.");
+            const dob = document.getElementById('frm-dob').value;
+            if(!dob) return alert("Enter Date of Birth");
+
+            const c = App.Student.currentStudent;
+            const p = App.Student.proposerData;
+            const s = App.Student.seconderData;
+
+            // Fill Preview
+            document.getElementById('prev-post').innerText = App.Student.selectedPost.name;
+            document.getElementById('preview-date').innerText = "Date: " + new Date().toLocaleDateString();
+
+            // Candidate
+            document.getElementById('prev-c-name').innerText = c.name;
+            document.getElementById('prev-c-adm').innerText = c.admNo;
+            document.getElementById('prev-c-dept').innerText = c.dept;
+            document.getElementById('prev-c-year').innerText = c.year + " " + c.stream;
+            document.getElementById('prev-c-dob').innerText = dob;
+            document.getElementById('prev-c-age').innerText = App.Student.calcAge() + " Years";
+
+            // Proposer
+            document.getElementById('prev-p-name').innerText = p.name;
+            document.getElementById('prev-p-adm').innerText = p.admNo;
+            document.getElementById('prev-p-dept').innerText = p.dept;
+            document.getElementById('prev-p-year').innerText = p.year + " " + p.stream;
+
+            // Seconder
+            document.getElementById('prev-s-name').innerText = s.name;
+            document.getElementById('prev-s-adm').innerText = s.admNo;
+            document.getElementById('prev-s-dept').innerText = s.dept;
+            document.getElementById('prev-s-year').innerText = s.year + " " + s.stream;
+
+            // Show Preview, Hide Form
+            document.getElementById('sec-form').classList.add('hidden');
+            document.getElementById('nomination-preview-container').classList.remove('hidden');
+        },
+
+        editForm: () => {
+            document.getElementById('sec-form').classList.remove('hidden');
+            document.getElementById('nomination-preview-container').classList.add('hidden');
+        },
+
+        // 7. Final Submit to Firebase
+        finalSubmit: async () => {
+            if(!confirm("Are you sure? This will officially submit your nomination.")) return;
+
+            try {
+                const serial = "NOM-" + Date.now().toString().slice(-6);
                 await addDoc(collection(db, "nominations"), {
                     serialNo: serial,
-                    postId: pid,
+                    postId: App.Student.selectedPost.id,
                     postName: App.Student.selectedPost.name,
-                    candidate: { name: s.name, admNo: s.admNo, dept: s.dept },
-                    proposerAdm: pAdm,
-                    seconderAdm: sAdm,
-                    dob: dob,
-                    status: "Submitted", // Pending Scrutiny
+                    candidate: App.Student.currentStudent,
+                    proposer: App.Student.proposerData,
+                    seconder: App.Student.seconderData,
+                    dob: document.getElementById('frm-dob').value,
+                    age: App.Student.calcAge(),
+                    status: "Submitted",
                     timestamp: new Date()
                 });
 
-                alert(`Nomination Submitted Successfully!\nYour Serial No: ${serial}`);
-                location.reload();
+                alert(`Success! Your Serial Number is ${serial}. Please Print this form.`);
+                // Disable submit button to prevent double submit
+                document.querySelector('#btn-print-group button:last-child').disabled = true;
+                document.querySelector('#btn-print-group button:last-child').innerText = "Submitted ✔";
 
             } catch(e) {
                 console.error(e);
-                alert("Submission Failed: " + e.message);
+                alert("Error: " + e.message);
             }
         }
     }
+    
 };
 
 // Make App global so HTML buttons can access it
