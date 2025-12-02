@@ -200,7 +200,118 @@ const App = {
             a.download = "template.csv";
             a.click();
         },
+// --- NOMINATION SCRUTINY LOGIC ---
 
+        // 1. Load All Nominations
+        loadNominations: async () => {
+            const tbody = document.getElementById('scrutiny-tbody');
+            if(!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading Nominations...</td></tr>';
+
+            try {
+                // Fetch all nominations
+                const q = await getDocs(collection(db, "nominations"));
+                App.data.nominations = []; // Store locally
+                q.forEach(doc => {
+                    App.data.nominations.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Default view: Show "Submitted" (Pending)
+                App.Admin.filterNominations('Submitted');
+            } catch (e) {
+                console.error(e);
+                alert("Error loading nominations.");
+            }
+        },
+
+        // 2. Filter View (Pending / Accepted / Rejected)
+        filterNominations: (status) => {
+            const list = App.data.nominations.filter(n => n.status === status);
+            const tbody = document.getElementById('scrutiny-tbody');
+            tbody.innerHTML = '';
+
+            // Update Tabs UI
+            document.querySelectorAll('.nav-pills .nav-link').forEach(btn => {
+                btn.classList.toggle('active', btn.innerText.includes(status === 'Submitted' ? 'Pending' : status));
+            });
+
+            if(list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No ${status} nominations found.</td></tr>`;
+                return;
+            }
+
+            list.forEach(n => {
+                const tr = document.createElement('tr');
+                
+                // Color code status
+                let badgeClass = "bg-warning text-dark";
+                if(n.status === 'Accepted') badgeClass = "bg-success";
+                if(n.status === 'Rejected') badgeClass = "bg-danger";
+
+                // Action Buttons (Only show for Pending)
+                let actions = "";
+                if(n.status === 'Submitted') {
+                    actions = `
+                        <button class="btn btn-sm btn-success mb-1 w-100" onclick="window.App.Admin.processNomination('${n.id}', 'Accepted')">Accept</button>
+                        <button class="btn btn-sm btn-outline-danger w-100" onclick="window.App.Admin.processNomination('${n.id}', 'Rejected')">Reject</button>
+                    `;
+                } else {
+                    actions = `<span class="badge ${badgeClass}">${n.status}</span>`;
+                    if(n.reason) actions += `<br><small class="text-danger">${n.reason}</small>`;
+                    // Allow Undo
+                    actions += `<div class="mt-2"><button class="btn btn-xs btn-link text-muted" onclick="window.App.Admin.processNomination('${n.id}', 'Submitted')">Undo</button></div>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="fw-bold text-primary">${n.serialNo}</td>
+                    <td>${n.postName}</td>
+                    <td>
+                        <div class="fw-bold">${n.candidate.name}</div>
+                        <small class="text-muted">Adm: ${n.candidate.admNo}</small><br>
+                        <small>Dept: ${n.candidate.dept}</small>
+                    </td>
+                    <td>${n.age || 'N/A'} Yrs</td>
+                    <td>
+                        <small><strong>P:</strong> ${n.proposer.name} (${n.proposer.admNo})</small><br>
+                        <small><strong>S:</strong> ${n.seconder.name} (${n.seconder.admNo})</small>
+                    </td>
+                    <td><span class="badge ${badgeClass}">${n.status}</span></td>
+                    <td>${actions}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('nomination-count').innerText = `Showing ${list.length} records.`;
+        },
+
+        // 3. Process (Accept / Reject)
+        processNomination: async (id, newStatus) => {
+            let reason = "";
+            if(newStatus === 'Rejected') {
+                reason = prompt("Enter Reason for Rejection (e.g. Underage, Invalid Seconder):");
+                if(!reason) return; // Cancel if no reason given
+            }
+
+            if(!confirm(`Mark this nomination as ${newStatus}?`)) return;
+
+            try {
+                // Update Firebase (using updateDoc via setDoc merge)
+                // Note: We need 'updateDoc' imported, but setDoc with merge works too
+                await setDoc(doc(db, "nominations", id), { 
+                    status: newStatus,
+                    reason: reason,
+                    scrutinizedAt: new Date()
+                }, { merge: true });
+
+                // Refresh Data
+                await App.Admin.loadNominations();
+                
+                // If we accepted/rejected, stay on 'Pending' tab to keep working
+                if(newStatus !== 'Submitted') App.Admin.filterNominations('Submitted');
+
+            } catch(e) {
+                alert("Error updating status: " + e.message);
+            }
+        },
         // --- Post Logic ---
         loadPosts: async () => {
             try {
