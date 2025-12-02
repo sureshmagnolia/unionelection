@@ -611,6 +611,18 @@ const App = {
             App.UI.showSection('dashboard');
             document.getElementById('sec-search').classList.add('hidden');
 
+            // --- 1. CHECK IF CANDIDATE LIST IS PUBLISHED ---
+            onSnapshot(doc(db, "settings", "electionStatus"), (docSnap) => {
+                const settings = docSnap.data();
+                if (settings && settings.validListPublished) {
+                    document.getElementById('sec-candidate-list').classList.remove('hidden');
+                    App.Student.renderCandidateList(); // Helper function below
+                } else {
+                    document.getElementById('sec-candidate-list').classList.add('hidden');
+                }
+            });
+
+            // --- 2. LOAD ELIGIBLE POSTS FOR NOMINATION (Existing Logic) ---
             const list = document.getElementById('eligible-posts-list');
             list.innerHTML = '<div class="spinner-border text-primary"></div>';
             
@@ -620,6 +632,7 @@ const App = {
                 snapshot.forEach((doc) => {
                     const post = { id: doc.id, ...doc.data() };
                     let isEligible = true;
+                    // Logic checks...
                     if(post.gender !== "Any" && post.gender !== s.gender) isEligible = false;
                     if(post.stream !== "Any" && post.stream !== s.stream) isEligible = false;
                     if(post.year !== "Any" && String(post.year) !== String(s.year)) isEligible = false;
@@ -643,6 +656,56 @@ const App = {
                 });
                 if(eligibleCount === 0) document.getElementById('no-posts-msg').classList.remove('hidden');
             });
+        },
+
+        // --- NEW HELPER: Render the Clean List for Students ---
+        renderCandidateList: async () => {
+            const container = document.getElementById('candidate-list-container');
+            container.innerHTML = '<p class="text-center">Loading List...</p>';
+
+            const q = await getDocs(collection(db, "nominations"));
+            const valid = [];
+            q.forEach(doc => {
+                const data = doc.data();
+                if(data.status === 'Accepted') valid.push(data);
+            });
+
+            if(valid.length === 0) {
+                container.innerHTML = '<p class="text-center text-muted">No valid nominations yet.</p>';
+                return;
+            }
+
+            // Group by Post
+            const grouped = {};
+            valid.forEach(n => {
+                if(!grouped[n.postName]) grouped[n.postName] = [];
+                grouped[n.postName].push(n);
+            });
+
+            let html = '';
+            Object.keys(grouped).sort().forEach(post => {
+                const candidates = grouped[post];
+                // Sort Alphabetically
+                candidates.sort((a,b) => a.candidate.name.localeCompare(b.candidate.name));
+
+                html += `
+                    <div class="mb-4">
+                        <h5 class="bg-light p-2 border-start border-4 border-success fw-bold">${post}</h5>
+                        <ul class="list-group list-group-flush">
+                            ${candidates.map(c => `
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="fw-bold">${c.candidate.name}</span>
+                                        <br><small class="text-muted">${c.candidate.dept}</small>
+                                    </div>
+                                    <span class="badge bg-secondary rounded-pill">S.No: ${c.serialNo}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
         },
 
         openNomination: (postId, postName) => {
