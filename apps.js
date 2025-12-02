@@ -1,4 +1,4 @@
-// 1. IMPORT FIREBASE (Using standard CDN URLs for Modules)
+// 1. IMPORT FIREBASE
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, setDoc, doc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-analytics.js";
@@ -29,12 +29,14 @@ const App = {
     UI: {
         showSection: (id) => {
             document.querySelectorAll('[id^="sec-"]').forEach(el => el.classList.add('hidden'));
-            document.getElementById(`sec-${id}`).classList.remove('hidden');
+            const target = document.getElementById(`sec-${id}`);
+            if(target) target.classList.remove('hidden');
         },
         renderPostsTable: () => {
             const tbody = document.getElementById('posts-tbody');
+            if(!tbody) return;
             tbody.innerHTML = '';
-            App.data.posts.forEach((post, index) => {
+            App.data.posts.forEach((post) => {
                 let restrictions = [];
                 if(post.gender !== "Any") restrictions.push(post.gender);
                 if(post.stream !== "Any") restrictions.push(post.stream);
@@ -58,16 +60,16 @@ const App = {
     },
 
     Admin: {
-        // --- CSV & Nominal Roll Logic (Brief) ---
+        // --- CSV & Nominal Roll Logic ---
         processCSV: () => {
             const fileInput = document.getElementById('csv-file');
-            if (!fileInput.files.length) return alert("Select CSV");
+            if (!fileInput || !fileInput.files.length) return alert("Select CSV");
             
+            // Assuming Papa is loaded globally in index.html
             Papa.parse(fileInput.files[0], {
                 header: true,
                 skipEmptyLines: true,
                 complete: (results) => {
-                    // Normalize Data
                     App.data.students = results.data.map(row => ({
                         slNo: row['Sl No'] || row['sl no'],
                         name: row['Name'],
@@ -77,16 +79,17 @@ const App = {
                         stream: row['UG-PG'] || row['Stream'] || "UG",
                         admNo: row['Admission Number'] || row['Adm No']
                     }));
-                    document.getElementById('student-count').innerText = `Loaded ${App.data.students.length} students. Ready to Save.`;
+                    const countDiv = document.getElementById('student-count');
+                    if(countDiv) countDiv.innerText = `Loaded ${App.data.students.length} students. Ready to Save.`;
                 }
             });
         },
 
         saveStudentsToDB: async () => {
             if(App.data.students.length === 0) return alert("No data to save");
-            const batch = writeBatch(db); // Note: Batch limit is 500. For large colleges, needs chunking loop.
+            const batch = writeBatch(db); 
             
-            // Limit to first 490 for this demo to avoid error
+            // Limit to first 490 for safety (Firestore batch limit is 500)
             const chunk = App.data.students.slice(0, 490);
             
             chunk.forEach(s => {
@@ -106,15 +109,17 @@ const App = {
         },
 
         // --- Post Management Logic ---
-        
-        // Load existing posts from DB on startup
         loadPosts: async () => {
-            const querySnapshot = await getDocs(collection(db, "posts"));
-            App.data.posts = [];
-            querySnapshot.forEach((doc) => {
-                App.data.posts.push({ id: doc.id, ...doc.data() });
-            });
-            App.UI.renderPostsTable();
+            try {
+                const querySnapshot = await getDocs(collection(db, "posts"));
+                App.data.posts = [];
+                querySnapshot.forEach((doc) => {
+                    App.data.posts.push({ id: doc.id, ...doc.data() });
+                });
+                App.UI.renderPostsTable();
+            } catch(e) {
+                console.log("Could not load posts (likely not logged in yet).");
+            }
         },
 
         addPost: async () => {
@@ -131,17 +136,14 @@ const App = {
                 gender: gender,
                 stream: stream,
                 year: year,
-                dept: dept.trim(), // Empty string if general
+                dept: dept.trim(), 
                 createdAt: new Date()
             };
 
             try {
                 const docRef = await addDoc(collection(db, "posts"), newPost);
-                // Update local state and UI
                 App.data.posts.push({ id: docRef.id, ...newPost });
                 App.UI.renderPostsTable();
-                
-                // Clear Form
                 document.getElementById('post-form').reset();
             } catch (e) {
                 console.error("Error adding post: ", e);
@@ -168,18 +170,15 @@ const App = {
                 }, { merge: true });
                 alert("Posts Locked. Nominations are now OPEN.");
             }
-        }
-    }
-};
+        },
 
-// --- Team Management Logic ---
-
+        // --- Team Management Logic (THIS IS THE NEW PART) ---
         loadTeam: async () => {
             const list = document.getElementById('admin-list');
+            if(!list) return;
             list.innerHTML = '<li class="list-group-item">Loading...</li>';
             
             try {
-                // Get list from database
                 const querySnapshot = await getDocs(collection(db, "admins"));
                 list.innerHTML = '';
                 
@@ -188,7 +187,6 @@ const App = {
 
                 // 2. Show OTHERS
                 querySnapshot.forEach((doc) => {
-                    // Don't show yourself twice if you are in DB
                     if(doc.id !== 'sureshmagnolia@gmail.com') {
                         list.innerHTML += `
                             <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -199,7 +197,7 @@ const App = {
                 });
             } catch (e) {
                 console.error(e);
-                list.innerHTML = `<li class="list-group-item text-danger">Error: You don't have permission to view this.</li>`;
+                list.innerHTML = `<li class="list-group-item text-danger">Error loading team. Permissions?</li>`;
             }
         },
 
@@ -210,14 +208,13 @@ const App = {
             if(!email || !email.includes('@')) return alert("Please enter a valid email.");
 
             try {
-                // Save to Firestore using email as ID
                 await setDoc(doc(db, "admins", email), {
                     addedAt: new Date(),
                     role: "admin"
                 });
                 alert(`${email} added to Team!`);
-                emailField.value = ''; // Clear input
-                App.Admin.loadTeam(); // Refresh list
+                emailField.value = ''; 
+                App.Admin.loadTeam(); 
             } catch (e) {
                 console.error(e);
                 alert("Error adding admin: " + e.message);
@@ -225,17 +222,20 @@ const App = {
         },
 
         removeTeamMember: async (email) => {
-            if(!confirm(`Are you sure you want to remove access for ${email}?`)) return;
+            if(!confirm(`Remove access for ${email}?`)) return;
             try {
                 await deleteDoc(doc(db, "admins", email));
-                App.Admin.loadTeam(); // Refresh list
+                App.Admin.loadTeam(); 
             } catch (e) {
                 alert("Error removing admin.");
             }
         }
+    }
+};
 
 // Make App global so HTML buttons can access it
 window.App = App;
 
 // Run startup tasks
-App.Admin.loadPosts();
+// We delay slightly to let auth settle in index.html, but immediate call is fine too
+// App.Admin.loadPosts();
