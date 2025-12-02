@@ -593,7 +593,7 @@ const App = {
             `);
             printWindow.document.close();
             printWindow.print();
-        }
+        },
     // ==========================================
     // 3. STUDENT PORTAL LOGIC
     // ==========================================
