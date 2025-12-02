@@ -260,11 +260,19 @@ function initAdminDashboard() {
     
     showView('admin');
 }
-// NEW: Calculate Duties Done based on actual attendance
+// Updated: Calculate Duties Done based on actual attendance (Filtered by Current AY)
 function getDutiesDoneCount(email) {
     let count = 0;
+    const acYear = getCurrentAcademicYear();
+    
     // Iterate through all slots to find confirmed attendance
-    Object.values(invigilationSlots).forEach(slot => {
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+        
+        // Filter by Academic Year (Ignore old duties)
+        if (dateObj < acYear.start || dateObj > acYear.end) return;
+
         if (slot.attendance && slot.attendance.includes(email)) {
             count++;
         }
@@ -650,7 +658,7 @@ function renderSlotsGridAdmin() {
     // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
-// --- RENDER STAFF LIST (Paginated + Responsive) ---
+// Updated: Render Staff List with Clickable Done Count
 function renderStaffTable() {
     if(!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
@@ -658,8 +666,7 @@ function renderStaffTable() {
     const filter = document.getElementById('staff-search').value.toLowerCase();
     const today = new Date(); 
 
-    // 1. Filter & Map Data (Preserve Original Index)
-    // We map first to keep the original index 'i' for edit/delete functions
+    // 1. Filter & Map Data
     const filteredItems = staffData
         .map((staff, i) => ({ ...staff, originalIndex: i }))
         .filter(item => {
@@ -670,8 +677,6 @@ function renderStaffTable() {
 
     // 2. Pagination Logic
     const totalPages = Math.ceil(filteredItems.length / STAFF_PER_PAGE) || 1;
-    
-    // Ensure valid page
     if (currentStaffPage > totalPages) currentStaffPage = totalPages;
     if (currentStaffPage < 1) currentStaffPage = 1;
 
@@ -679,18 +684,17 @@ function renderStaffTable() {
     const end = start + STAFF_PER_PAGE;
     const pageItems = filteredItems.slice(start, end);
 
-    // 3. Update Controls
+    // Update Controls
     const pageInfo = document.getElementById('staff-page-info');
+    if (pageInfo) pageInfo.textContent = `Page ${currentStaffPage} of ${totalPages} (${filteredItems.length} Staff)`;
     const prevBtn = document.getElementById('btn-staff-prev');
     const nextBtn = document.getElementById('btn-staff-next');
-
-    if (pageInfo) pageInfo.textContent = `Page ${currentStaffPage} of ${totalPages} (${filteredItems.length} Staff)`;
     if (prevBtn) prevBtn.disabled = (currentStaffPage === 1);
     if (nextBtn) nextBtn.disabled = (currentStaffPage === totalPages);
 
-    // 4. Render Rows
+    // 3. Render Rows
     pageItems.forEach((staff) => {
-        const index = staff.originalIndex; // Use ORIGINAL index for actions
+        const index = staff.originalIndex;
         
         const target = calculateStaffTarget(staff);
         const done = getDutiesDoneCount(staff.email);
@@ -711,7 +715,7 @@ function renderStaffTable() {
 
         const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
 
-        // Lock Logic & Buttons
+        // Lock Logic
         let actionButtons = "";
         if (isStaffListLocked) {
             actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
@@ -764,7 +768,10 @@ function renderStaffTable() {
                         </div>
                         <div class="border-l border-gray-200">
                             <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Done</div>
-                            <div class="font-mono text-sm font-bold text-blue-600">${done}</div>
+                            <div class="font-mono text-sm font-bold text-blue-600 cursor-pointer hover:underline hover:text-blue-800 transition-colors" 
+                                 onclick="openCompletedDutiesModal('${staff.email}')" title="Click to view history">
+                                ${done}
+                            </div>
                         </div>
                         <div class="border-l border-gray-200">
                             <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Pending</div>
@@ -776,7 +783,13 @@ function renderStaffTable() {
 
             <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
 
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">
+                <button onclick="openCompletedDutiesModal('${staff.email}')" 
+                        class="text-blue-600 hover:text-blue-800 hover:underline decoration-blue-400 underline-offset-2 transition-all cursor-pointer focus:outline-none" 
+                        title="View Duty History">
+                    ${done}
+                </button>
+            </td>
 
             <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
 
@@ -787,7 +800,6 @@ function renderStaffTable() {
         ui.staffTableBody.appendChild(row);
     });
 
-    // Mobile Spacer
     const spacer = document.createElement('tr');
     spacer.className = "block md:hidden h-32 border-none bg-transparent pointer-events-none";
     spacer.innerHTML = `<td class="block border-none p-0"></td>`;
@@ -3240,57 +3252,75 @@ function renderAdminTodayStats() {
         `;
     }
 } // <--- THIS BRACE WAS MISSING
+// Updated: Show Completed Duties Modal (AY Filtered + Neat UI)
 window.openCompletedDutiesModal = function(email) {
     const list = document.getElementById('completed-duties-list');
     if (!list) return;
     
     list.innerHTML = '';
     const history = [];
+    const acYear = getCurrentAcademicYear();
+    const staffName = getNameFromEmail(email);
     
-    // 1. Scan for completed duties
+    // Update Modal Header with Name & AY
+    const headerTitle = document.querySelector('#completed-duties-modal h3');
+    const headerSub = document.querySelector('#completed-duties-modal p');
+    if(headerTitle) headerTitle.innerHTML = `Duty History: <span class="text-indigo-700">${staffName}</span>`;
+    if(headerSub) headerSub.textContent = `Verified Records for AY ${acYear.label}`;
+
+    // 1. Scan for completed duties in current AY
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+
+        // Filter by Academic Year
+        if (dateObj < acYear.start || dateObj > acYear.end) return;
+
         if (slot.attendance && slot.attendance.includes(email)) {
-            // Determine Role (Invigilator vs CS/SAS)
+            // Determine Role
             let role = "Invigilator";
             if (slot.supervision) {
                 if (slot.supervision.cs === email) role = "Chief Supt.";
                 else if (slot.supervision.sas === email) role = "Senior Asst.";
             }
-            history.push({ key, role });
+            history.push({ key, role, dateObj });
         }
     });
 
     // 2. Sort (Newest First)
-    history.sort((a, b) => {
-        // Reuse existing parseDate helper
-        const dateA = parseDate(a.key);
-        const dateB = parseDate(b.key);
-        return dateB - dateA;
-    });
+    history.sort((a, b) => b.dateObj - a.dateObj);
 
-    // 3. Render
+    // 3. Render Neat List
     if (history.length === 0) {
-        list.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic bg-gray-50 rounded border border-gray-100">No completed duties found yet.</div>`;
+        list.innerHTML = `
+            <div class="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                <p class="text-gray-400 text-xs italic">No duties completed in this Academic Year.</p>
+            </div>`;
     } else {
         history.forEach(item => {
             const [date, time] = item.key.split(' | ');
-            // Color coding for roles
             const isSup = item.role !== "Invigilator";
-            const bgClass = isSup ? "bg-purple-50 border-purple-100" : "bg-green-50 border-green-100";
-            const textClass = isSup ? "text-purple-900" : "text-green-900";
-            const badgeClass = isSup ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-white text-green-600 border-green-200";
-
-            list.innerHTML += `
-                <div class="flex justify-between items-center p-3 rounded border ${bgClass} hover:shadow-sm transition">
-                    <div>
-                        <div class="text-sm font-bold ${textClass}">${date}</div>
-                        <div class="text-[10px] text-gray-500 font-medium">${time}</div>
+            
+            // Neat styling for list items
+            const itemHtml = `
+                <div class="flex justify-between items-center p-3 bg-white border border-gray-100 rounded-lg hover:bg-gray-50 transition shadow-sm mb-2">
+                    <div class="flex items-center gap-3">
+                        <div class="flex flex-col items-center justify-center w-10 h-10 bg-indigo-50 text-indigo-600 rounded-md border border-indigo-100">
+                            <span class="text-[10px] font-bold uppercase leading-none">${item.dateObj.toLocaleString('default', {month:'short'})}</span>
+                            <span class="text-sm font-black leading-none">${item.dateObj.getDate()}</span>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-gray-800">${date}</div>
+                            <div class="text-[10px] text-gray-500">${time}</div>
+                        </div>
                     </div>
-                    <span class="text-[10px] font-bold uppercase px-2 py-1 rounded border ${badgeClass}">
+                    
+                    <span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full border ${isSup ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-green-100 text-green-700 border-green-200'}">
                         ${item.role}
                     </span>
                 </div>`;
+            
+            list.innerHTML += itemHtml;
         });
     }
 
