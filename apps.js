@@ -60,6 +60,21 @@ const App = {
     },
 
     Admin: {
+     // --- Helper: Download CSV Template ---
+        downloadTemplate: () => {
+            // The exact headers your app expects
+            const csvContent = "Sl No,Name,Gender,Dept,Year,Stream,Admission Number\n1,Sample Name,Male,Botany,1,UG,12345";
+            
+            // Create a virtual file and trigger download
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "nominal_roll_template.csv"; // File name
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        },
         // --- CSV & Nominal Roll Logic ---
         processCSV: () => {
             const fileInput = document.getElementById('csv-file');
