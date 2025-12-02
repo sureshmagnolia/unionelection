@@ -21,8 +21,7 @@ const SYSTEM_ROLES = [ROLE_CS, ROLE_SAS, ROLE_PRINCIPAL];
 // Default Config (Uses the constants)
 const DEFAULT_ROLES = { 
     "Vice Principal": 0, 
-    "HOD": 1, 
-    "NSS Officer": 1, 
+    "HOD": 1,  
     "Warden": 0, 
     "Exam Chief": 0,
     [ROLE_CS]: 0,       
