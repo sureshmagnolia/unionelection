@@ -757,7 +757,12 @@ const App = {
             } catch(e) { console.error(e); }
         },
 
+        // Add a variable to store the correct answer (inside the Student object)
+        captchaAnswer: 0,
+
+        // 6. Generate Preview & Setup CAPTCHA
         generatePreview: () => {
+            // ... (Validation checks kept same) ...
             if(!App.Student.proposerData || !App.Student.seconderData) return alert("Invalid Proposer/Seconder");
             const dob = document.getElementById('frm-dob').value;
             if(!dob) return alert("Enter DOB");
@@ -766,6 +771,7 @@ const App = {
             const p = App.Student.proposerData;
             const s = App.Student.seconderData;
 
+            // Fill Data (Same as before)
             document.getElementById('prev-post').innerText = App.Student.selectedPost.name;
             document.getElementById('preview-date').innerText = "Date: " + new Date().toLocaleDateString();
             document.getElementById('prev-serial-display').innerText = "---"; 
@@ -787,6 +793,16 @@ const App = {
             document.getElementById('prev-s-dept').innerText = s.dept;
             document.getElementById('prev-s-year').innerText = s.year + " " + s.stream;
 
+            // --- NEW: GENERATE MATH CAPTCHA ---
+            const num1 = Math.floor(Math.random() * 10) + 1; // Random 1-10
+            const num2 = Math.floor(Math.random() * 10) + 1; // Random 1-10
+            App.Student.captchaAnswer = num1 + num2;
+            
+            document.getElementById('math-q').innerText = `${num1} + ${num2}`;
+            document.getElementById('math-a').value = ''; // Clear previous answer
+            document.getElementById('captcha-box').classList.remove('hidden'); // Show Captcha
+
+            // UI State
             document.getElementById('btn-edit').classList.remove('hidden');
             document.getElementById('btn-submit').classList.remove('hidden');
             document.getElementById('btn-print').classList.add('hidden');
@@ -796,19 +812,24 @@ const App = {
             document.getElementById('nomination-preview-container').classList.remove('hidden');
         },
 
-        editForm: () => {
-            document.getElementById('sec-form').classList.remove('hidden');
-            document.getElementById('nomination-preview-container').classList.add('hidden');
-        },
-
+        // 7. Final Submit (With CAPTCHA Check)
         finalSubmit: async () => {
-            if(!confirm("Submit Nomination?")) return;
+            // --- NEW: VERIFY CAPTCHA ---
+            const userAnswer = parseInt(document.getElementById('math-a').value);
+            if (userAnswer !== App.Student.captchaAnswer) {
+                alert("❌ Incorrect CAPTCHA Answer.\nPlease solve the math question to prove you are human.");
+                return;
+            }
+
+            if(!confirm("Are you sure? Once submitted, you cannot edit.")) return;
+
             const submitBtn = document.getElementById('btn-submit');
             submitBtn.disabled = true;
             submitBtn.innerText = "Processing...";
 
             try {
                 let assignedSerial = "";
+
                 await runTransaction(db, async (transaction) => {
                     const counterRef = doc(db, "settings", "counters");
                     const counterDoc = await transaction.get(counterRef);
@@ -817,6 +838,7 @@ const App = {
                     if (counterDoc.exists()) {
                         nextSerial = (counterDoc.data().nominationSerial || 0) + 1;
                     }
+
                     assignedSerial = nextSerial.toString();
                     const newNomRef = doc(collection(db, "nominations"));
 
@@ -834,12 +856,18 @@ const App = {
                         timestamp: new Date()
                     });
                 });
+
                 alert(`Submitted! Serial No: ${assignedSerial}`);
+                
                 document.getElementById('prev-serial-display').innerText = `Serial No: ${assignedSerial}`;
+
+                // Hide Captcha & Edit buttons after success
+                document.getElementById('captcha-box').classList.add('hidden'); 
                 document.getElementById('btn-edit').classList.add('hidden');
                 document.getElementById('btn-submit').classList.add('hidden');
                 document.getElementById('btn-print').classList.remove('hidden');
                 document.getElementById('btn-exit').classList.remove('hidden');
+
             } catch(e) {
                 console.error(e);
                 alert("Error: " + e.message);
