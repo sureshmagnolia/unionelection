@@ -6,9 +6,16 @@
     <title>Election Admin Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f4f6f9; }
+        body { background-color: #f4f6f9; padding-bottom: 60px; }
         .hidden { display: none !important; }
         
+        /* Mobile Tweaks */
+        @media (max-width: 768px) {
+            .btn { width: 100%; margin-bottom: 5px; } /* Full width buttons on mobile */
+            .navbar-brand { font-size: 1.2rem; }
+            #btn-auth { width: 100%; margin-top: 10px; }
+        }
+
         /* Print Styles */
         @media print {
             body * { visibility: hidden; }
@@ -22,90 +29,83 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">Union Election Admin</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('nominal-roll')">1. Nominal Roll</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('posts')">2. Posts</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('nominations')">3. Scrutiny</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('booths')">4. Booths</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('team')">5. Team</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('nominal-roll'); closeMenu()">1. Nominal Roll</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('posts'); closeMenu()">2. Posts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('nominations'); closeMenu()">3. Scrutiny</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('booths'); closeMenu()">4. Booths</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('team'); closeMenu()">5. Team</a></li>
                 </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <button class="btn btn-outline-warning btn-sm fw-bold" id="btn-auth">Login with Google</button>
-                    </li>
-                </ul>
+                <div class="d-flex">
+                    <button class="btn btn-outline-warning btn-sm fw-bold" id="btn-auth">Login with Google</button>
+                </div>
             </div>
         </div>
     </nav>
 
-    <div id="login-overlay" class="container mt-5 text-center">
-        <div class="card shadow-lg p-5">
-            <h1 class="text-danger">Admin Access Only</h1>
-            <p class="lead">You must log in with an authorized Google Account to access the Election Management System.</p>
-            <p>If you are the Super Admin, click the Login button in the top right corner.</p>
+    <div id="login-overlay" class="container mt-5 text-center px-4">
+        <div class="card shadow-lg p-4">
+            <h2 class="text-danger">Admin Access Only</h2>
+            <p class="lead small">Log in with an authorized Google Account.</p>
         </div>
     </div>
 
-    <div id="main-content" class="container-fluid mt-4 hidden">
+    <div id="main-content" class="container-fluid mt-3 hidden">
         
         <div id="sec-nominal-roll">
             <div class="card shadow-sm mb-3">
-                <div class="card-header bg-primary text-white">1. Upload Nominal Roll (CSV)</div>
+                <div class="card-header bg-primary text-white">1. Nominal Roll</div>
                 <div class="card-body">
                     <div class="mb-3">
                         <label class="form-label">Upload CSV</label>
                         <div class="input-group">
                             <input type="file" id="csv-file" class="form-control" accept=".csv">
-                            <button class="btn btn-outline-secondary" onclick="window.App.Admin.downloadTemplate()">Download Template</button>
+                            <button class="btn btn-outline-secondary" onclick="window.App.Admin.downloadTemplate()">Template</button>
                         </div>
                     </div>
-                    <button class="btn btn-success" onclick="window.App.Admin.processCSV()">Upload & Preview</button>
-                    <button class="btn btn-dark" onclick="window.App.Admin.saveStudentsToDB()">Save to DB</button>
-                    <div id="student-count" class="mt-2 fw-bold text-success"></div>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6"><button class="btn btn-success" onclick="window.App.Admin.processCSV()">Upload & Preview</button></div>
+                        <div class="col-12 col-md-6"><button class="btn btn-dark" onclick="window.App.Admin.saveStudentsToDB()">Save to DB</button></div>
+                    </div>
+                    <div id="student-count" class="mt-2 fw-bold text-success text-center"></div>
                 </div>
             </div>
         </div>
 
         <div id="sec-posts" class="hidden">
-            <div class="row">
-                <div class="col-md-4">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
                     <div class="card shadow-sm">
-                        <div class="card-header bg-danger text-white">Add Election Post</div>
+                        <div class="card-header bg-danger text-white">Add Post</div>
                         <div class="card-body">
                             <form id="post-form" onsubmit="event.preventDefault(); window.App.Admin.addPost();">
-                                <div class="mb-2"><label>Post Name</label><input type="text" id="p-name" class="form-control" required></div>
+                                <div class="mb-2"><label>Name</label><input type="text" id="p-name" class="form-control" required></div>
                                 <div class="mb-2"><label>Vacancies</label><input type="number" id="p-vacancy" class="form-control" value="1" min="1"></div>
-                                <hr>
-                                <div class="mb-2">
-                                    <label>Gender</label>
-                                    <select id="p-gender" class="form-select"><option value="Any">Any</option><option value="Female">Female Only</option><option value="Male">Male Only</option></select>
-                                </div>
-                                <div class="mb-2">
-                                    <label>Stream</label>
-                                    <select id="p-stream" class="form-select"><option value="Any">Any</option><option value="UG">UG</option><option value="PG">PG</option></select>
-                                </div>
-                                <div class="mb-2">
-                                    <label>Year</label>
-                                    <select id="p-year" class="form-select"><option value="Any">Any</option><option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option></select>
-                                </div>
-                                <div class="mb-3">
-                                    <label>Dept (Specific)</label><input type="text" id="p-dept" class="form-control" placeholder="Optional">
-                                </div>
+                                <div class="mb-2"><label>Gender</label><select id="p-gender" class="form-select"><option value="Any">Any</option><option value="Female">Female</option><option value="Male">Male</option></select></div>
+                                <div class="mb-2"><label>Stream</label><select id="p-stream" class="form-select"><option value="Any">Any</option><option value="UG">UG</option><option value="PG">PG</option></select></div>
+                                <div class="mb-2"><label>Year</label><select id="p-year" class="form-select"><option value="Any">Any</option><option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option></select></div>
+                                <div class="mb-3"><label>Dept</label><input type="text" id="p-dept" class="form-control" placeholder="Optional"></div>
                                 <button type="submit" class="btn btn-danger w-100">Add Post</button>
                             </form>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-8">
+                <div class="col-12 col-md-8">
                     <div class="card shadow-sm">
-                        <div class="card-header d-flex justify-content-between">
-                            <span>Current Posts</span>
-                            <button class="btn btn-warning btn-sm" onclick="window.App.Admin.lockPosts()">🔒 Lock & Publish</button>
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Posts</span>
+                            <button class="btn btn-warning btn-sm" onclick="window.App.Admin.lockPosts()">🔒 Publish</button>
                         </div>
                         <div class="card-body table-responsive">
-                            <table class="table table-bordered table-striped"><tbody id="posts-tbody"></tbody></table>
+                            <table class="table table-bordered table-striped small">
+                                <thead class="table-dark"><tr><th>Name</th><th>Rule</th><th>Act</th></tr></thead>
+                                <tbody id="posts-tbody"></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -113,23 +113,23 @@
         </div>
 
         <div id="sec-team" class="hidden">
-            <div class="row">
-                <div class="col-md-5">
+            <div class="row g-3">
+                <div class="col-12 col-md-5">
                     <div class="card shadow-sm">
-                        <div class="card-header bg-dark text-white">Add Team Member</div>
+                        <div class="card-header bg-dark text-white">Add Admin</div>
                         <div class="card-body">
-                            <div class="input-group mb-3">
-                                <input type="email" id="new-admin-email" class="form-control" placeholder="gmail only">
+                            <div class="input-group">
+                                <input type="email" id="new-admin-email" class="form-control" placeholder="Email">
                                 <button class="btn btn-primary" onclick="window.App.Admin.addTeamMember()">Add</button>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-7">
+                <div class="col-12 col-md-7">
                     <div class="card shadow-sm">
-                        <div class="card-header">Current Team</div>
+                        <div class="card-header">Team List</div>
                         <ul class="list-group list-group-flush" id="admin-list"></ul>
-                        <div class="card-footer"><button class="btn btn-sm btn-secondary" onclick="window.App.Admin.loadTeam()">Refresh</button></div>
+                        <div class="card-footer"><button class="btn btn-sm btn-secondary w-100" onclick="window.App.Admin.loadTeam()">Refresh</button></div>
                     </div>
                 </div>
             </div>
@@ -142,13 +142,21 @@
     <div id="print-area"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
+    <script>
+        function closeMenu() {
+            const nav = document.getElementById('navbarNav');
+            if (nav.classList.contains('show')) {
+                new bootstrap.Collapse(nav).toggle();
+            }
+        }
+    </script>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } 
         from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
-        
-        // Import your logic
         import "./apps.js"; 
 
         const firebaseConfig = {
@@ -164,49 +172,31 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
-
         const btn = document.getElementById('btn-auth');
         const loginOverlay = document.getElementById('login-overlay');
         const mainContent = document.getElementById('main-content');
 
-        // Handle Button Click
         btn.addEventListener('click', () => {
             if (auth.currentUser) {
-                if(confirm("Are you sure you want to Logout?")) {
-                    signOut(auth).then(() => location.reload());
-                }
+                if(confirm("Logout?")) signOut(auth).then(() => location.reload());
             } else {
-                signInWithPopup(auth, provider).then((result) => {
-                    // Success - Page will update via onAuthStateChanged
-                    console.log("Logged in");
-                }).catch((error) => {
-                    alert("Login Failed: " + error.message);
-                });
+                signInWithPopup(auth, provider).catch((error) => alert(error.message));
             }
         });
 
-        // Check Login State
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // LOGGED IN
-                btn.innerText = "Logout (" + user.email + ")";
+                btn.innerText = "Logout";
                 btn.classList.replace('btn-outline-warning', 'btn-danger');
-                
-                // Show App, Hide Overlay
                 loginOverlay.classList.add('hidden');
                 mainContent.classList.remove('hidden');
-
-                // Load Data
                 if(window.App && window.App.Admin) {
                     window.App.Admin.loadPosts(); 
                     window.App.Admin.loadTeam();
                 }
             } else {
-                // LOGGED OUT
-                btn.innerText = "Login with Google";
+                btn.innerText = "Login";
                 btn.classList.replace('btn-danger', 'btn-outline-warning');
-
-                // Hide App, Show Overlay
                 loginOverlay.classList.remove('hidden');
                 mainContent.classList.add('hidden');
             }
