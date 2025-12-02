@@ -172,6 +172,68 @@ const App = {
     }
 };
 
+// --- Team Management Logic ---
+
+        loadTeam: async () => {
+            const list = document.getElementById('admin-list');
+            list.innerHTML = '<li class="list-group-item">Loading...</li>';
+            
+            try {
+                // Get list from database
+                const querySnapshot = await getDocs(collection(db, "admins"));
+                list.innerHTML = '';
+                
+                // 1. Show YOU (Super Admin)
+                list.innerHTML += `<li class="list-group-item active">sureshmagnolia@gmail.com (Super Admin)</li>`;
+
+                // 2. Show OTHERS
+                querySnapshot.forEach((doc) => {
+                    // Don't show yourself twice if you are in DB
+                    if(doc.id !== 'sureshmagnolia@gmail.com') {
+                        list.innerHTML += `
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                ${doc.id}
+                                <button class="btn btn-sm btn-outline-danger" onclick="window.App.Admin.removeTeamMember('${doc.id}')">Remove</button>
+                            </li>`;
+                    }
+                });
+            } catch (e) {
+                console.error(e);
+                list.innerHTML = `<li class="list-group-item text-danger">Error: You don't have permission to view this.</li>`;
+            }
+        },
+
+        addTeamMember: async () => {
+            const emailField = document.getElementById('new-admin-email');
+            const email = emailField.value.trim().toLowerCase();
+            
+            if(!email || !email.includes('@')) return alert("Please enter a valid email.");
+
+            try {
+                // Save to Firestore using email as ID
+                await setDoc(doc(db, "admins", email), {
+                    addedAt: new Date(),
+                    role: "admin"
+                });
+                alert(`${email} added to Team!`);
+                emailField.value = ''; // Clear input
+                App.Admin.loadTeam(); // Refresh list
+            } catch (e) {
+                console.error(e);
+                alert("Error adding admin: " + e.message);
+            }
+        },
+
+        removeTeamMember: async (email) => {
+            if(!confirm(`Are you sure you want to remove access for ${email}?`)) return;
+            try {
+                await deleteDoc(doc(db, "admins", email));
+                App.Admin.loadTeam(); // Refresh list
+            } catch (e) {
+                alert("Error removing admin.");
+            }
+        }
+
 // Make App global so HTML buttons can access it
 window.App = App;
 
