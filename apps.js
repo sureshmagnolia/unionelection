@@ -380,6 +380,122 @@ const App = {
             if(confirm("Remove admin?")) await deleteDoc(doc(db, "admins", email));
         }
     },
+
+// ------------------------------------------------
+        // MODULE: BOOTHS (Missing Part)
+        // ------------------------------------------------
+        loadBooths: () => {
+            const tbody = document.getElementById('booths-tbody');
+            if(!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
+            
+            // Live Listener for Booths
+            onSnapshot(collection(db, "booths"), (snapshot) => {
+                const booths = [];
+                snapshot.forEach(doc => booths.push({ id: doc.id, ...doc.data() }));
+                booths.sort((a,b) => a.name.localeCompare(b.name));
+
+                tbody.innerHTML = '';
+                if(booths.length === 0) { 
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">No booths created yet.</td></tr>'; 
+                    return; 
+                }
+
+                booths.forEach(b => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><span class="fw-bold">${b.name}</span><br><small class="text-muted">${b.location}</small></td>
+                        <td>
+                            <span class="badge bg-primary fs-6">${b.voterCount || 0}</span>
+                            <div class="small text-muted mt-1" style="max-width:200px; overflow:hidden;">
+                                ${b.assignedDepts ? b.assignedDepts.join(', ') : '-'}
+                            </div>
+                        </td>
+                        <td><small>Start: <strong>${b.serialStart || '-'}</strong></small><br><small>End: <strong>${b.serialEnd || '-'}</strong></small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-dark" onclick="window.App.Admin.printBoothReport('${b.id}')">🖨 Report</button>
+                            <button class="btn btn-sm btn-danger" onclick="window.App.Admin.deleteBooth('${b.id}')">X</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            });
+        },
+
+        addBooth: async () => {
+            const name = document.getElementById('b-name').value;
+            const loc = document.getElementById('b-loc').value;
+            if(!name || !loc) return;
+            await addDoc(collection(db, "booths"), { 
+                name: name, 
+                location: loc, 
+                voterCount: 0, 
+                assignedDepts: [] 
+            });
+            document.getElementById('b-name').value = '';
+            document.getElementById('b-loc').value = '';
+        },
+
+        deleteBooth: async (id) => {
+            if(confirm("Delete this booth?")) await deleteDoc(doc(db, "booths", id));
+        },
+
+        autoAssignBooths: async () => {
+            if(!confirm("Reset and auto-assign ALL students to booths?")) return;
+            
+            const boothSnap = await getDocs(collection(db, "booths"));
+            const booths = [];
+            boothSnap.forEach(doc => booths.push({ id: doc.id, ...doc.data(), currentLoad: 0, depts: [] }));
+            
+            if(booths.length === 0) return alert("Create booths first!");
+
+            const studentSnap = await getDocs(collection(db, "students"));
+            const students = [];
+            studentSnap.forEach(doc => students.push(doc.data()));
+
+            const deptMap = {};
+            students.forEach(s => { if(!deptMap[s.dept]) deptMap[s.dept] = []; deptMap[s.dept].push(s); });
+
+            let boothIndex = 0;
+            const batch = writeBatch(db);
+
+            Object.keys(deptMap).forEach(deptName => {
+                const deptStudents = deptMap[deptName];
+                const targetBooth = booths[boothIndex];
+                deptStudents.forEach(s => {
+                    const sRef = doc(db, "students", s.admNo.toString());
+                    batch.update(sRef, { boothId: targetBooth.id, boothName: targetBooth.name });
+                });
+                targetBooth.currentLoad += deptStudents.length;
+                targetBooth.depts.push(deptName);
+                boothIndex = (boothIndex + 1) % booths.length;
+            });
+
+            booths.forEach(b => {
+                const bRef = doc(db, "booths", b.id);
+                batch.update(bRef, { voterCount: b.currentLoad, assignedDepts: b.depts });
+            });
+            
+            try { await batch.commit(); alert(`Success! Assigned ${students.length} students.`); }
+            catch(e) { alert("Error: " + e.message); }
+        },
+
+        printBoothReport: async (boothId) => {
+            const bSnap = await getDoc(doc(db, "booths", boothId));
+            const booth = bSnap.data();
+            const q = await getDocs(collection(db, "students"));
+            const voters = [];
+            q.forEach(doc => { const s = doc.data(); if(s.boothId === boothId) voters.push(s); });
+            voters.sort((a,b) => parseInt(a.slNo) - parseInt(b.slNo));
+            
+            if(voters.length === 0) return alert("No voters assigned.");
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`<html><head><title>Booth Report</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid black;padding:5px;font-size:12px;}.header{text-align:center;margin-bottom:20px;}.stats{margin-top:20px;border:1px solid black;padding:10px;}</style></head><body><div class="header"><h2>Presiding Officer Report</h2><h3>${booth.name} (${booth.location})</h3></div><div class="stats"><strong>Depts:</strong> ${booth.assignedDepts}<br><strong>Total:</strong> ${voters.length}</div><h3>Voter List</h3><table><thead><tr><th>Sl</th><th>Adm</th><th>Name</th><th>Dept</th><th>Sign</th></tr></thead><tbody>${voters.map(v => `<tr><td>${v.slNo}</td><td>${v.admNo}</td><td>${v.name}</td><td>${v.dept}</td><td></td></tr>`).join('')}</tbody></table></body></html>`);
+            printWindow.document.close();
+            printWindow.print();
+        }
+  
 // ------------------------------------------------
         // MODULE E: BOOTHS & ALLOCATION
         // ------------------------------------------------
