@@ -517,10 +517,13 @@ const App = {
             if(confirm("Delete this booth?")) await deleteDoc(doc(db, "booths", id));
         },
         // ----------------------------------------------------------------
-        // SMART LOAD BALANCER: AUTO ASSIGN VOTERS
+        // HYBRID LOAD BALANCER: Split Only Largest Dept
         // ----------------------------------------------------------------
         autoAssignBooths: async () => {
-            if(!confirm("⚠️ START SMART ALLOCATION?\n\nThis will:\n1. Count students per Dept.\n2. Balance Depts across booths to equalize voter numbers.\n3. Update ALL student records.\n\nThis may take a few seconds.")) return;
+            if(!confirm("⚠️ START HYBRID ALLOCATION?\n\nLogic:\n1. Identify the SINGLE largest Department.\n2. Split ONLY that department into Classes.\n3. Keep all other departments intact.\n4. Distribute to balance booth numbers.")) return;
+
+            const statusEl = document.getElementById('student-count');
+            statusEl.innerText = "Analyzing data...";
 
             // 1. Fetch Data
             const boothSnap = await getDocs(collection(db, "booths"));
@@ -529,11 +532,11 @@ const App = {
                 id: doc.id, 
                 ...doc.data(), 
                 currentLoad: 0, 
-                assignedDepts: [], 
-                studentUpdates: [] // Store students here temporarily
+                assignedUnits: [], // Stores Dept Names OR Class Names
+                studentUpdates: [] 
             }));
 
-            if(booths.length === 0) return alert("Please create booths first!");
+            if(booths.length === 0) return alert("Create booths first!");
 
             const studentSnap = await getDocs(collection(db, "students"));
             const allStudents = [];
@@ -541,53 +544,95 @@ const App = {
 
             if(allStudents.length === 0) return alert("No students found.");
 
-            // 2. Group Students by Dept
+            // 2. Group All Students by Department First
             const deptMap = {};
             allStudents.forEach(s => {
-                const d = s.dept.trim().toUpperCase(); // Normalize
+                const d = s.dept.trim().toUpperCase(); 
                 if(!deptMap[d]) deptMap[d] = [];
                 deptMap[d].push(s);
             });
 
-            // 3. Sort Depts by Size (Largest to Smallest) - Critical for balancing
-            const sortedDepts = Object.keys(deptMap).sort((a, b) => deptMap[b].length - deptMap[a].length);
+            // 3. Find the "Giant" (Largest Dept)
+            let largestDeptName = "";
+            let maxCount = 0;
+            for (const d in deptMap) {
+                if (deptMap[d].length > maxCount) {
+                    maxCount = deptMap[d].length;
+                    largestDeptName = d;
+                }
+            }
+            console.log(`Largest Dept is ${largestDeptName} with ${maxCount} students.`);
 
-            // 4. The Logic Engine (Greedy Least-Loaded)
-            sortedDepts.forEach(deptName => {
-                // Find the booth with the LOWEST current load
+            // 4. Create "Allocation Units" (Puzzle Pieces)
+            // A Unit is either a Whole Dept OR a Specific Class (if it's the giant)
+            const allocationUnits = [];
+
+            for (const deptName in deptMap) {
+                const students = deptMap[deptName];
+
+                if (deptName === largestDeptName) {
+                    // --- SPLIT LOGIC for the Giant ---
+                    const classMap = {};
+                    students.forEach(s => {
+                        // Key: "COMMERCE 1 UG"
+                        const classKey = `${s.dept} ${s.year} ${s.stream}`.toUpperCase();
+                        if(!classMap[classKey]) classMap[classKey] = [];
+                        classMap[classKey].push(s);
+                    });
+                    
+                    // Add each class as a separate unit
+                    for(const cKey in classMap) {
+                        allocationUnits.push({
+                            name: cKey, // e.g., "COMMERCE 1 UG"
+                            students: classMap[cKey],
+                            count: classMap[cKey].length,
+                            isSplit: true
+                        });
+                    }
+                } else {
+                    // --- WHOLE LOGIC for others ---
+                    allocationUnits.push({
+                        name: deptName, // e.g., "HISTORY"
+                        students: students,
+                        count: students.length,
+                        isSplit: false
+                    });
+                }
+            }
+
+            // 5. Sort Units Largest to Smallest (Greedy Algorithm)
+            // This ensures big blocks get seated first, small blocks fill gaps.
+            allocationUnits.sort((a, b) => b.count - a.count);
+
+            // 6. Assign to Emptiest Booth
+            allocationUnits.forEach(unit => {
+                // Find booth with lowest load
                 booths.sort((a, b) => a.currentLoad - b.currentLoad);
-                const targetBooth = booths[0]; // The emptiest booth
+                const target = booths[0];
 
-                // Assign this Dept to this Booth
-                const studentsInDept = deptMap[deptName];
-                targetBooth.assignedDepts.push(deptName);
-                targetBooth.currentLoad += studentsInDept.length;
-                
-                // Add these students to the booth's update list
-                targetBooth.studentUpdates.push(...studentsInDept);
+                target.assignedUnits.push(unit.name);
+                target.currentLoad += unit.count;
+                target.studentUpdates.push(...unit.students);
             });
 
-            // 5. Execute Updates (With Batch Chunking)
-            // We need to update Booth Docs AND Student Docs
-            const statusEl = document.getElementById('student-count');
-            statusEl.innerText = "Processing allocation...";
-
+            // 7. Commit to Database
+            statusEl.innerText = "Saving allocations...";
             try {
                 const batchSize = 450;
                 let batch = writeBatch(db);
                 let opCount = 0;
 
-                // A. Prepare Booth Updates
+                // Update Booths
                 for (const b of booths) {
                     const bRef = doc(db, "booths", b.id);
                     batch.update(bRef, { 
                         voterCount: b.currentLoad, 
-                        assignedDepts: b.assignedDepts 
+                        assignedDepts: b.assignedUnits // Saving the mixed list (Depts + Classes)
                     });
                     opCount++;
                 }
 
-                // B. Prepare Student Updates
+                // Update Students
                 for (const b of booths) {
                     for (const s of b.studentUpdates) {
                         const sRef = doc(db, "students", s.admNo.toString());
@@ -597,47 +642,97 @@ const App = {
                         });
                         opCount++;
 
-                        // Commit if batch is full
                         if (opCount >= batchSize) {
                             await batch.commit();
                             batch = writeBatch(db);
                             opCount = 0;
-                            console.log("Batch committed...");
                         }
                     }
                 }
-
-                // Commit remaining
                 if (opCount > 0) await batch.commit();
 
-                // 6. Generate Report Text
-                let report = "Allocation Complete!\n\n";
+                // Report
+                let report = `Allocation Complete!\nLargest Dept (${largestDeptName}) was split.\n\n`;
                 booths.forEach(b => {
-                    report += `${b.name}: ${b.currentLoad} Voters (${b.assignedDepts.join(', ')})\n`;
+                    report += `${b.name}: ${b.currentLoad} Voters\n`;
                 });
                 alert(report);
                 statusEl.innerText = "Allocation Finished.";
 
             } catch(e) {
                 console.error(e);
-                alert("Error during allocation: " + e.message);
+                alert("Error: " + e.message);
             }
         },
-        printBoothReport: async (boothId) => {
+       printBoothReport: async (boothId) => {
             const bSnap = await getDoc(doc(db, "booths", boothId));
             const booth = bSnap.data();
             const q = await getDocs(collection(db, "students"));
             const voters = [];
-            q.forEach(doc => { const s = doc.data(); if(s.boothId === boothId) voters.push(s); });
-            voters.sort((a,b) => parseInt(a.slNo) - parseInt(b.slNo));
+            q.forEach(doc => { 
+                const s = doc.data(); 
+                if(s.boothId === boothId) voters.push(s); 
+            });
+            
+            // Sort: Dept -> Year -> Name
+            voters.sort((a,b) => a.dept.localeCompare(b.dept) || a.year - b.year || a.name.localeCompare(b.name));
+            
             if(voters.length === 0) return alert("No voters assigned.");
 
             const printWindow = window.open('', '_blank');
-            printWindow.document.write(`<html><head><title>Booth Report</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid black;padding:5px;font-size:12px;}.header{text-align:center;margin-bottom:20px;}.stats{margin-top:20px;border:1px solid black;padding:10px;}</style></head><body><div class="header"><h2>Presiding Officer Report</h2><h3>${booth.name} (${booth.location})</h3></div><div class="stats"><strong>Depts:</strong> ${booth.assignedDepts}<br><strong>Total:</strong> ${voters.length}</div><h3>Voter List</h3><table><thead><tr><th>Sl</th><th>Adm</th><th>Name</th><th>Dept</th><th>Sign</th></tr></thead><tbody>${voters.map(v => `<tr><td>${v.slNo}</td><td>${v.admNo}</td><td>${v.name}</td><td>${v.dept}</td><td></td></tr>`).join('')}</tbody></table></body></html>`);
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Booth Report - ${booth.name}</title>
+                    <style>
+                        body { font-family: sans-serif; padding: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th, td { border: 1px solid black; padding: 5px; font-size: 12px; }
+                        .header { text-align: center; margin-bottom: 20px; }
+                        .stats { margin-top: 20px; border: 1px solid black; padding: 10px; background: #f0f0f0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>Presiding Officer's Report</h2>
+                        <h3>Booth: ${booth.name} (${booth.location})</h3>
+                    </div>
+
+                    <div class="stats">
+                        <strong>Assigned Groups:</strong><br> 
+                        ${booth.assignedDepts ? booth.assignedDepts.join(', ') : 'None'}
+                        <br><br>
+                        <strong>Total Voters:</strong> ${voters.length}
+                        <br>
+                        <strong>Ballot Paper Serial Range:</strong> From ______ To ______
+                    </div>
+
+                    <h3>Voter List</h3>
+                    <table>
+                        <thead><tr><th>Sl No</th><th>Adm No</th><th>Name</th><th>Class</th><th>Signature</th></tr></thead>
+                        <tbody>
+                            ${voters.map((v, i) => `
+                                <tr>
+                                    <td>${i + 1}</td>
+                                    <td>${v.admNo}</td>
+                                    <td><strong>${v.name}</strong></td>
+                                    <td>${v.dept} ${v.year} ${v.stream}</td>
+                                    <td></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <br><br>
+                    <div style="display: flex; justify-content: space-between;">
+                        <div>Signature of Polling Agent</div>
+                        <div>Signature of Presiding Officer</div>
+                    </div>
+                </body>
+                </html>
+            `);
             printWindow.document.close();
             printWindow.print();
         }
-
     }, // <--- The critical comma separating Admin and Student
 
     // ==========================================
