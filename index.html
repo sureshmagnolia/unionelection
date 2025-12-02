@@ -203,7 +203,61 @@
 </div>
 
         
-        <div id="sec-booths" class="hidden"><h2>Booth Module (Coming Soon)</h2></div>
+        <div id="sec-booths" class="hidden">
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">Create Booth</div>
+                <div class="card-body">
+                    <form onsubmit="event.preventDefault(); window.App.Admin.addBooth();">
+                        <div class="mb-3">
+                            <label>Booth Name / Room No</label>
+                            <input type="text" id="b-name" class="form-control" placeholder="e.g. Room 101" required>
+                        </div>
+                        <div class="mb-3">
+                            <label>Location / Block</label>
+                            <input type="text" id="b-loc" class="form-control" placeholder="e.g. Main Block" required>
+                        </div>
+                        <button type="submit" class="btn btn-dark w-100">Add Booth</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card shadow-sm mt-3">
+                <div class="card-header bg-warning">Allocation Tools</div>
+                <div class="card-body">
+                    <p class="small text-muted">Clicking this will distribute all students into available booths based on Department.</p>
+                    <button class="btn btn-danger w-100" onclick="window.App.Admin.autoAssignBooths()">⚡ Auto Assign Voters</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    Active Booths
+                    <button class="btn btn-sm btn-outline-primary float-end" onclick="window.App.Admin.loadBooths()">Refresh</button>
+                </div>
+                <div class="card-body table-responsive">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Booth Name</th>
+                                <th>Voters</th>
+                                <th>Ballot Stats</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="booths-tbody">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+        
     </div>
 
     <div id="print-area"></div>
