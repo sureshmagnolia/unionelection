@@ -212,56 +212,71 @@
 </div>
 
         
-        <div id="sec-booths" class="hidden">
-    <div class="row g-3">
+       <div id="sec-booths" class="hidden">
+    
+    <div class="row g-3 mb-4">
+        
         <div class="col-md-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-dark text-white">Create Booth</div>
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">1. Define Scale</div>
                 <div class="card-body">
-                    <form onsubmit="event.preventDefault(); window.App.Admin.addBooth();">
-                        <div class="mb-3">
-                            <label>Booth Name / Room No</label>
-                            <input type="text" id="b-name" class="form-control" placeholder="e.g. Room 101" required>
-                        </div>
-                        <div class="mb-3">
-                            <label>Location / Block</label>
-                            <input type="text" id="b-loc" class="form-control" placeholder="e.g. Main Block" required>
-                        </div>
-                        <button type="submit" class="btn btn-dark w-100">Add Booth</button>
-                    </form>
-                </div>
-            </div>
-            
-            <div class="card shadow-sm mt-3">
-                <div class="card-header bg-warning">Allocation Tools</div>
-                <div class="card-body">
-                    <p class="small text-muted">Clicking this will distribute all students into available booths based on Department.</p>
-                    <button class="btn btn-danger w-100" onclick="window.App.Admin.autoAssignBooths()">⚡ Auto Assign Voters</button>
+                    <p class="small text-muted">How many polling booths do you need?</p>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Count</span>
+                        <input type="number" id="gen-count" class="form-control" placeholder="e.g. 15">
+                        <button class="btn btn-primary" onclick="window.App.Admin.generateBooths()">Generate</button>
+                    </div>
+                    <hr>
+                    <button class="btn btn-danger w-100" onclick="window.App.Admin.autoAssignBooths()">⚡ Auto-Distribute Voters</button>
                 </div>
             </div>
         </div>
 
         <div class="col-md-8">
-            <div class="card shadow-sm">
-                <div class="card-header">
-                    Active Booths
-                    <button class="btn btn-sm btn-outline-primary float-end" onclick="window.App.Admin.loadBooths()">Refresh</button>
-                </div>
-                <div class="card-body table-responsive">
-                    <table class="table table-bordered align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Booth Name</th>
-                                <th>Voters</th>
-                                <th>Ballot Stats</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="booths-tbody">
-                            </tbody>
-                    </table>
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-dark text-white">2. Physical Room Inventory</div>
+                <div class="card-body">
+                    <form class="row g-2 align-items-center" onsubmit="event.preventDefault(); window.App.Admin.addRoom();">
+                        <div class="col-md-3">
+                            <input type="text" id="r-no" class="form-control" placeholder="Room No (e.g. 101)" required>
+                        </div>
+                        <div class="col-md-5">
+                            <input type="text" id="r-loc" class="form-control" placeholder="Location (e.g. Main Block)" required>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-dark w-100">Add Room</button>
+                        </div>
+                    </form>
+                    
+                    <div class="mt-3" style="max-height: 150px; overflow-y: auto;">
+                        <table class="table table-sm table-striped small mb-0">
+                            <thead class="sticky-top bg-light"><tr><th>Room</th><th>Location</th><th>Action</th></tr></thead>
+                            <tbody id="rooms-tbody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-primary">
+        <div class="card-header bg-white text-primary fw-bold">
+            3. Logistics Map (Assign Rooms to Booths)
+            <button class="btn btn-sm btn-outline-secondary float-end" onclick="window.App.Admin.loadBooths()">🔄 Refresh Map</button>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 15%;">Booth ID</th>
+                        <th style="width: 35%;">Voter Allocation</th>
+                        <th style="width: 35%;">Physical Location (Select Room)</th>
+                        <th style="width: 15%;">Report</th>
+                    </tr>
+                </thead>
+                <tbody id="booths-tbody">
+                    </tbody>
+            </table>
         </div>
     </div>
 </div>
