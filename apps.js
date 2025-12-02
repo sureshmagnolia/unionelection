@@ -600,140 +600,7 @@ const App = {
             }, { merge: true });
         },
 
-        // 5. HYBRID LOAD BALANCER (Kept as requested)
-        autoAssignBooths: async () => {
-            if(!confirm("⚠️ START HYBRID ALLOCATION?")) return;
-            const statusEl = document.getElementById('student-count');
-            statusEl.innerText = "Analyzing data...";
-
-            const boothSnap = await getDocs(collection(db, "booths"));
-            const booths = [];
-            boothSnap.forEach(doc => booths.push({ id: doc.id, ...doc.data(), currentLoad: 0, assignedUnits: [], studentUpdates: [] }));
-
-            if(booths.length === 0) return alert("Generate booths first!");
-
-            const studentSnap = await getDocs(collection(db, "students"));
-            const allStudents = [];
-            studentSnap.forEach(doc => allStudents.push(doc.data()));
-
-            // Group by Dept
-            const deptMap = {};
-            allStudents.forEach(s => {
-                const d = s.dept.trim().toUpperCase(); 
-                if(!deptMap[d]) deptMap[d] = [];
-                deptMap[d].push(s);
-            });
-
-            // Find Giant
-            let largestDeptName = "";
-            let maxCount = 0;
-            for (const d in deptMap) {
-                if (deptMap[d].length > maxCount) {
-                    maxCount = deptMap[d].length;
-                    largestDeptName = d;
-                }
-            }
-
-            const allocationUnits = [];
-            for (const deptName in deptMap) {
-                const students = deptMap[deptName];
-                if (deptName === largestDeptName) {
-                    // Split Giant
-                    const classMap = {};
-                    students.forEach(s => {
-                        const classKey = `${s.dept} ${s.year} ${s.stream}`.toUpperCase();
-                        if(!classMap[classKey]) classMap[classKey] = [];
-                        classMap[classKey].push(s);
-                    });
-                    for(const cKey in classMap) {
-                        allocationUnits.push({ name: cKey, students: classMap[cKey], count: classMap[cKey].length });
-                    }
-                } else {
-                    allocationUnits.push({ name: deptName, students: students, count: students.length });
-                }
-            }
-
-            allocationUnits.sort((a, b) => b.count - a.count);
-
-            allocationUnits.forEach(unit => {
-                booths.sort((a, b) => a.currentLoad - b.currentLoad);
-                const target = booths[0];
-                target.assignedUnits.push(unit.name);
-                target.currentLoad += unit.count;
-                target.studentUpdates.push(...unit.students);
-            });
-
-            statusEl.innerText = "Saving allocations...";
-            try {
-                const batchSize = 450;
-                let batch = writeBatch(db);
-                let opCount = 0;
-
-                for (const b of booths) {
-                    const bRef = doc(db, "booths", b.id);
-                    batch.update(bRef, { voterCount: b.currentLoad, assignedDepts: b.assignedUnits });
-                    opCount++;
-                }
-
-                for (const b of booths) {
-                    for (const s of b.studentUpdates) {
-                        const sRef = doc(db, "students", s.admNo.toString());
-                        batch.update(sRef, { boothId: b.id, boothName: b.name });
-                        opCount++;
-                        if (opCount >= batchSize) { await batch.commit(); batch = writeBatch(db); opCount = 0; }
-                    }
-                }
-                if (opCount > 0) await batch.commit();
-                alert(`Allocation Complete! Giant Dept (${largestDeptName}) was split.`);
-                statusEl.innerText = "Allocation Finished.";
-            } catch(e) { alert("Error: " + e.message); }
-        },
-
-        // 6. Print Report (Updated to show Room Info)
-        printBoothReport: async (boothId) => {
-            const bSnap = await getDoc(doc(db, "booths", boothId));
-            const booth = bSnap.data();
-            const q = await getDocs(collection(db, "students"));
-            const voters = [];
-            q.forEach(doc => { const s = doc.data(); if(s.boothId === boothId) voters.push(s); });
-            voters.sort((a,b) => a.dept.localeCompare(b.dept) || a.year - b.year || a.name.localeCompare(b.name));
-            
-            if(voters.length === 0) return alert("No voters assigned.");
-
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(`
-                <html>
-                <head>
-                    <title>Booth Report - ${booth.name}</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 20px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                        th, td { border: 1px solid black; padding: 5px; font-size: 12px; }
-                        .header { text-align: center; margin-bottom: 20px; }
-                        .stats { margin-top: 20px; border: 1px solid black; padding: 10px; background: #f0f0f0; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h2>Presiding Officer's Report</h2>
-                        <h1>${booth.name}</h1>
-                        <h3>Location: ${booth.roomName || 'Not Assigned'} (${booth.location || 'Unknown'})</h3>
-                    </div>
-                    <div class="stats">
-                        <strong>Assigned Groups:</strong> ${booth.assignedDepts ? booth.assignedDepts.join(', ') : 'None'}<br>
-                        <strong>Total Voters:</strong> ${voters.length}<br>
-                        <strong>Ballot Range:</strong> From ______ To ______
-                    </div>
-                    <h3>Voter List</h3>
-                    <table><thead><tr><th>Sl</th><th>Adm</th><th>Name</th><th>Class</th><th>Sign</th></tr></thead>
-                    <tbody>
-                        ${voters.map((v, i) => `<tr><td>${i+1}</td><td>${v.admNo}</td><td>${v.name}</td><td>${v.dept} ${v.year} ${v.stream}</td><td></td></tr>`).join('')}
-                    </tbody></table>
-                </body></html>
-            `);
-            printWindow.document.close();
-            printWindow.print();
-        }
+        
         
         // ----------------------------------------------------------------
         // HYBRID LOAD BALANCER: Split Only Largest Dept
@@ -870,8 +737,150 @@ const App = {
                 }
                 if (opCount > 0) await batch.commit();
 
+
+        // ----------------------------------------------------------------
+        // LOGISTIC LOAD BALANCER: Giant Split Max 2
+        // ----------------------------------------------------------------
+        autoAssignBooths: async () => {
+            if(!confirm("⚠️ START LOGISTIC ALLOCATION?\n\nConstraint: To minimize ballot distribution complexity, the largest Department will be split into a MAXIMUM of 2 chunks (Booth A & Booth B). All other departments remain whole.")) return;
+
+            const statusEl = document.getElementById('student-count');
+            statusEl.innerText = "Analyzing Department Sizes...";
+
+            // 1. Fetch Data
+            const boothSnap = await getDocs(collection(db, "booths"));
+            const booths = [];
+            boothSnap.forEach(doc => booths.push({ 
+                id: doc.id, 
+                ...doc.data(), 
+                currentLoad: 0, 
+                assignedUnits: [], 
+                studentUpdates: [] 
+            }));
+
+            if(booths.length === 0) return alert("Create booths first!");
+
+            const studentSnap = await getDocs(collection(db, "students"));
+            const allStudents = [];
+            studentSnap.forEach(doc => allStudents.push(doc.data()));
+
+            if(allStudents.length === 0) return alert("No students found.");
+
+            // 2. Group Students by Department
+            const deptMap = {};
+            allStudents.forEach(s => {
+                const d = s.dept.trim().toUpperCase(); 
+                if(!deptMap[d]) deptMap[d] = [];
+                deptMap[d].push(s);
+            });
+
+            // 3. Find the "Giant" (Largest Dept)
+            let largestDeptName = "";
+            let maxCount = 0;
+            for (const d in deptMap) {
+                if (deptMap[d].length > maxCount) {
+                    maxCount = deptMap[d].length;
+                    largestDeptName = d;
+                }
+            }
+
+            // 4. Create "Allocation Units"
+            const allocationUnits = [];
+
+            for (const deptName in deptMap) {
+                const students = deptMap[deptName];
+
+                if (deptName === largestDeptName) {
+                    // --- THE "MAX 2" SPLIT LOGIC ---
+                    // 1. Break Giant into Classes first
+                    const classMap = {};
+                    students.forEach(s => {
+                        const classKey = `${s.dept} ${s.year} ${s.stream}`.toUpperCase();
+                        if(!classMap[classKey]) classMap[classKey] = [];
+                        classMap[classKey].push(s);
+                    });
+
+                    // 2. Divide Classes into exactly Two Buckets (A and B)
+                    // We try to fill Bucket A until it reaches 50%, then put rest in B.
+                    const halfTarget = students.length / 2;
+                    const bucketA = { name: `${deptName} (Part 1)`, students: [], count: 0 };
+                    const bucketB = { name: `${deptName} (Part 2)`, students: [], count: 0 };
+
+                    for (const cKey in classMap) {
+                        const classStudents = classMap[cKey];
+                        // If Bucket A is not yet full (approx half), add there. Else Bucket B.
+                        if (bucketA.count < halfTarget) {
+                            bucketA.students.push(...classStudents);
+                            bucketA.count += classStudents.length;
+                        } else {
+                            bucketB.students.push(...classStudents);
+                            bucketB.count += classStudents.length;
+                        }
+                    }
+
+                    // Add the two halves as units
+                    if (bucketA.count > 0) allocationUnits.push({ name: bucketA.name, students: bucketA.students, count: bucketA.count });
+                    if (bucketB.count > 0) allocationUnits.push({ name: bucketB.name, students: bucketB.students, count: bucketB.count });
+
+                } else {
+                    // --- WHOLE LOGIC for others ---
+                    allocationUnits.push({
+                        name: deptName, 
+                        students: students,
+                        count: students.length
+                    });
+                }
+            }
+
+            // 5. Sort Units Largest to Smallest
+            allocationUnits.sort((a, b) => b.count - a.count);
+
+            // 6. Assign to Emptiest Booth
+            allocationUnits.forEach(unit => {
+                booths.sort((a, b) => a.currentLoad - b.currentLoad);
+                const target = booths[0];
+
+                target.assignedUnits.push(unit.name);
+                target.currentLoad += unit.count;
+                target.studentUpdates.push(...unit.students);
+            });
+
+            // 7. Commit to Database
+            statusEl.innerText = "Saving allocations...";
+            try {
+                const batchSize = 450;
+                let batch = writeBatch(db);
+                let opCount = 0;
+
+                for (const b of booths) {
+                    const bRef = doc(db, "booths", b.id);
+                    batch.update(bRef, { 
+                        voterCount: b.currentLoad, 
+                        assignedDepts: b.assignedUnits 
+                    });
+                    opCount++;
+                }
+
+                for (const b of booths) {
+                    for (const s of b.studentUpdates) {
+                        const sRef = doc(db, "students", s.admNo.toString());
+                        batch.update(sRef, { 
+                            boothId: b.id, 
+                            boothName: b.name 
+                        });
+                        opCount++;
+
+                        if (opCount >= batchSize) {
+                            await batch.commit();
+                            batch = writeBatch(db);
+                            opCount = 0;
+                        }
+                    }
+                }
+                if (opCount > 0) await batch.commit();
+
                 // Report
-                let report = `Allocation Complete!\nLargest Dept (${largestDeptName}) was split.\n\n`;
+                let report = `Logistics Optimized Allocation Complete!\n\n`;
                 booths.forEach(b => {
                     report += `${b.name}: ${b.currentLoad} Voters\n`;
                 });
@@ -883,6 +892,9 @@ const App = {
                 alert("Error: " + e.message);
             }
         },
+
+
+              
        printBoothReport: async (boothId) => {
             const bSnap = await getDoc(doc(db, "booths", boothId));
             const booth = bSnap.data();
