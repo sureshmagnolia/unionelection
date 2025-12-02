@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Election Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #eef2f5; }
+        .hidden { display: none !important; }
+        .step-card { border-left: 5px solid #0d6efd; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-dark bg-primary shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">🎓 Union Election 2025</a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+
+        <div id="sec-search" class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card shadow p-4 text-center">
+                    <h4>Find Your Roll</h4>
+                    <p class="text-muted">Enter your Admission Number to start.</p>
+                    <div class="input-group mb-3">
+                        <input type="text" id="search-input" class="form-control form-control-lg" placeholder="e.g., 3452">
+                        <button class="btn btn-primary" onclick="window.App.Student.search()">Search</button>
+                    </div>
+                    <div id="search-error" class="text-danger fw-bold"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="sec-dashboard" class="hidden">
+            
+            <div class="card shadow-sm mb-4 step-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h2 id="st-name" class="mb-0">Student Name</h2>
+                            <p class="text-muted mb-0">
+                                <span id="st-dept">Dept</span> | 
+                                <span id="st-year">Year</span> | 
+                                <span id="st-stream">Stream</span>
+                            </p>
+                        </div>
+                        <div class="text-end">
+                            <h5 class="text-primary" id="st-adm">#1234</h5>
+                            <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Exit</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mb-3">📢 Posts You Can Contest For</h5>
+            <div id="eligible-posts-list" class="row g-3">
+                </div>
+            
+            <div id="no-posts-msg" class="alert alert-warning hidden">
+                You are not eligible for any active posts based on current rules.
+            </div>
+        </div>
+
+        <div id="sec-form" class="hidden">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white d-flex justify-content-between">
+                    <span>Nomination Form</span>
+                    <button class="btn btn-sm btn-light" onclick="window.App.UI.showSection('dashboard')">Cancel</button>
+                </div>
+                <div class="card-body">
+                    <h3 class="text-center mb-4">Post: <span id="form-post-name" class="fw-bold">...</span></h3>
+                    
+                    <form onsubmit="event.preventDefault(); window.App.Student.submitNomination();">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Candidate Name</label>
+                                <input type="text" id="frm-c-name" class="form-control bg-light" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Admission No</label>
+                                <input type="text" id="frm-c-adm" class="form-control bg-light" readonly>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Date of Birth</label>
+                            <input type="date" id="frm-dob" class="form-control" required onchange="window.App.Student.calcAge()">
+                            <small id="age-display" class="text-primary fw-bold"></small>
+                        </div>
+
+                        <hr>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Proposer Adm No</label>
+                                <input type="text" id="frm-p-adm" class="form-control" required placeholder="Enter Adm No">
+                                <small class="text-muted">Must belong to same constituency</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Seconder Adm No</label>
+                                <input type="text" id="frm-s-adm" class="form-control" required placeholder="Enter Adm No">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-danger w-100 btn-lg">Submit Nomination</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+        // Import main logic
+        import "./apps.js"; 
+    </script>
+</body>
+</html>
