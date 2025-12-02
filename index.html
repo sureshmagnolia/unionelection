@@ -42,7 +42,14 @@
             <div class="card shadow-sm">
                 <div class="card-header bg-primary text-white">1. Upload Nominal Roll (CSV)</div>
                 <div class="card-body">
-                    <input type="file" id="csv-file" class="form-control mb-3" accept=".csv">
+                    <div class="mb-3">
+                    <label class="form-label">Upload Nominal Roll</label>
+                        <div class="input-group">
+                        <input type="file" id="csv-file" class="form-control" accept=".csv">
+                            <button class="btn btn-outline-secondary" onclick="window.App.Admin.downloadTemplate()">Download Template CSV</button>
+                        </div>
+                            <small class="text-muted">Required Headers: Sl No, Name, Gender, Dept, Year, Stream, Admission Number</small>
+                </div>
                     <button class="btn btn-success" onclick="window.App.Admin.processCSV()">Upload & Preview</button>
                     <button class="btn btn-dark" onclick="window.App.Admin.saveStudentsToDB()">Save to DB</button>
                     <div id="student-count" class="mt-2 fw-bold"></div>
