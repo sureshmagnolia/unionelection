@@ -380,7 +380,23 @@ function initStaffDashboard(me) {
     if(typeof renderExchangeMarket === "function") {
         renderExchangeMarket(me.email);
     }
-
+    // --- CHECK FOR HoD ROLE & SHOW MONITOR BUTTON ---
+    const btnMonitor = document.getElementById('btn-hod-monitor');
+    if (btnMonitor) {
+        const today = new Date();
+        const isHoD = me.roleHistory && me.roleHistory.some(r => {
+            const start = new Date(r.start);
+            const end = new Date(r.end);
+            // Check for HOD role (case insensitive or exact match)
+            return (r.role.toUpperCase() === 'HOD' || r.role.includes('Head')) && start <= today && end >= today;
+        });
+        
+        if (isHoD) { 
+             btnMonitor.classList.remove('hidden');
+        } else {
+             btnMonitor.classList.add('hidden');
+        }
+    }
     renderStaffUpcomingSummary(me.email);
     showView('staff');
     
@@ -6411,6 +6427,136 @@ if (staffSearchInput) {
         renderStaffTable();
     });
 }
+
+// --- HoD MONITORING LOGIC ---
+window.openHodMonitorModal = function() {
+    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+    if (!me) return;
+
+    const dept = me.dept;
+    document.getElementById('hod-dept-name').textContent = `${dept} Department Overview`;
+    
+    const list = document.getElementById('hod-monitor-list');
+    list.innerHTML = '<div class="text-center py-10"><span class="animate-spin text-2xl inline-block">⏳</span> <span class="block mt-2 text-sm text-gray-500">Loading department data...</span></div>';
+    
+    window.openModal('hod-monitor-modal');
+
+    // Slight delay to allow modal render
+    setTimeout(() => {
+        // Filter Staff by Dept
+        const deptStaff = staffData.filter(s => s.dept === dept && s.status !== 'archived');
+        
+        if (deptStaff.length === 0) {
+            list.innerHTML = '<div class="text-center text-gray-400 py-8 italic border-2 border-dashed border-gray-200 rounded-lg">No staff members found in this department.</div>';
+            return;
+        }
+
+        let html = "";
+        
+        // Sort by Name
+        deptStaff.sort((a, b) => a.name.localeCompare(b.name));
+
+        deptStaff.forEach(staff => {
+            // 1. Gather Duties (Assigned) & Exchange Requests
+            const duties = [];
+            const exchanges = [];
+            
+            Object.keys(invigilationSlots).forEach(key => {
+                const slot = invigilationSlots[key];
+                if (slot.assigned.includes(staff.email)) {
+                    duties.push(key);
+                }
+                if (slot.exchangeRequests && slot.exchangeRequests.includes(staff.email)) {
+                    exchanges.push(key);
+                }
+            });
+            duties.sort((a, b) => parseDate(a) - parseDate(b));
+
+            // 2. Gather Unavailability
+            const unavail = [];
+            
+            // A. Slot Specific
+            Object.keys(invigilationSlots).forEach(key => {
+                const slot = invigilationSlots[key];
+                if (slot.unavailable) {
+                    const uEntry = slot.unavailable.find(u => (typeof u === 'string' ? u === staff.email : u.email === staff.email));
+                    if (uEntry) {
+                        const reason = (typeof uEntry === 'object') ? uEntry.reason : "Unspecified";
+                        unavail.push({ key: key, reason: reason });
+                    }
+                }
+            });
+
+            // B. Advance
+            Object.keys(advanceUnavailability).forEach(dateStr => {
+                ['FN', 'AN'].forEach(sess => {
+                    if (advanceUnavailability[dateStr][sess]) {
+                        const uEntry = advanceUnavailability[dateStr][sess].find(u => u.email === staff.email);
+                        if (uEntry) {
+                            unavail.push({ key: `${dateStr} | ${sess}`, reason: uEntry.reason });
+                        }
+                    }
+                });
+            });
+            
+            // Render Card Sections
+            const dutyHtml = duties.length > 0 
+                ? duties.map(d => {
+                    const isExchanged = exchanges.includes(d);
+                    const bg = isExchanged ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-green-50 text-green-700 border-green-200';
+                    const icon = isExchanged ? '⏳' : '✅';
+                    return `<span class="inline-block ${bg} text-[10px] px-2 py-1 rounded border font-mono mb-1 mr-1 font-bold whitespace-nowrap">${icon} ${d}</span>`;
+                }).join('')
+                : `<span class="text-gray-400 text-xs italic">No duties currently assigned.</span>`;
+
+            const unavHtml = unavail.length > 0
+                ? unavail.map(u => `
+                    <div class="text-[10px] text-red-700 bg-red-50 border border-red-100 px-2 py-1 rounded mb-1 flex justify-between items-center">
+                        <span class="font-mono">${u.key}</span>
+                        <span class="font-bold bg-white px-1 rounded border border-red-100">${u.reason}</span>
+                    </div>`).join('')
+                : `<span class="text-gray-400 text-xs italic">No unavailability recorded.</span>`;
+
+            html += `
+                <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition">
+                    <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-2">
+                        <div class="flex items-center gap-3">
+                            <div class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                                ${staff.name.charAt(0)}
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-sm leading-tight">${staff.name}</h4>
+                                <p class="text-[10px] text-gray-500">${staff.designation}</p>
+                            </div>
+                        </div>
+                        <div class="text-right bg-gray-50 px-2 py-1 rounded border border-gray-100">
+                            <span class="block text-[9px] text-gray-400 uppercase font-bold">Total Duties</span>
+                            <span class="block text-sm font-bold text-gray-700">${duties.length}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h5 class="text-[10px] font-bold text-green-700 uppercase mb-2 flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Assigned & Posted
+                            </h5>
+                            <div class="flex flex-wrap">${dutyHtml}</div>
+                        </div>
+                        <div class="md:border-l md:border-gray-100 md:pl-4">
+                            <h5 class="text-[10px] font-bold text-red-600 uppercase mb-2 flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Unavailability
+                            </h5>
+                            <div class="flex flex-col">${unavHtml}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        list.innerHTML = html;
+    }, 50);
+}
+
 // Initialize Listeners
 setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
 setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
