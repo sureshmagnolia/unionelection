@@ -516,41 +516,112 @@ const App = {
         deleteBooth: async (id) => {
             if(confirm("Delete this booth?")) await deleteDoc(doc(db, "booths", id));
         },
+        // ----------------------------------------------------------------
+        // SMART LOAD BALANCER: AUTO ASSIGN VOTERS
+        // ----------------------------------------------------------------
         autoAssignBooths: async () => {
-            if(!confirm("Reset and auto-assign ALL students to booths?")) return;
+            if(!confirm("⚠️ START SMART ALLOCATION?\n\nThis will:\n1. Count students per Dept.\n2. Balance Depts across booths to equalize voter numbers.\n3. Update ALL student records.\n\nThis may take a few seconds.")) return;
+
+            // 1. Fetch Data
             const boothSnap = await getDocs(collection(db, "booths"));
             const booths = [];
-            boothSnap.forEach(doc => booths.push({ id: doc.id, ...doc.data(), currentLoad: 0, depts: [] }));
-            if(booths.length === 0) return alert("Create booths first!");
+            boothSnap.forEach(doc => booths.push({ 
+                id: doc.id, 
+                ...doc.data(), 
+                currentLoad: 0, 
+                assignedDepts: [], 
+                studentUpdates: [] // Store students here temporarily
+            }));
+
+            if(booths.length === 0) return alert("Please create booths first!");
 
             const studentSnap = await getDocs(collection(db, "students"));
-            const students = [];
-            studentSnap.forEach(doc => students.push(doc.data()));
+            const allStudents = [];
+            studentSnap.forEach(doc => allStudents.push(doc.data()));
 
+            if(allStudents.length === 0) return alert("No students found.");
+
+            // 2. Group Students by Dept
             const deptMap = {};
-            students.forEach(s => { if(!deptMap[s.dept]) deptMap[s.dept] = []; deptMap[s.dept].push(s); });
+            allStudents.forEach(s => {
+                const d = s.dept.trim().toUpperCase(); // Normalize
+                if(!deptMap[d]) deptMap[d] = [];
+                deptMap[d].push(s);
+            });
 
-            let boothIndex = 0;
-            const batch = writeBatch(db);
+            // 3. Sort Depts by Size (Largest to Smallest) - Critical for balancing
+            const sortedDepts = Object.keys(deptMap).sort((a, b) => deptMap[b].length - deptMap[a].length);
 
-            Object.keys(deptMap).forEach(deptName => {
-                const deptStudents = deptMap[deptName];
-                const targetBooth = booths[boothIndex];
-                deptStudents.forEach(s => {
-                    const sRef = doc(db, "students", s.admNo.toString());
-                    batch.update(sRef, { boothId: targetBooth.id, boothName: targetBooth.name });
+            // 4. The Logic Engine (Greedy Least-Loaded)
+            sortedDepts.forEach(deptName => {
+                // Find the booth with the LOWEST current load
+                booths.sort((a, b) => a.currentLoad - b.currentLoad);
+                const targetBooth = booths[0]; // The emptiest booth
+
+                // Assign this Dept to this Booth
+                const studentsInDept = deptMap[deptName];
+                targetBooth.assignedDepts.push(deptName);
+                targetBooth.currentLoad += studentsInDept.length;
+                
+                // Add these students to the booth's update list
+                targetBooth.studentUpdates.push(...studentsInDept);
+            });
+
+            // 5. Execute Updates (With Batch Chunking)
+            // We need to update Booth Docs AND Student Docs
+            const statusEl = document.getElementById('student-count');
+            statusEl.innerText = "Processing allocation...";
+
+            try {
+                const batchSize = 450;
+                let batch = writeBatch(db);
+                let opCount = 0;
+
+                // A. Prepare Booth Updates
+                for (const b of booths) {
+                    const bRef = doc(db, "booths", b.id);
+                    batch.update(bRef, { 
+                        voterCount: b.currentLoad, 
+                        assignedDepts: b.assignedDepts 
+                    });
+                    opCount++;
+                }
+
+                // B. Prepare Student Updates
+                for (const b of booths) {
+                    for (const s of b.studentUpdates) {
+                        const sRef = doc(db, "students", s.admNo.toString());
+                        batch.update(sRef, { 
+                            boothId: b.id, 
+                            boothName: b.name 
+                        });
+                        opCount++;
+
+                        // Commit if batch is full
+                        if (opCount >= batchSize) {
+                            await batch.commit();
+                            batch = writeBatch(db);
+                            opCount = 0;
+                            console.log("Batch committed...");
+                        }
+                    }
+                }
+
+                // Commit remaining
+                if (opCount > 0) await batch.commit();
+
+                // 6. Generate Report Text
+                let report = "Allocation Complete!\n\n";
+                booths.forEach(b => {
+                    report += `${b.name}: ${b.currentLoad} Voters (${b.assignedDepts.join(', ')})\n`;
                 });
-                targetBooth.currentLoad += deptStudents.length;
-                targetBooth.depts.push(deptName);
-                boothIndex = (boothIndex + 1) % booths.length;
-            });
+                alert(report);
+                statusEl.innerText = "Allocation Finished.";
 
-            booths.forEach(b => {
-                const bRef = doc(db, "booths", b.id);
-                batch.update(bRef, { voterCount: b.currentLoad, assignedDepts: b.depts });
-            });
-            try { await batch.commit(); alert(`Success! Assigned ${students.length} students.`); }
-            catch(e) { alert("Error: " + e.message); }
+            } catch(e) {
+                console.error(e);
+                alert("Error during allocation: " + e.message);
+            }
         },
         printBoothReport: async (boothId) => {
             const bSnap = await getDoc(doc(db, "booths", boothId));
