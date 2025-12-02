@@ -544,6 +544,79 @@ const App = {
                 statusEl.innerText = "Finished.";
             } catch(e) { alert("Error: " + e.message); }
         },
+// ----------------------------------------------------------------
+        // RESET BUTTON: Clear Booths & Allocations
+        // ----------------------------------------------------------------
+        resetBoothModule: async () => {
+            if(!confirm("⚠️ DANGER ZONE: This will DELETE ALL BOOTHS and remove voter allocations from ALL students.\n\nAre you sure you want to start over?")) return;
+
+            const statusEl = document.getElementById('student-count');
+            statusEl.innerText = "Clearing data...";
+
+            try {
+                // STEP 1: Delete All Booths
+                const boothSnap = await getDocs(collection(db, "booths"));
+                const deleteBatch = writeBatch(db);
+                let deleteCount = 0;
+
+                boothSnap.forEach(doc => {
+                    deleteBatch.delete(doc.ref);
+                    deleteCount++;
+                });
+
+                if (deleteCount > 0) await deleteBatch.commit();
+                console.log("Booths deleted.");
+
+                // STEP 2: Clear Student Allocations (Using Chunking Loop)
+                const studentSnap = await getDocs(collection(db, "students"));
+                const allStudents = [];
+                studentSnap.forEach(doc => {
+                    const s = doc.data();
+                    // Only update if they actually have a booth assigned
+                    if (s.boothId || s.boothName) {
+                        allStudents.push(s);
+                    }
+                });
+
+                if (allStudents.length > 0) {
+                    const batchSize = 450;
+                    let batch = writeBatch(db);
+                    let opCount = 0;
+                    let batchIndex = 1;
+
+                    statusEl.innerText = `Clearing allocations from ${allStudents.length} students...`;
+
+                    for (const s of allStudents) {
+                        const sRef = doc(db, "students", s.admNo.toString());
+                        
+                        // Wipe the fields
+                        batch.update(sRef, { 
+                            boothId: "", 
+                            boothName: "" 
+                        });
+                        opCount++;
+
+                        if (opCount >= batchSize) {
+                            await batch.commit();
+                            console.log(`Cleared batch ${batchIndex}`);
+                            batch = writeBatch(db);
+                            opCount = 0;
+                            batchIndex++;
+                        }
+                    }
+                    if (opCount > 0) await batch.commit();
+                }
+
+                alert("System Reset Complete! All booths deleted and voters unassigned.");
+                statusEl.innerText = "Booth Data Cleared.";
+
+            } catch(e) {
+                console.error(e);
+                alert("Error resetting data: " + e.message);
+            }
+        },
+
+      
         printBoothReport: async (boothId) => {
             const bSnap = await getDoc(doc(db, "booths", boothId));
             const booth = bSnap.data();
