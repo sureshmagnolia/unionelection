@@ -1,6 +1,6 @@
 // 1. IMPORT FIREBASE
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, doc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, doc, deleteDoc, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-analytics.js";
 
 // 2. YOUR CONFIGURATION
@@ -537,26 +537,58 @@ const App = {
             document.getElementById('nomination-preview-container').classList.add('hidden');
         },
 
-        finalSubmit: async () => {
-            if(!confirm("Submit Nomination?")) return;
+       finalSubmit: async () => {
+            if(!confirm("Are you sure? This will officially submit your nomination.")) return;
+
+            // Disable button immediately to prevent double clicks
+            const submitBtn = document.querySelector('#btn-print-group button:last-child');
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Processing...";
+
             try {
-                const serial = "NOM-" + Date.now().toString().slice(-6);
-                await addDoc(collection(db, "nominations"), {
-                    serialNo: serial,
-                    postId: App.Student.selectedPost.id,
-                    postName: App.Student.selectedPost.name,
-                    candidate: App.Student.currentStudent,
-                    proposer: App.Student.proposerData,
-                    seconder: App.Student.seconderData,
-                    dob: document.getElementById('frm-dob').value,
-                    age: App.Student.calcAge(),
-                    status: "Submitted",
-                    timestamp: new Date()
+                // Use a Transaction to ensure Serial Numbers (1, 2, 3...) don't duplicate
+                let assignedSerial = "";
+
+                await runTransaction(db, async (transaction) => {
+                    // 1. Read the counter
+                    const counterRef = doc(db, "settings", "counters");
+                    const counterDoc = await transaction.get(counterRef);
+
+                    // 2. Calculate next number (Start at 1 if no counter exists)
+                    let nextSerial = 1;
+                    if (counterDoc.exists()) {
+                        nextSerial = (counterDoc.data().nominationSerial || 0) + 1;
+                    }
+
+                    assignedSerial = nextSerial.toString();
+
+                    // 3. Create the Nomination Reference
+                    const newNomRef = doc(collection(db, "nominations"));
+
+                    // 4. Update Counter & Save Nomination together
+                    transaction.set(counterRef, { nominationSerial: nextSerial }, { merge: true });
+                    transaction.set(newNomRef, {
+                        serialNo: assignedSerial,
+                        postId: App.Student.selectedPost.id,
+                        postName: App.Student.selectedPost.name,
+                        candidate: App.Student.currentStudent,
+                        proposer: App.Student.proposerData,
+                        seconder: App.Student.seconderData,
+                        dob: document.getElementById('frm-dob').value,
+                        age: App.Student.calcAge(),
+                        status: "Submitted",
+                        timestamp: new Date()
+                    });
                 });
-                alert(`Submitted! Serial No: ${serial}`);
+
+                alert(`Success! Your Nomination Serial Number is: ${assignedSerial}`);
                 location.reload();
+
             } catch(e) {
+                console.error(e);
                 alert("Error: " + e.message);
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Application";
             }
         }
     }
