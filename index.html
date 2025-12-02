@@ -73,6 +73,36 @@
                         <div class="col-12 col-md-6"><button class="btn btn-dark" onclick="window.App.Admin.saveStudentsToDB()">Save to DB</button></div>
                     </div>
                     <div id="student-count" class="mt-2 fw-bold text-success text-center"></div>
+
+
+                    <div class="mt-3">
+    <div class="d-flex justify-content-between mb-2">
+        <input type="text" id="admin-search" class="form-control form-control-sm w-50" placeholder="Search Name..." onkeyup="window.App.Admin.filterTable()">
+        <button class="btn btn-sm btn-info" onclick="window.App.Admin.loadStudentsFromDB()">🔄 Load from DB</button>
+    </div>
+    
+    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+        <table class="table table-bordered table-hover small">
+            <thead class="table-dark sticky-top">
+                <tr>
+                    <th>Sl</th>
+                    <th>Name</th>
+                    <th>Gender</th>
+                    <th>Dept</th>
+                    <th>Year</th>
+                    <th>Stream</th>
+                    <th>Adm No</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="nominal-tbody">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+
+                    
                 </div>
             </div>
         </div>
