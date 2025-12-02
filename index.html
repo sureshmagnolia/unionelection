@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Election Admin - Setup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; }
+        .hidden { display: none !important; }
+        /* Print Styles */
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Union Election Admin</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('nominal-roll')">1. Nominal Roll</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('posts')">2. Posts & Rules</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('nominations')">3. Scrutiny</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="window.App.UI.showSection('booths')">4. Booths</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        
+        <div id="sec-nominal-roll">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">1. Upload Nominal Roll (CSV)</div>
+                <div class="card-body">
+                    <input type="file" id="csv-file" class="form-control mb-3" accept=".csv">
+                    <button class="btn btn-success" onclick="window.App.Admin.processCSV()">Upload & Preview</button>
+                    <button class="btn btn-dark" onclick="window.App.Admin.saveStudentsToDB()">Save to DB</button>
+                    <div id="student-count" class="mt-2 fw-bold"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="sec-posts" class="hidden">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-danger text-white">Add Election Post</div>
+                        <div class="card-body">
+                            <form id="post-form" onsubmit="event.preventDefault(); window.App.Admin.addPost();">
+                                <div class="mb-2">
+                                    <label>Post Name</label>
+                                    <input type="text" id="p-name" class="form-control" placeholder="e.g. Chairperson" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label>Vacancies</label>
+                                    <input type="number" id="p-vacancy" class="form-control" value="1" min="1">
+                                </div>
+                                <hr>
+                                <h6>Eligibility Constraints</h6>
+                                <div class="mb-2">
+                                    <label>Gender Restriction</label>
+                                    <select id="p-gender" class="form-select">
+                                        <option value="Any">Any</option>
+                                        <option value="Female">Female Only</option>
+                                        <option value="Male">Male Only</option>
+                                    </select>
+                                </div>
+                                <div class="mb-2">
+                                    <label>Stream Restriction</label>
+                                    <select id="p-stream" class="form-select">
+                                        <option value="Any">Any</option>
+                                        <option value="UG">UG Only</option>
+                                        <option value="PG">PG Only</option>
+                                        <option value="PHD">PHD Only</option>
+                                    </select>
+                                </div>
+                                <div class="mb-2">
+                                    <label>Year Restriction</label>
+                                    <select id="p-year" class="form-select">
+                                        <option value="Any">Any</option>
+                                        <option value="1">1st Year Only</option>
+                                        <option value="2">2nd Year Only</option>
+                                        <option value="3">3rd Year Only</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label>Dept Restriction (Association Sec)</label>
+                                    <input type="text" id="p-dept" class="form-control" placeholder="Type Exact Dept Name or leave empty">
+                                    <small class="text-muted">Leave empty for General Posts</small>
+                                </div>
+                                <button type="submit" class="btn btn-danger w-100">Add Post</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Current Posts List</span>
+                            <button class="btn btn-warning btn-sm" onclick="window.App.Admin.lockPosts()">🔒 Lock & Publish Posts</button>
+                        </div>
+                        <div class="card-body table-responsive">
+                            <table class="table table-bordered table-striped">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Post Name</th>
+                                        <th>Vacancies</th>
+                                        <th>Restrictions</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="posts-tbody">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="sec-nominations" class="hidden"><h2>Scrutiny Module (Next Phase)</h2></div>
+        <div id="sec-booths" class="hidden"><h2>Booth Module (Later Phase)</h2></div>
+
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    
+    <script type="module" src="apps.js"></script>
+</body>
+</html>
