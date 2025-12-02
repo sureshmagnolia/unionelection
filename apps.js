@@ -42,8 +42,7 @@ const App = {
                 if(post.stream !== "Any") restrictions.push(post.stream);
                 if(post.year !== "Any") restrictions.push(post.year + " Year");
                 if(post.dept) restrictions.push("Dept: " + post.dept);
-                
-                if(restrictions.length === 0) restrictions.push("General (Open to All)");
+                if(restrictions.length === 0) restrictions.push("General");
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -51,7 +50,7 @@ const App = {
                     <td>${post.vacancy}</td>
                     <td><small>${restrictions.join(", ")}</small></td>
                     <td>
-                        <button class="btn btn-sm btn-danger" onclick="window.App.Admin.deletePost('${post.id}')">Delete</button>
+                        <button class="btn btn-sm btn-danger" onclick="window.App.Admin.deletePost('${post.id}')">X</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -60,7 +59,7 @@ const App = {
     },
 
     Admin: {
-        // 1. Process CSV Upload
+        // --- CSV & Nominal Roll Logic ---
         processCSV: () => {
             const fileInput = document.getElementById('csv-file');
             if (!fileInput || !fileInput.files.length) return alert("Select CSV");
@@ -79,16 +78,15 @@ const App = {
                         admNo: row['Admission Number'] || row['Adm No']
                     }));
                     
-                    // CALL THE RENDER TABLE FUNCTION
                     App.Admin.renderTable(App.data.students);
                     document.getElementById('student-count').innerText = `Previewing ${App.data.students.length} students (Not saved yet)`;
                 }
             });
         },
 
-        // 2. Load Existing Data from Firebase
         loadStudentsFromDB: async () => {
             const tbody = document.getElementById('nominal-tbody');
+            if(!tbody) return;
             tbody.innerHTML = '<tr><td colspan="8" class="text-center">Loading from Database...</td></tr>';
             
             try {
@@ -105,7 +103,6 @@ const App = {
             }
         },
 
-        // 3. RENDER TABLE (The missing function!)
         renderTable: (data) => {
             const tbody = document.getElementById('nominal-tbody');
             if(!tbody) return;
@@ -113,8 +110,6 @@ const App = {
 
             data.forEach((student, index) => {
                 const tr = document.createElement('tr');
-                
-                // We add 'onchange' events to update the local array when you type
                 tr.innerHTML = `
                     <td><input type="text" class="form-control form-control-sm" value="${student.slNo}" onchange="window.App.Admin.updateLocalData(${index}, 'slNo', this.value)"></td>
                     <td><input type="text" class="form-control form-control-sm fw-bold" value="${student.name}" onchange="window.App.Admin.updateLocalData(${index}, 'name', this.value)"></td>
@@ -139,30 +134,28 @@ const App = {
             });
         },
 
-        // 4. Update Local Data (Helper)
         updateLocalData: (index, field, value) => {
             App.data.students[index][field] = value;
-            // Turn row yellow to indicate "Unsaved Changes"
-            document.getElementById('nominal-tbody').children[index].style.backgroundColor = "#fff3cd";
+            const row = document.getElementById('nominal-tbody').children[index];
+            if(row) row.style.backgroundColor = "#fff3cd"; // Yellow = Unsaved
         },
 
-        // 5. Save Single Row
         saveRow: async (index) => {
             const student = App.data.students[index];
             if(!student.admNo) return alert("Error: No Admission Number");
 
             try {
                 await setDoc(doc(db, "students", student.admNo.toString()), student);
-                // Turn row green to indicate "Saved"
                 const row = document.getElementById('nominal-tbody').children[index];
-                row.style.backgroundColor = "#d1e7dd";
-                setTimeout(() => row.style.backgroundColor = "", 1000);
+                if(row) {
+                    row.style.backgroundColor = "#d1e7dd"; // Green = Saved
+                    setTimeout(() => row.style.backgroundColor = "", 1000);
+                }
             } catch (e) {
                 alert("Error saving: " + e.message);
             }
         },
 
-        // 6. Delete Row
         deleteRow: async (admNo, index) => {
             if(!confirm("Delete this student?")) return;
             try {
@@ -174,11 +167,9 @@ const App = {
             }
         },
 
-        // 7. Bulk Save (From CSV)
         saveStudentsToDB: async () => {
             if(App.data.students.length === 0) return alert("No data to save");
             const batch = writeBatch(db); 
-            // Limit to 490 for demo
             const chunk = App.data.students.slice(0, 490);
             chunk.forEach(s => {
                 if(s.admNo) {
@@ -189,21 +180,28 @@ const App = {
             try {
                 await batch.commit();
                 alert("Batch Save Complete!");
-                App.Admin.loadStudentsFromDB(); // Reload to show edit buttons
+                App.Admin.loadStudentsFromDB(); 
             } catch(e) {
                 console.error(e);
                 alert("Error saving: " + e.message);
             }
         },
 
-        // 8. Filter Table
         filterTable: () => {
             const query = document.getElementById('admin-search').value.toLowerCase();
             const filtered = App.data.students.filter(s => s.name.toLowerCase().includes(query) || s.admNo.toString().includes(query));
             App.Admin.renderTable(filtered);
         },
 
-        // --- Post & Team Logic (Kept Same) ---
+        downloadTemplate: () => {
+            const csv = "Sl No,Name,Gender,Dept,Year,Stream,Admission Number\n1,Sample,Male,Botany,1,UG,12345";
+            const a = document.createElement('a');
+            a.href = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+            a.download = "template.csv";
+            a.click();
+        },
+
+        // --- Post Logic ---
         loadPosts: async () => {
             try {
                 const querySnapshot = await getDocs(collection(db, "posts"));
@@ -238,6 +236,8 @@ const App = {
                 alert("Done.");
             }
         },
+
+        // --- Team Logic ---
         loadTeam: async () => {
             const list = document.getElementById('admin-list');
             if(!list) return;
@@ -262,30 +262,19 @@ const App = {
                 await deleteDoc(doc(db, "admins", email));
                 App.Admin.loadTeam();
             }
-        },
-        downloadTemplate: () => {
-            const csv = "Sl No,Name,Gender,Dept,Year,Stream,Admission Number\n1,Sample,Male,Botany,1,UG,12345";
-            const a = document.createElement('a');
-            a.href = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-            a.download = "template.csv";
-            a.click();
         }
     },
 
-  , // <--- IMPORTANT COMMA here to separate Admin and Student blocks
-
-  Student: {
+    Student: {
         currentStudent: null,
         selectedPost: null,
         proposerData: null,
         seconderData: null,
 
-        // 1. Search Logic
         search: async () => {
             const input = document.getElementById('search-input').value.trim();
             const err = document.getElementById('search-error');
             err.innerText = "";
-            
             if(!input) return;
 
             try {
@@ -296,18 +285,16 @@ const App = {
                     App.Student.currentStudent = docSnap.data();
                     App.Student.loadDashboard();
                 } else {
-                    err.innerText = "Student not found. Check Admission Number.";
+                    err.innerText = "Student not found.";
                 }
             } catch (e) {
                 console.error(e);
-                err.innerText = "System Error. Try again.";
+                err.innerText = "System Error.";
             }
         },
 
-        // 2. Load Dashboard
         loadDashboard: async () => {
             const s = App.Student.currentStudent;
-            // Fill Profile
             document.getElementById('st-name').innerText = s.name;
             document.getElementById('st-dept').innerText = s.dept;
             document.getElementById('st-year').innerText = s.year + " Year";
@@ -317,7 +304,6 @@ const App = {
             App.UI.showSection('dashboard');
             document.getElementById('sec-search').classList.add('hidden');
 
-            // Load Posts
             const list = document.getElementById('eligible-posts-list');
             list.innerHTML = '<div class="spinner-border text-primary"></div>';
             
@@ -329,7 +315,6 @@ const App = {
                 const post = { id: doc.id, ...doc.data() };
                 let isEligible = true;
                 
-                // Eligibility Logic
                 if(post.gender !== "Any" && post.gender !== s.gender) isEligible = false;
                 if(post.stream !== "Any" && post.stream !== s.stream) isEligible = false;
                 if(post.year !== "Any" && String(post.year) !== String(s.year)) isEligible = false;
@@ -342,8 +327,7 @@ const App = {
                             <div class="card h-100 border-primary shadow-sm">
                                 <div class="card-body">
                                     <h5 class="card-title fw-bold">${post.name}</h5>
-                                    <p class="card-text small text-muted">Vacancies: ${post.vacancy}</p>
-                                    <button class="btn btn-primary w-100" 
+                                    <button class="btn btn-primary w-100 mt-2" 
                                         onclick="window.App.Student.openNomination('${post.id}', '${post.name}')">
                                         Apply Now
                                     </button>
@@ -352,41 +336,32 @@ const App = {
                         </div>`;
                 }
             });
-
             if(eligibleCount === 0) document.getElementById('no-posts-msg').classList.remove('hidden');
         },
 
-        // 3. Open Nomination Form
         openNomination: (postId, postName) => {
             App.Student.selectedPost = { id: postId, name: postName };
-            
-            // UI Switch
             document.getElementById('sec-dashboard').classList.add('hidden');
             document.getElementById('sec-form').classList.remove('hidden');
             document.getElementById('nomination-preview-container').classList.add('hidden');
 
-            // Pre-fill Candidate
             document.getElementById('display-post-name').innerText = postName;
             document.getElementById('frm-c-name').value = App.Student.currentStudent.name;
             document.getElementById('frm-c-adm').value = App.Student.currentStudent.admNo;
         },
 
-        // 4. Calculate Age
         calcAge: () => {
             const dobInput = document.getElementById('frm-dob').value;
             if(!dobInput) return;
-            
             const dob = new Date(dobInput);
             const today = new Date();
             let age = today.getFullYear() - dob.getFullYear();
             const m = today.getMonth() - dob.getMonth();
             if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-            
             document.getElementById('age-display').innerText = `Age: ${age} Years`;
             return age;
         },
 
-        // 5. Fetch Proposer/Seconder Details (AJAX style)
         fetchStudentDetails: async (type) => {
             const inputId = type === 'p' ? 'frm-p-adm' : 'frm-s-adm';
             const detailsId = type === 'p' ? 'p-details' : 's-details';
@@ -394,46 +369,37 @@ const App = {
             const display = document.getElementById(detailsId);
             
             if(!admNo) { display.innerText = ""; return; }
-            if(admNo === App.Student.currentStudent.admNo) {
-                display.innerHTML = "<span class='text-red-500'>Cannot match Candidate</span>";
-                return;
-            }
-
+            
             try {
-                display.innerText = "Checking DB...";
+                display.innerText = "Checking...";
                 const docRef = doc(db, "students", admNo);
                 const snap = await getDoc(docRef);
 
                 if(snap.exists()) {
                     const data = snap.data();
-                    display.innerHTML = `<span class="text-green-600 font-bold">✔ ${data.name}</span> (${data.dept}, ${data.year} Yr)`;
-                    // Store for later
+                    display.innerHTML = `<span class="text-green-600 font-bold">✔ ${data.name}</span> (${data.dept})`;
                     if(type === 'p') App.Student.proposerData = data;
                     if(type === 's') App.Student.seconderData = data;
                 } else {
-                    display.innerHTML = "<span class='text-red-500 font-bold'>✘ Student Not Found</span>";
+                    display.innerHTML = "<span class='text-red-500'>✘ Not Found</span>";
                     if(type === 'p') App.Student.proposerData = null;
                     if(type === 's') App.Student.seconderData = null;
                 }
             } catch(e) { console.error(e); }
         },
 
-        // 6. Generate Preview
         generatePreview: () => {
-            // Validation
-            if(!App.Student.proposerData || !App.Student.seconderData) return alert("Please enter valid Proposer and Seconder Admission Numbers.");
+            if(!App.Student.proposerData || !App.Student.seconderData) return alert("Invalid Proposer/Seconder");
             const dob = document.getElementById('frm-dob').value;
-            if(!dob) return alert("Enter Date of Birth");
+            if(!dob) return alert("Enter DOB");
 
             const c = App.Student.currentStudent;
             const p = App.Student.proposerData;
             const s = App.Student.seconderData;
 
-            // Fill Preview
             document.getElementById('prev-post').innerText = App.Student.selectedPost.name;
             document.getElementById('preview-date').innerText = "Date: " + new Date().toLocaleDateString();
 
-            // Candidate
             document.getElementById('prev-c-name').innerText = c.name;
             document.getElementById('prev-c-adm').innerText = c.admNo;
             document.getElementById('prev-c-dept').innerText = c.dept;
@@ -441,19 +407,16 @@ const App = {
             document.getElementById('prev-c-dob').innerText = dob;
             document.getElementById('prev-c-age').innerText = App.Student.calcAge() + " Years";
 
-            // Proposer
             document.getElementById('prev-p-name').innerText = p.name;
             document.getElementById('prev-p-adm').innerText = p.admNo;
             document.getElementById('prev-p-dept').innerText = p.dept;
             document.getElementById('prev-p-year').innerText = p.year + " " + p.stream;
 
-            // Seconder
             document.getElementById('prev-s-name').innerText = s.name;
             document.getElementById('prev-s-adm').innerText = s.admNo;
             document.getElementById('prev-s-dept').innerText = s.dept;
             document.getElementById('prev-s-year').innerText = s.year + " " + s.stream;
 
-            // Show Preview, Hide Form
             document.getElementById('sec-form').classList.add('hidden');
             document.getElementById('nomination-preview-container').classList.remove('hidden');
         },
@@ -463,10 +426,8 @@ const App = {
             document.getElementById('nomination-preview-container').classList.add('hidden');
         },
 
-        // 7. Final Submit to Firebase
         finalSubmit: async () => {
-            if(!confirm("Are you sure? This will officially submit your nomination.")) return;
-
+            if(!confirm("Submit Nomination?")) return;
             try {
                 const serial = "NOM-" + Date.now().toString().slice(-6);
                 await addDoc(collection(db, "nominations"), {
@@ -481,24 +442,13 @@ const App = {
                     status: "Submitted",
                     timestamp: new Date()
                 });
-
-                alert(`Success! Your Serial Number is ${serial}. Please Print this form.`);
-                // Disable submit button to prevent double submit
-                document.querySelector('#btn-print-group button:last-child').disabled = true;
-                document.querySelector('#btn-print-group button:last-child').innerText = "Submitted ✔";
-
+                alert(`Submitted! Serial No: ${serial}`);
+                location.reload();
             } catch(e) {
-                console.error(e);
                 alert("Error: " + e.message);
             }
         }
     }
-    
 };
 
-// Make App global so HTML buttons can access it
 window.App = App;
-
-// Run startup tasks
-// We delay slightly to let auth settle in index.html, but immediate call is fine too
-// App.Admin.loadPosts();
