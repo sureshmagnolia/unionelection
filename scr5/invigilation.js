@@ -379,18 +379,31 @@ function initStaffDashboard(me) {
     if(typeof renderExchangeMarket === "function") {
         renderExchangeMarket(me.email);
     }
-    // --- CHECK FOR HoD ROLE & SHOW MONITOR BUTTON ---
+   // --- CHECK FOR HoD ROLE & SHOW MONITOR BUTTON ---
     const btnMonitor = document.getElementById('btn-hod-monitor');
     if (btnMonitor) {
+        // 1. Fix Date Comparison (Ignore Time)
         const today = new Date();
-        const isHoD = me.roleHistory && me.roleHistory.some(r => {
+        today.setHours(0, 0, 0, 0); 
+
+        // 2. Check Functional Roles (Role History)
+        const hasActiveRole = me.roleHistory && me.roleHistory.some(r => {
             const start = new Date(r.start);
             const end = new Date(r.end);
             // Check for HOD role (case insensitive or exact match)
+            // Fix: Normalized date comparison
             return (r.role.toUpperCase() === 'HOD' || r.role.includes('Head')) && start <= today && end >= today;
         });
+
+        // 3. Check Designation (NEW: Allows "HOD" in Designation field to work)
+        const hasDesignation = me.designation && (
+            me.designation.toUpperCase() === 'HOD' || 
+            me.designation.toLowerCase().includes('head of') || 
+            me.designation.toLowerCase().includes('dept') 
+        );
         
-        if (isHoD) { 
+        // Show if EITHER is true
+        if (hasActiveRole || hasDesignation) { 
              btnMonitor.classList.remove('hidden');
         } else {
              btnMonitor.classList.add('hidden');
