@@ -357,6 +357,107 @@ const App = {
             }, { merge: true });
         },
 
+      // --- VALID LIST MANAGEMENT ---
+
+        // 1. Publish to Students
+        publishValidList: async () => {
+            if(!confirm("Are you sure? This will make the 'Accepted' nominations visible to ALL students on their dashboard.")) return;
+            
+            try {
+                // Set a global setting flag
+                await setDoc(doc(db, "settings", "electionStatus"), { 
+                    validListPublished: true,
+                    publishedAt: new Date()
+                }, { merge: true });
+                alert("Published! Students can now see the candidate list.");
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        },
+
+        // 2. Print Formal Report
+        printValidList: async () => {
+            // Get all accepted nominations
+            const q = await getDocs(collection(db, "nominations"));
+            const valid = [];
+            q.forEach(doc => {
+                const data = doc.data();
+                if(data.status === 'Accepted') valid.push(data);
+            });
+
+            if(valid.length === 0) return alert("No valid nominations found yet.");
+
+            // Group by Post
+            const grouped = {};
+            valid.forEach(n => {
+                if(!grouped[n.postName]) grouped[n.postName] = [];
+                grouped[n.postName].push(n);
+            });
+
+            // Generate HTML
+            let htmlContent = '';
+            Object.keys(grouped).sort().forEach(post => {
+                const candidates = grouped[post];
+                // Sort candidates alphabetically
+                candidates.sort((a,b) => a.candidate.name.localeCompare(b.candidate.name));
+
+                htmlContent += `
+                    <div class="post-block">
+                        <div class="post-title">${post}</div>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width:50px">Sl</th>
+                                    <th>Candidate Name</th>
+                                    <th>Dept & Class</th>
+                                    <th>Serial No</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${candidates.map((c, i) => `
+                                    <tr>
+                                        <td>${i+1}</td>
+                                        <td><strong>${c.candidate.name.toUpperCase()}</strong></td>
+                                        <td>${c.candidate.dept} - ${c.candidate.year} Year</td>
+                                        <td>${c.serialNo}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            });
+
+            // Open Print Window
+            const win = window.open('', '_blank');
+            win.document.write(`
+                <html>
+                <head>
+                    <title>Valid Nominations List</title>
+                    <style>
+                        body { font-family: 'Times New Roman', serif; padding: 40px; }
+                        h1 { text-align: center; text-decoration: underline; }
+                        .post-block { margin-bottom: 30px; page-break-inside: avoid; }
+                        .post-title { font-size: 18px; font-weight: bold; background: #eee; padding: 5px; border: 1px solid #000; border-bottom: none; }
+                        .table { width: 100%; border-collapse: collapse; }
+                        .table th, .table td { border: 1px solid #000; padding: 8px; text-align: left; font-size: 14px; }
+                    </style>
+                </head>
+                <body>
+                    <h1>List of Valid Nominations - Union Election 2025</h1>
+                    ${htmlContent}
+                    <br><br>
+                    <div style="float: right; text-align: center;">
+                        <p>Returning Officer</p>
+                    </div>
+                </body>
+                </html>
+            `);
+            win.document.close();
+            win.print();
+        },
+
+      
         // --- MODULE D: TEAM ---
         loadTeam: () => {
             if(unsubTeam) unsubTeam();
