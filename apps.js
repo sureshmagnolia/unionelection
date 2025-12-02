@@ -19,7 +19,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const analytics = getAnalytics(app);
 
-// Global Listeners (to stop background updates if needed)
+// Global Listeners
 let unsubStudents = null;
 let unsubPosts = null;
 let unsubNominations = null;
@@ -41,7 +41,6 @@ const App = {
             const target = document.getElementById(`sec-${id}`);
             if(target) target.classList.remove('hidden');
         },
-        // Helper to render Posts table in Admin Post View
         renderPostsTable: () => {
             const tbody = document.getElementById('posts-tbody');
             if(!tbody) return;
@@ -69,10 +68,7 @@ const App = {
     },
 
     Admin: {
-        // ------------------------------------------------
-        // MODULE A: NOMINAL ROLL (CSV, Edit, Save)
-        // ------------------------------------------------
-        
+        // --- MODULE A: NOMINAL ROLL ---
         processCSV: () => {
             const fileInput = document.getElementById('csv-file');
             if (!fileInput || !fileInput.files.length) return alert("Select CSV");
@@ -90,39 +86,31 @@ const App = {
                         stream: row['UG-PG'] || row['Stream'] || "UG",
                         admNo: row['Admission Number'] || row['Adm No']
                     }));
-                    
                     App.Admin.renderTable(App.data.students);
                     document.getElementById('student-count').innerText = `Previewing ${App.data.students.length} students (Not saved yet)`;
                 }
             });
         },
 
-        // LIVE SYNC: Students
         loadStudentsFromDB: () => {
             if(unsubStudents) unsubStudents(); 
-            
             const tbody = document.getElementById('nominal-tbody');
-            if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center">Syncing Database...</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center">Syncing...</td></tr>';
 
             unsubStudents = onSnapshot(collection(db, "students"), (snapshot) => {
                 App.data.students = [];
                 snapshot.forEach(doc => App.data.students.push(doc.data()));
-                
-                // Sort by Sl No
                 App.data.students.sort((a,b) => parseInt(a.slNo) - parseInt(b.slNo));
-                
                 App.Admin.renderTable(App.data.students);
                 const countEl = document.getElementById('student-count');
-                if(countEl) countEl.innerText = `Live: ${App.data.students.length} students synced.`;
+                if(countEl) countEl.innerText = `Live: ${App.data.students.length} students.`;
             });
         },
 
-        // RENDER TABLE (With Inputs for Editing)
         renderTable: (data) => {
             const tbody = document.getElementById('nominal-tbody');
             if(!tbody) return;
             tbody.innerHTML = '';
-
             data.forEach((student, index) => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -137,7 +125,7 @@ const App = {
                     <td><input type="text" class="form-control form-control-sm" value="${student.dept}" onchange="window.App.Admin.updateLocalData(${index}, 'dept', this.value)"></td>
                     <td><input type="text" class="form-control form-control-sm" value="${student.year}" onchange="window.App.Admin.updateLocalData(${index}, 'year', this.value)"></td>
                     <td><input type="text" class="form-control form-control-sm" value="${student.stream}" onchange="window.App.Admin.updateLocalData(${index}, 'stream', this.value)"></td>
-                    <td><input type="text" class="form-control form-control-sm bg-light" value="${student.admNo}" readonly title="ID cannot be changed"></td>
+                    <td><input type="text" class="form-control form-control-sm bg-light" value="${student.admNo}" readonly></td>
                     <td>
                         <div class="btn-group">
                             <button class="btn btn-sm btn-success" onclick="window.App.Admin.saveRow(${index})">💾</button>
@@ -152,53 +140,32 @@ const App = {
         updateLocalData: (index, field, value) => {
             App.data.students[index][field] = value;
             const row = document.getElementById('nominal-tbody').children[index];
-            if(row) row.style.backgroundColor = "#fff3cd"; // Yellow = Unsaved
+            if(row) row.style.backgroundColor = "#fff3cd"; 
         },
 
         saveRow: async (index) => {
             const student = App.data.students[index];
             if(!student.admNo) return alert("Error: No Admission Number");
-
             try {
                 await setDoc(doc(db, "students", student.admNo.toString()), student);
                 const row = document.getElementById('nominal-tbody').children[index];
-                if(row) {
-                    row.style.backgroundColor = "#d1e7dd"; // Green = Saved
-                    setTimeout(() => row.style.backgroundColor = "", 1000);
-                }
-            } catch (e) {
-                alert("Error saving: " + e.message);
-            }
+                if(row) { row.style.backgroundColor = "#d1e7dd"; setTimeout(() => row.style.backgroundColor = "", 1000); }
+            } catch (e) { alert("Error saving: " + e.message); }
         },
 
         deleteRow: async (admNo, index) => {
             if(!confirm("Delete this student?")) return;
-            try {
-                if(admNo) await deleteDoc(doc(db, "students", admNo.toString()));
-                // onSnapshot will remove it from UI
-            } catch(e) {
-                alert("Error deleting");
-            }
+            try { if(admNo) await deleteDoc(doc(db, "students", admNo.toString())); } 
+            catch(e) { alert("Error deleting"); }
         },
 
         saveStudentsToDB: async () => {
             if(App.data.students.length === 0) return alert("No data to save");
             const batch = writeBatch(db); 
-            // Warning: Limit is 500 ops.
             const chunk = App.data.students.slice(0, 490);
-            chunk.forEach(s => {
-                if(s.admNo) {
-                    const docRef = doc(db, "students", s.admNo.toString());
-                    batch.set(docRef, s);
-                }
-            });
-            try {
-                await batch.commit();
-                alert("Batch Save Complete!");
-            } catch(e) {
-                console.error(e);
-                alert("Error saving: " + e.message);
-            }
+            chunk.forEach(s => { if(s.admNo) { const docRef = doc(db, "students", s.admNo.toString()); batch.set(docRef, s); }});
+            try { await batch.commit(); alert("Batch Save Complete!"); } 
+            catch(e) { console.error(e); alert("Error saving: " + e.message); }
         },
 
         filterTable: () => {
@@ -215,10 +182,7 @@ const App = {
             a.click();
         },
 
-        // ------------------------------------------------
-        // MODULE B: POSTS
-        // ------------------------------------------------
-        
+        // --- MODULE B: POSTS ---
         loadPosts: () => {
             if(unsubPosts) unsubPosts();
             unsubPosts = onSnapshot(collection(db, "posts"), (snapshot) => {
@@ -250,15 +214,11 @@ const App = {
             }
         },
 
-        // ------------------------------------------------
-        // MODULE C: SCRUTINY (Nominations)
-        // ------------------------------------------------
-
+        // --- MODULE C: SCRUTINY ---
         loadNominations: () => {
             if(unsubNominations) unsubNominations();
-            
             const tbody = document.getElementById('scrutiny-tbody');
-            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center">Connecting to Live Stream...</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center">Syncing...</td></tr>';
 
             unsubNominations = onSnapshot(collection(db, "nominations"), (snapshot) => {
                 App.data.nominations = [];
@@ -288,7 +248,6 @@ const App = {
             if(!tbody) return;
             tbody.innerHTML = '';
 
-            // Update Tabs
             document.querySelectorAll('.nav-pills .nav-link').forEach(btn => {
                 const btnStatus = btn.innerText === 'Pending' ? 'Submitted' : btn.innerText;
                 if(btnStatus === status) { btn.classList.add('active'); btn.classList.remove('text-dark'); }
@@ -302,7 +261,6 @@ const App = {
                 return;
             }
 
-            // Sort by Serial No
             list.sort((a, b) => parseInt(a.serialNo) - parseInt(b.serialNo));
 
             list.forEach(n => {
@@ -356,9 +314,7 @@ const App = {
             }, { merge: true });
         },
 
-        // ------------------------------------------------
-        // MODULE D: TEAM
-        // ------------------------------------------------
+        // --- MODULE D: TEAM ---
         loadTeam: () => {
             if(unsubTeam) unsubTeam();
             unsubTeam = onSnapshot(collection(db, "admins"), (snapshot) => {
@@ -378,75 +334,49 @@ const App = {
         },
         removeTeamMember: async (email) => {
             if(confirm("Remove admin?")) await deleteDoc(doc(db, "admins", email));
-        }
-    },
+        },
 
-// ------------------------------------------------
-        // MODULE: BOOTHS (Missing Part)
-        // ------------------------------------------------
+        // --- MODULE E: BOOTHS ---
         loadBooths: () => {
             const tbody = document.getElementById('booths-tbody');
             if(!tbody) return;
             tbody.innerHTML = '<tr><td colspan="4" class="text-center">Loading...</td></tr>';
-            
-            // Live Listener for Booths
             onSnapshot(collection(db, "booths"), (snapshot) => {
                 const booths = [];
                 snapshot.forEach(doc => booths.push({ id: doc.id, ...doc.data() }));
                 booths.sort((a,b) => a.name.localeCompare(b.name));
 
                 tbody.innerHTML = '';
-                if(booths.length === 0) { 
-                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">No booths created yet.</td></tr>'; 
-                    return; 
-                }
+                if(booths.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center">No booths created yet.</td></tr>'; return; }
 
                 booths.forEach(b => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td><span class="fw-bold">${b.name}</span><br><small class="text-muted">${b.location}</small></td>
-                        <td>
-                            <span class="badge bg-primary fs-6">${b.voterCount || 0}</span>
-                            <div class="small text-muted mt-1" style="max-width:200px; overflow:hidden;">
-                                ${b.assignedDepts ? b.assignedDepts.join(', ') : '-'}
-                            </div>
-                        </td>
+                        <td><span class="badge bg-primary fs-6">${b.voterCount || 0}</span><div class="small text-muted mt-1" style="max-width:200px; overflow:hidden;">${b.assignedDepts ? b.assignedDepts.join(', ') : '-'}</div></td>
                         <td><small>Start: <strong>${b.serialStart || '-'}</strong></small><br><small>End: <strong>${b.serialEnd || '-'}</strong></small></td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-dark" onclick="window.App.Admin.printBoothReport('${b.id}')">🖨 Report</button>
-                            <button class="btn btn-sm btn-danger" onclick="window.App.Admin.deleteBooth('${b.id}')">X</button>
-                        </td>
+                        <td><button class="btn btn-sm btn-outline-dark" onclick="window.App.Admin.printBoothReport('${b.id}')">🖨</button><button class="btn btn-sm btn-danger" onclick="window.App.Admin.deleteBooth('${b.id}')">X</button></td>
                     `;
                     tbody.appendChild(tr);
                 });
             });
         },
-
         addBooth: async () => {
             const name = document.getElementById('b-name').value;
             const loc = document.getElementById('b-loc').value;
             if(!name || !loc) return;
-            await addDoc(collection(db, "booths"), { 
-                name: name, 
-                location: loc, 
-                voterCount: 0, 
-                assignedDepts: [] 
-            });
+            await addDoc(collection(db, "booths"), { name: name, location: loc, voterCount: 0, assignedDepts: [] });
             document.getElementById('b-name').value = '';
             document.getElementById('b-loc').value = '';
         },
-
         deleteBooth: async (id) => {
             if(confirm("Delete this booth?")) await deleteDoc(doc(db, "booths", id));
         },
-
         autoAssignBooths: async () => {
             if(!confirm("Reset and auto-assign ALL students to booths?")) return;
-            
             const boothSnap = await getDocs(collection(db, "booths"));
             const booths = [];
             boothSnap.forEach(doc => booths.push({ id: doc.id, ...doc.data(), currentLoad: 0, depts: [] }));
-            
             if(booths.length === 0) return alert("Create booths first!");
 
             const studentSnap = await getDocs(collection(db, "students"));
@@ -475,11 +405,9 @@ const App = {
                 const bRef = doc(db, "booths", b.id);
                 batch.update(bRef, { voterCount: b.currentLoad, assignedDepts: b.depts });
             });
-            
             try { await batch.commit(); alert(`Success! Assigned ${students.length} students.`); }
             catch(e) { alert("Error: " + e.message); }
         },
-
         printBoothReport: async (boothId) => {
             const bSnap = await getDoc(doc(db, "booths", boothId));
             const booth = bSnap.data();
@@ -487,7 +415,6 @@ const App = {
             const voters = [];
             q.forEach(doc => { const s = doc.data(); if(s.boothId === boothId) voters.push(s); });
             voters.sort((a,b) => parseInt(a.slNo) - parseInt(b.slNo));
-            
             if(voters.length === 0) return alert("No voters assigned.");
 
             const printWindow = window.open('', '_blank');
@@ -495,66 +422,9 @@ const App = {
             printWindow.document.close();
             printWindow.print();
         }
-  
 
-            // Sort by Serial No
-            voters.sort((a,b) => parseInt(a.slNo) - parseInt(b.slNo));
-            
-            if(voters.length === 0) return alert("No voters assigned to this booth yet.");
+    }, // <--- The critical comma separating Admin and Student
 
-            // Generate HTML for Print
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(`
-                <html>
-                <head>
-                    <title>Booth Report - ${booth.name}</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 20px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                        th, td { border: 1px solid black; padding: 5px; font-size: 12px; }
-                        .header { text-align: center; margin-bottom: 20px; }
-                        .stats { margin-top: 20px; border: 1px solid black; padding: 10px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h2>Presiding Officer's Report</h2>
-                        <h3>Booth: ${booth.name} (${booth.location})</h3>
-                    </div>
-
-                    <div class="stats">
-                        <strong>Assigned Departments:</strong> ${booth.assignedDepts ? booth.assignedDepts.join(', ') : 'None'}<br>
-                        <strong>Total Voters:</strong> ${voters.length}<br>
-                        <strong>Ballot Paper Serial Range:</strong> From ______ To ______
-                    </div>
-
-                    <h3>Voter List</h3>
-                    <table>
-                        <thead><tr><th>Sl No</th><th>Adm No</th><th>Name</th><th>Dept</th><th>Signature</th></tr></thead>
-                        <tbody>
-                            ${voters.map(v => `
-                                <tr>
-                                    <td>${v.slNo}</td>
-                                    <td>${v.admNo}</td>
-                                    <td>${v.name}</td>
-                                    <td>${v.dept}</td>
-                                    <td></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-
-                    <br><br>
-                    <div style="display: flex; justify-content: space-between;">
-                        <div>Signature of Polling Agent</div>
-                        <div>Signature of Presiding Officer</div>
-                    </div>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
-            printWindow.print();
-        },
     // ==========================================
     // 3. STUDENT PORTAL LOGIC
     // ==========================================
@@ -600,7 +470,6 @@ const App = {
             const list = document.getElementById('eligible-posts-list');
             list.innerHTML = '<div class="spinner-border text-primary"></div>';
             
-            // Listen to posts for student too
             onSnapshot(collection(db, "posts"), (snapshot) => {
                 list.innerHTML = '';
                 let eligibleCount = 0;
@@ -727,14 +596,12 @@ const App = {
 
         finalSubmit: async () => {
             if(!confirm("Submit Nomination?")) return;
-
             const submitBtn = document.getElementById('btn-submit');
             submitBtn.disabled = true;
             submitBtn.innerText = "Processing...";
 
             try {
                 let assignedSerial = "";
-
                 await runTransaction(db, async (transaction) => {
                     const counterRef = doc(db, "settings", "counters");
                     const counterDoc = await transaction.get(counterRef);
@@ -743,7 +610,6 @@ const App = {
                     if (counterDoc.exists()) {
                         nextSerial = (counterDoc.data().nominationSerial || 0) + 1;
                     }
-
                     assignedSerial = nextSerial.toString();
                     const newNomRef = doc(collection(db, "nominations"));
 
@@ -761,16 +627,12 @@ const App = {
                         timestamp: new Date()
                     });
                 });
-
                 alert(`Submitted! Serial No: ${assignedSerial}`);
-                
                 document.getElementById('prev-serial-display').innerText = `Serial No: ${assignedSerial}`;
-
                 document.getElementById('btn-edit').classList.add('hidden');
                 document.getElementById('btn-submit').classList.add('hidden');
                 document.getElementById('btn-print').classList.remove('hidden');
                 document.getElementById('btn-exit').classList.remove('hidden');
-
             } catch(e) {
                 console.error(e);
                 alert("Error: " + e.message);
