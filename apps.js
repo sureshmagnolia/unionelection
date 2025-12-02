@@ -159,13 +159,56 @@ const App = {
             catch(e) { alert("Error deleting"); }
         },
 
+        // --- REPLACEMENT FUNCTION: Chunked Save ---
         saveStudentsToDB: async () => {
-            if(App.data.students.length === 0) return alert("No data to save");
-            const batch = writeBatch(db); 
-            const chunk = App.data.students.slice(0, 490);
-            chunk.forEach(s => { if(s.admNo) { const docRef = doc(db, "students", s.admNo.toString()); batch.set(docRef, s); }});
-            try { await batch.commit(); alert("Batch Save Complete!"); } 
-            catch(e) { console.error(e); alert("Error saving: " + e.message); }
+            const allStudents = App.data.students;
+            const total = allStudents.length;
+            
+            if (total === 0) return alert("No data to save.");
+            
+            // Disable button to prevent double clicks
+            const statusEl = document.getElementById('student-count');
+            statusEl.innerText = "Initializing Batch Upload...";
+            
+            // Firestore limit is 500. We use 450 to be safe.
+            const BATCH_SIZE = 450; 
+            const totalBatches = Math.ceil(total / BATCH_SIZE);
+            
+            try {
+                for (let i = 0; i < totalBatches; i++) {
+                    const start = i * BATCH_SIZE;
+                    const end = start + BATCH_SIZE;
+                    const chunk = allStudents.slice(start, end);
+                    
+                    const batch = writeBatch(db);
+                    
+                    chunk.forEach(s => {
+                        if (s.admNo) {
+                            // Ensure Adm No is string to avoid ID errors
+                            const docRef = doc(db, "students", s.admNo.toString());
+                            batch.set(docRef, s);
+                        }
+                    });
+
+                    // Update UI Status
+                    statusEl.innerText = `Saving Batch ${i + 1} of ${totalBatches}... (${chunk.length} records)`;
+                    console.log(`Committing batch ${i+1}`);
+                    
+                    // Send to Firebase and wait
+                    await batch.commit();
+                }
+
+                alert(`Success! All ${total} students saved to database.`);
+                statusEl.innerText = `Complete: ${total} students saved.`;
+                
+                // Refresh view
+                App.Admin.loadStudentsFromDB(); 
+
+            } catch (e) {
+                console.error(e);
+                alert("Error during upload: " + e.message);
+                statusEl.innerText = "Upload Failed.";
+            }
         },
 
         filterTable: () => {
