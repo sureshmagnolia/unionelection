@@ -1,6 +1,6 @@
-// 1. IMPORT FIREBASE
+// 1. IMPORT FIREBASE (Added 'onSnapshot' for Live Sync)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, doc, deleteDoc, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, getDoc, setDoc, doc, deleteDoc, writeBatch, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-analytics.js";
 
 // 2. YOUR CONFIGURATION
@@ -19,11 +19,18 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const analytics = getAnalytics(app);
 
+// Global Unsubscribe variables (to stop listeners when needed)
+let unsubStudents = null;
+let unsubPosts = null;
+let unsubNominations = null;
+let unsubTeam = null;
+
 // 4. APP LOGIC CONTAINER
 const App = {
     data: {
         students: [],
-        posts: []
+        posts: [],
+        nominations: []
     },
 
     UI: {
@@ -59,7 +66,7 @@ const App = {
     },
 
     Admin: {
-        // --- CSV & Nominal Roll Logic ---
+        // --- CSV Upload ---
         processCSV: () => {
             const fileInput = document.getElementById('csv-file');
             if (!fileInput || !fileInput.files.length) return alert("Select CSV");
@@ -84,23 +91,25 @@ const App = {
             });
         },
 
-        loadStudentsFromDB: async () => {
-            const tbody = document.getElementById('nominal-tbody');
-            if(!tbody) return;
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center">Loading from Database...</td></tr>';
+        // --- REAL-TIME: Listen to Students ---
+        loadStudentsFromDB: () => {
+            if(unsubStudents) unsubStudents(); // Stop previous listener
             
-            try {
-                const q = await getDocs(collection(db, "students"));
+            const tbody = document.getElementById('nominal-tbody');
+            if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center">Syncing...</td></tr>';
+
+            // Start Listening
+            unsubStudents = onSnapshot(collection(db, "students"), (snapshot) => {
                 App.data.students = [];
-                q.forEach(doc => {
-                    App.data.students.push(doc.data());
-                });
+                snapshot.forEach(doc => App.data.students.push(doc.data()));
+                
+                // Sort by Sl No locally for display
+                App.data.students.sort((a,b) => parseInt(a.slNo) - parseInt(b.slNo));
+                
                 App.Admin.renderTable(App.data.students);
-                document.getElementById('student-count').innerText = `Loaded ${App.data.students.length} students from DB.`;
-            } catch(e) {
-                console.error(e);
-                alert("Error loading data: " + e.message);
-            }
+                const countEl = document.getElementById('student-count');
+                if(countEl) countEl.innerText = `Live: ${App.data.students.length} students synced.`;
+            });
         },
 
         renderTable: (data) => {
@@ -137,7 +146,7 @@ const App = {
         updateLocalData: (index, field, value) => {
             App.data.students[index][field] = value;
             const row = document.getElementById('nominal-tbody').children[index];
-            if(row) row.style.backgroundColor = "#fff3cd"; // Yellow = Unsaved
+            if(row) row.style.backgroundColor = "#fff3cd"; 
         },
 
         saveRow: async (index) => {
@@ -148,7 +157,7 @@ const App = {
                 await setDoc(doc(db, "students", student.admNo.toString()), student);
                 const row = document.getElementById('nominal-tbody').children[index];
                 if(row) {
-                    row.style.backgroundColor = "#d1e7dd"; // Green = Saved
+                    row.style.backgroundColor = "#d1e7dd"; 
                     setTimeout(() => row.style.backgroundColor = "", 1000);
                 }
             } catch (e) {
@@ -160,8 +169,7 @@ const App = {
             if(!confirm("Delete this student?")) return;
             try {
                 if(admNo) await deleteDoc(doc(db, "students", admNo.toString()));
-                App.data.students.splice(index, 1);
-                App.Admin.renderTable(App.data.students);
+                // No need to splice array, 'onSnapshot' will auto-remove it from UI!
             } catch(e) {
                 alert("Error deleting");
             }
@@ -180,7 +188,7 @@ const App = {
             try {
                 await batch.commit();
                 alert("Batch Save Complete!");
-                App.Admin.loadStudentsFromDB(); 
+                // onSnapshot will update UI automatically
             } catch(e) {
                 console.error(e);
                 alert("Error saving: " + e.message);
@@ -200,126 +208,15 @@ const App = {
             a.download = "template.csv";
             a.click();
         },
-// --- NOMINATION SCRUTINY LOGIC ---
 
-        // 1. Load All Nominations
-        loadNominations: async () => {
-            const tbody = document.getElementById('scrutiny-tbody');
-            if(!tbody) return;
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading Nominations...</td></tr>';
-
-            try {
-                // Fetch all nominations
-                const q = await getDocs(collection(db, "nominations"));
-                App.data.nominations = []; // Store locally
-                q.forEach(doc => {
-                    App.data.nominations.push({ id: doc.id, ...doc.data() });
-                });
-                
-                // Default view: Show "Submitted" (Pending)
-                App.Admin.filterNominations('Submitted');
-            } catch (e) {
-                console.error(e);
-                alert("Error loading nominations.");
-            }
-        },
-
-        // 2. Filter View (Pending / Accepted / Rejected)
-        filterNominations: (status) => {
-            const list = App.data.nominations.filter(n => n.status === status);
-            const tbody = document.getElementById('scrutiny-tbody');
-            tbody.innerHTML = '';
-
-            // Update Tabs UI
-            document.querySelectorAll('.nav-pills .nav-link').forEach(btn => {
-                btn.classList.toggle('active', btn.innerText.includes(status === 'Submitted' ? 'Pending' : status));
-            });
-
-            if(list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No ${status} nominations found.</td></tr>`;
-                return;
-            }
-
-            list.forEach(n => {
-                const tr = document.createElement('tr');
-                
-                // Color code status
-                let badgeClass = "bg-warning text-dark";
-                if(n.status === 'Accepted') badgeClass = "bg-success";
-                if(n.status === 'Rejected') badgeClass = "bg-danger";
-
-                // Action Buttons (Only show for Pending)
-                let actions = "";
-                if(n.status === 'Submitted') {
-                    actions = `
-                        <button class="btn btn-sm btn-success mb-1 w-100" onclick="window.App.Admin.processNomination('${n.id}', 'Accepted')">Accept</button>
-                        <button class="btn btn-sm btn-outline-danger w-100" onclick="window.App.Admin.processNomination('${n.id}', 'Rejected')">Reject</button>
-                    `;
-                } else {
-                    actions = `<span class="badge ${badgeClass}">${n.status}</span>`;
-                    if(n.reason) actions += `<br><small class="text-danger">${n.reason}</small>`;
-                    // Allow Undo
-                    actions += `<div class="mt-2"><button class="btn btn-xs btn-link text-muted" onclick="window.App.Admin.processNomination('${n.id}', 'Submitted')">Undo</button></div>`;
-                }
-
-                tr.innerHTML = `
-                    <td class="fw-bold text-primary">${n.serialNo}</td>
-                    <td>${n.postName}</td>
-                    <td>
-                        <div class="fw-bold">${n.candidate.name}</div>
-                        <small class="text-muted">Adm: ${n.candidate.admNo}</small><br>
-                        <small>Dept: ${n.candidate.dept}</small>
-                    </td>
-                    <td>${n.age || 'N/A'} Yrs</td>
-                    <td>
-                        <small><strong>P:</strong> ${n.proposer.name} (${n.proposer.admNo})</small><br>
-                        <small><strong>S:</strong> ${n.seconder.name} (${n.seconder.admNo})</small>
-                    </td>
-                    <td><span class="badge ${badgeClass}">${n.status}</span></td>
-                    <td>${actions}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-            document.getElementById('nomination-count').innerText = `Showing ${list.length} records.`;
-        },
-
-        // 3. Process (Accept / Reject)
-        processNomination: async (id, newStatus) => {
-            let reason = "";
-            if(newStatus === 'Rejected') {
-                reason = prompt("Enter Reason for Rejection (e.g. Underage, Invalid Seconder):");
-                if(!reason) return; // Cancel if no reason given
-            }
-
-            if(!confirm(`Mark this nomination as ${newStatus}?`)) return;
-
-            try {
-                // Update Firebase (using updateDoc via setDoc merge)
-                // Note: We need 'updateDoc' imported, but setDoc with merge works too
-                await setDoc(doc(db, "nominations", id), { 
-                    status: newStatus,
-                    reason: reason,
-                    scrutinizedAt: new Date()
-                }, { merge: true });
-
-                // Refresh Data
-                await App.Admin.loadNominations();
-                
-                // If we accepted/rejected, stay on 'Pending' tab to keep working
-                if(newStatus !== 'Submitted') App.Admin.filterNominations('Submitted');
-
-            } catch(e) {
-                alert("Error updating status: " + e.message);
-            }
-        },
-        // --- Post Logic ---
-        loadPosts: async () => {
-            try {
-                const querySnapshot = await getDocs(collection(db, "posts"));
+        // --- REAL-TIME: Listen to Posts ---
+        loadPosts: () => {
+            if(unsubPosts) unsubPosts();
+            unsubPosts = onSnapshot(collection(db, "posts"), (snapshot) => {
                 App.data.posts = [];
-                querySnapshot.forEach((doc) => App.data.posts.push({ id: doc.id, ...doc.data() }));
+                snapshot.forEach((doc) => App.data.posts.push({ id: doc.id, ...doc.data() }));
                 App.UI.renderPostsTable();
-            } catch(e) { console.log("Not logged in"); }
+            });
         },
         addPost: async () => {
             const newPost = {
@@ -332,14 +229,10 @@ const App = {
                 createdAt: new Date()
             };
             await addDoc(collection(db, "posts"), newPost);
-            App.Admin.loadPosts();
             document.getElementById('post-form').reset();
         },
         deletePost: async (id) => {
-            if(confirm("Delete post?")) {
-                await deleteDoc(doc(db, "posts", id));
-                App.Admin.loadPosts();
-            }
+            if(confirm("Delete post?")) await deleteDoc(doc(db, "posts", id));
         },
         lockPosts: async () => {
             if(confirm("Lock posts & Open Nominations?")) {
@@ -348,31 +241,127 @@ const App = {
             }
         },
 
-        // --- Team Logic ---
-        loadTeam: async () => {
-            const list = document.getElementById('admin-list');
-            if(!list) return;
-            list.innerHTML = '';
-            const q = await getDocs(collection(db, "admins"));
-            list.innerHTML = `<li class="list-group-item active">sureshmagnolia@gmail.com (Super)</li>`;
-            q.forEach(doc => {
-                if(doc.id !== 'sureshmagnolia@gmail.com') {
-                    list.innerHTML += `<li class="list-group-item d-flex justify-content-between">${doc.id} <button class="btn btn-sm btn-danger" onclick="window.App.Admin.removeTeamMember('${doc.id}')">X</button></li>`;
+        // --- REAL-TIME: Listen to Nominations (Scrutiny) ---
+        loadNominations: () => {
+            if(unsubNominations) unsubNominations();
+            
+            const tbody = document.getElementById('scrutiny-tbody');
+            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center">Connecting to Live Stream...</td></tr>';
+
+            unsubNominations = onSnapshot(collection(db, "nominations"), (snapshot) => {
+                App.data.nominations = [];
+                snapshot.forEach(doc => App.data.nominations.push({ id: doc.id, ...doc.data() }));
+                // Auto-refresh the view based on current filter
+                App.Admin.refreshScrutinyView();
+            });
+        },
+        
+        refreshScrutinyView: () => {
+            const activeBtn = document.querySelector('#pills-tab .nav-link.active');
+            const status = activeBtn ? activeBtn.innerText.replace('Pending', 'Submitted') : 'Submitted';
+            App.Admin.filterNominations(status);
+        },
+
+        filterNominations: (status) => {
+            const query = document.getElementById('scrutiny-search') ? document.getElementById('scrutiny-search').value.toLowerCase().trim() : "";
+            const list = App.data.nominations.filter(n => {
+                const matchesStatus = (n.status === status);
+                const matchesSearch = (n.serialNo.toString().toLowerCase().includes(query) || 
+                                       n.candidate.name.toLowerCase().includes(query));
+                return matchesStatus && matchesSearch;
+            });
+
+            const tbody = document.getElementById('scrutiny-tbody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            // Update Tabs
+            document.querySelectorAll('.nav-pills .nav-link').forEach(btn => {
+                const btnStatus = btn.innerText === 'Pending' ? 'Submitted' : btn.innerText;
+                if(btnStatus === status) { btn.classList.add('active'); btn.classList.remove('text-dark'); }
+                else { btn.classList.remove('active'); btn.classList.add('text-dark'); }
+            });
+
+            if(list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No records found.</td></tr>`;
+                const count = document.getElementById('nomination-count');
+                if(count) count.innerText = "";
+                return;
+            }
+
+            list.sort((a, b) => parseInt(a.serialNo) - parseInt(b.serialNo));
+
+            list.forEach(n => {
+                const tr = document.createElement('tr');
+                let badgeClass = "bg-warning text-dark";
+                if(n.status === 'Accepted') badgeClass = "bg-success";
+                if(n.status === 'Rejected') badgeClass = "bg-danger";
+
+                let actions = "";
+                if(n.status === 'Submitted') {
+                    actions = `
+                        <button class="btn btn-sm btn-success mb-1 w-100" onclick="window.App.Admin.processNomination('${n.id}', 'Accepted')">Accept</button>
+                        <button class="btn btn-sm btn-outline-danger w-100" onclick="window.App.Admin.processNomination('${n.id}', 'Rejected')">Reject</button>
+                    `;
+                } else {
+                    actions = `<span class="badge ${badgeClass}">${n.status}</span>`;
+                    if(n.reason) actions += `<br><small class="text-danger">${n.reason}</small>`;
+                    actions += `<div class="mt-2"><button class="btn btn-xs btn-link text-muted" onclick="window.App.Admin.processNomination('${n.id}', 'Submitted')">Undo</button></div>`;
                 }
+
+                tr.innerHTML = `
+                    <td class="fw-bold text-primary fs-5 text-center">${n.serialNo}</td>
+                    <td>${n.postName}</td>
+                    <td>
+                        <div class="fw-bold">${n.candidate.name}</div>
+                        <small class="text-muted">Adm: ${n.candidate.admNo}</small>
+                    </td>
+                    <td>${n.age || 'N/A'}</td>
+                    <td><small>P: ${n.proposer.admNo}<br>S: ${n.seconder.admNo}</small></td>
+                    <td><span class="badge ${badgeClass}">${n.status}</span></td>
+                    <td>${actions}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            const count = document.getElementById('nomination-count');
+            if(count) count.innerText = `Live: ${list.length} records.`;
+        },
+
+        processNomination: async (id, newStatus) => {
+            let reason = "";
+            if(newStatus === 'Rejected') {
+                reason = prompt("Reason for Rejection:");
+                if(!reason) return;
+            }
+            if(!confirm(`Mark as ${newStatus}?`)) return;
+
+            await setDoc(doc(db, "nominations", id), { 
+                status: newStatus,
+                reason: reason,
+                scrutinizedAt: new Date()
+            }, { merge: true });
+        },
+
+        // --- REAL-TIME: Listen to Team ---
+        loadTeam: () => {
+            if(unsubTeam) unsubTeam();
+            unsubTeam = onSnapshot(collection(db, "admins"), (snapshot) => {
+                const list = document.getElementById('admin-list');
+                if(!list) return;
+                list.innerHTML = `<li class="list-group-item active">sureshmagnolia@gmail.com (Super)</li>`;
+                snapshot.forEach(doc => {
+                    if(doc.id !== 'sureshmagnolia@gmail.com') {
+                        list.innerHTML += `<li class="list-group-item d-flex justify-content-between">${doc.id} <button class="btn btn-sm btn-danger" onclick="window.App.Admin.removeTeamMember('${doc.id}')">X</button></li>`;
+                    }
+                });
             });
         },
         addTeamMember: async () => {
             const email = document.getElementById('new-admin-email').value.trim().toLowerCase();
-            if(email) {
-                await setDoc(doc(db, "admins", email), { role: "admin" });
-                App.Admin.loadTeam();
-            }
+            if(email) await setDoc(doc(db, "admins", email), { role: "admin" });
         },
         removeTeamMember: async (email) => {
-            if(confirm("Remove admin?")) {
-                await deleteDoc(doc(db, "admins", email));
-                App.Admin.loadTeam();
-            }
+            if(confirm("Remove admin?")) await deleteDoc(doc(db, "admins", email));
         }
     },
 
@@ -418,36 +407,36 @@ const App = {
             const list = document.getElementById('eligible-posts-list');
             list.innerHTML = '<div class="spinner-border text-primary"></div>';
             
-            const querySnapshot = await getDocs(collection(db, "posts"));
-            list.innerHTML = '';
-            let eligibleCount = 0;
+            // Listen to posts for student too (so they see locked posts vanish instantly)
+            onSnapshot(collection(db, "posts"), (snapshot) => {
+                list.innerHTML = '';
+                let eligibleCount = 0;
+                snapshot.forEach((doc) => {
+                    const post = { id: doc.id, ...doc.data() };
+                    let isEligible = true;
+                    if(post.gender !== "Any" && post.gender !== s.gender) isEligible = false;
+                    if(post.stream !== "Any" && post.stream !== s.stream) isEligible = false;
+                    if(post.year !== "Any" && String(post.year) !== String(s.year)) isEligible = false;
+                    if(post.dept && post.dept !== "" && post.dept !== s.dept) isEligible = false;
 
-            querySnapshot.forEach((doc) => {
-                const post = { id: doc.id, ...doc.data() };
-                let isEligible = true;
-                
-                if(post.gender !== "Any" && post.gender !== s.gender) isEligible = false;
-                if(post.stream !== "Any" && post.stream !== s.stream) isEligible = false;
-                if(post.year !== "Any" && String(post.year) !== String(s.year)) isEligible = false;
-                if(post.dept && post.dept !== "" && post.dept !== s.dept) isEligible = false;
-
-                if(isEligible) {
-                    eligibleCount++;
-                    list.innerHTML += `
-                        <div class="col-md-6">
-                            <div class="card h-100 border-primary shadow-sm">
-                                <div class="card-body">
-                                    <h5 class="card-title fw-bold">${post.name}</h5>
-                                    <button class="btn btn-primary w-100 mt-2" 
-                                        onclick="window.App.Student.openNomination('${post.id}', '${post.name}')">
-                                        Apply Now
-                                    </button>
+                    if(isEligible) {
+                        eligibleCount++;
+                        list.innerHTML += `
+                            <div class="col-md-6">
+                                <div class="card h-100 border-primary shadow-sm">
+                                    <div class="card-body">
+                                        <h5 class="card-title fw-bold">${post.name}</h5>
+                                        <button class="btn btn-primary w-100 mt-2" 
+                                            onclick="window.App.Student.openNomination('${post.id}', '${post.name}')">
+                                            Apply Now
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>`;
-                }
+                            </div>`;
+                    }
+                });
+                if(eligibleCount === 0) document.getElementById('no-posts-msg').classList.remove('hidden');
             });
-            if(eligibleCount === 0) document.getElementById('no-posts-msg').classList.remove('hidden');
         },
 
         openNomination: (postId, postName) => {
@@ -499,22 +488,19 @@ const App = {
             } catch(e) { console.error(e); }
         },
 
-        // 6. Generate Preview
         generatePreview: () => {
-            if(!App.Student.proposerData || !App.Student.seconderData) return alert("Please enter valid Proposer and Seconder Admission Numbers.");
+            if(!App.Student.proposerData || !App.Student.seconderData) return alert("Invalid Proposer/Seconder");
             const dob = document.getElementById('frm-dob').value;
-            if(!dob) return alert("Enter Date of Birth");
+            if(!dob) return alert("Enter DOB");
 
             const c = App.Student.currentStudent;
             const p = App.Student.proposerData;
             const s = App.Student.seconderData;
 
-            // Fill Data
             document.getElementById('prev-post').innerText = App.Student.selectedPost.name;
             document.getElementById('preview-date').innerText = "Date: " + new Date().toLocaleDateString();
-            document.getElementById('prev-serial-display').innerText = "---"; // Reset Serial
+            document.getElementById('prev-serial-display').innerText = "---"; 
 
-            // Candidate
             document.getElementById('prev-c-name').innerText = c.name;
             document.getElementById('prev-c-adm').innerText = c.admNo;
             document.getElementById('prev-c-dept').innerText = c.dept;
@@ -522,19 +508,16 @@ const App = {
             document.getElementById('prev-c-dob').innerText = dob;
             document.getElementById('prev-c-age').innerText = App.Student.calcAge() + " Years";
 
-            // Proposer
             document.getElementById('prev-p-name').innerText = p.name;
             document.getElementById('prev-p-adm').innerText = p.admNo;
             document.getElementById('prev-p-dept').innerText = p.dept;
             document.getElementById('prev-p-year').innerText = p.year + " " + p.stream;
 
-            // Seconder
             document.getElementById('prev-s-name').innerText = s.name;
             document.getElementById('prev-s-adm').innerText = s.admNo;
             document.getElementById('prev-s-dept').innerText = s.dept;
             document.getElementById('prev-s-year').innerText = s.year + " " + s.stream;
 
-            // UI State: SHOW Submit, HIDE Print
             document.getElementById('btn-edit').classList.remove('hidden');
             document.getElementById('btn-submit').classList.remove('hidden');
             document.getElementById('btn-print').classList.add('hidden');
@@ -549,9 +532,8 @@ const App = {
             document.getElementById('nomination-preview-container').classList.add('hidden');
         },
 
-        // 7. Final Submit (With Serial Number Logic)
         finalSubmit: async () => {
-            if(!confirm("Are you sure? Once submitted, you cannot edit.")) return;
+            if(!confirm("Submit Nomination?")) return;
 
             const submitBtn = document.getElementById('btn-submit');
             submitBtn.disabled = true;
@@ -587,13 +569,10 @@ const App = {
                     });
                 });
 
-                // SUCCESS: Update UI to "Post-Submission" State
-                alert(`Submission Successful! Serial Number: ${assignedSerial}`);
+                alert(`Submitted! Serial No: ${assignedSerial}`);
                 
-                // 1. Inject Serial Number into the Paper
                 document.getElementById('prev-serial-display').innerText = `Serial No: ${assignedSerial}`;
 
-                // 2. Swap Buttons (Hide Edit/Submit, Show Print)
                 document.getElementById('btn-edit').classList.add('hidden');
                 document.getElementById('btn-submit').classList.add('hidden');
                 document.getElementById('btn-print').classList.remove('hidden');
@@ -604,66 +583,6 @@ const App = {
                 alert("Error: " + e.message);
                 submitBtn.disabled = false;
                 submitBtn.innerText = "Confirm & Submit";
-            }
-        }
-
-        editForm: () => {
-            document.getElementById('sec-form').classList.remove('hidden');
-            document.getElementById('nomination-preview-container').classList.add('hidden');
-        },
-
-       finalSubmit: async () => {
-            if(!confirm("Are you sure? This will officially submit your nomination.")) return;
-
-            // Disable button immediately to prevent double clicks
-            const submitBtn = document.querySelector('#btn-print-group button:last-child');
-            submitBtn.disabled = true;
-            submitBtn.innerText = "Processing...";
-
-            try {
-                // Use a Transaction to ensure Serial Numbers (1, 2, 3...) don't duplicate
-                let assignedSerial = "";
-
-                await runTransaction(db, async (transaction) => {
-                    // 1. Read the counter
-                    const counterRef = doc(db, "settings", "counters");
-                    const counterDoc = await transaction.get(counterRef);
-
-                    // 2. Calculate next number (Start at 1 if no counter exists)
-                    let nextSerial = 1;
-                    if (counterDoc.exists()) {
-                        nextSerial = (counterDoc.data().nominationSerial || 0) + 1;
-                    }
-
-                    assignedSerial = nextSerial.toString();
-
-                    // 3. Create the Nomination Reference
-                    const newNomRef = doc(collection(db, "nominations"));
-
-                    // 4. Update Counter & Save Nomination together
-                    transaction.set(counterRef, { nominationSerial: nextSerial }, { merge: true });
-                    transaction.set(newNomRef, {
-                        serialNo: assignedSerial,
-                        postId: App.Student.selectedPost.id,
-                        postName: App.Student.selectedPost.name,
-                        candidate: App.Student.currentStudent,
-                        proposer: App.Student.proposerData,
-                        seconder: App.Student.seconderData,
-                        dob: document.getElementById('frm-dob').value,
-                        age: App.Student.calcAge(),
-                        status: "Submitted",
-                        timestamp: new Date()
-                    });
-                });
-
-                alert(`Success! Your Nomination Serial Number is: ${assignedSerial}`);
-                location.reload();
-
-            } catch(e) {
-                console.error(e);
-                alert("Error: " + e.message);
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Submit Application";
             }
         }
     }
