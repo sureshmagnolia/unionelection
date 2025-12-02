@@ -165,7 +165,44 @@
             </div>
         </div>
 
-        <div id="sec-nominations" class="hidden"><h2>Scrutiny Module (Coming Soon)</h2></div>
+
+<div id="sec-nominations" class="hidden">
+    <div class="card shadow-sm">
+        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Nomination Scrutiny</h5>
+            <button class="btn btn-sm btn-dark" onclick="window.App.Admin.loadNominations()">🔄 Refresh List</button>
+        </div>
+        <div class="card-body">
+            
+            <ul class="nav nav-pills mb-3" id="pills-tab">
+                <li class="nav-item"><button class="nav-link active" onclick="window.App.Admin.filterNominations('Submitted')">Pending</button></li>
+                <li class="nav-item"><button class="nav-link" onclick="window.App.Admin.filterNominations('Accepted')">Accepted</button></li>
+                <li class="nav-item"><button class="nav-link" onclick="window.App.Admin.filterNominations('Rejected')">Rejected</button></li>
+            </ul>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Serial No</th>
+                            <th>Post</th>
+                            <th>Candidate</th>
+                            <th>Age</th>
+                            <th>Proposer / Seconder</th>
+                            <th>Status</th>
+                            <th style="width: 180px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scrutiny-tbody">
+                        </tbody>
+                </table>
+            </div>
+            <div id="nomination-count" class="text-muted small mt-2"></div>
+        </div>
+    </div>
+</div>
+
+        
         <div id="sec-booths" class="hidden"><h2>Booth Module (Coming Soon)</h2></div>
     </div>
 
