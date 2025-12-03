@@ -247,7 +247,10 @@ const ABSENTEE_LIST_KEY = 'examAbsenteeList';
 const QP_CODE_LIST_KEY = 'examQPCodes';
 const BASE_DATA_KEY = 'examBaseData';
 const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
- 
+
+const INVIG_MAPPING_KEY = 'examInvigilatorMapping';
+let currentInvigMapping = {}; // { "SessionKey": { "RoomName": "StaffName" } }
+
 // *** MOVED HERE TO FIX ERROR ***
 const EXAM_RULES_KEY = 'examRulesConfig'; 
 let currentExamRules = []; 
@@ -2563,6 +2566,10 @@ generateReportButton.addEventListener('click', async () => {
             const examName = getExamName(session.Date, session.Time, pageStream);
             const examNameHtml = examName ? `<h2 style="font-size:14pt; font-weight:bold; margin:2px 0;">${examName}</h2>` : "";
 
+            // NEW: Get Invigilator Name
+           const invigMap = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+           const currentSessionInvigs = invigMap[sessionKeyPipe] || {};
+           const assignedInvigilatorName = currentSessionInvigs[session.Room] || "Name & Signature of Invigilator";
             // --- 1. Footer Content (Modified for Scribe Reductions) ---
             let courseSummaryRows = '';
             const uniqueQPCodesInRoom = new Set();
@@ -2651,7 +2658,7 @@ generateReportButton.addEventListener('click', async () => {
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <div style="font-size: 9pt;">${scribeFootnote}</div>
                         <div class="signature" style="text-align: center; width: 200px;">
-                            <div style="border-top: 1px solid #000; padding-top: 4px;">Name & Signature of Invigilator</div>
+                            <div style="border-top: 1px solid #000; padding-top: 4px;">${assignedInvigilatorName}</div>
                         </div>
                     </div>
                 </div>
@@ -7571,6 +7578,7 @@ if (allotmentSessionSelect) {
         if (sessionKey) {
             loadRoomAllotment(sessionKey);
             loadScribeAllotment(sessionKey);
+            renderInvigilationPanel(); // <--- ADD THIS LINE
         } else {
             // Hide all sections
             allotmentStudentCountSection.classList.add('hidden');
@@ -7578,6 +7586,7 @@ if (allotmentSessionSelect) {
             allottedRoomsSection.classList.add('hidden');
             saveAllotmentSection.classList.add('hidden');
             scribeAllotmentListSection.classList.add('hidden');
+            document.getElementById('invigilator-assignment-section').classList.add('hidden'); // <--- ADD THIS
         }
     });
 }
@@ -12102,7 +12111,230 @@ window.removeScribeRoom = function(regNo) {
     if (typeof syncDataToCloud === 'function') syncDataToCloud();
     renderScribeAllotmentList(currentSessionKey);
 };    
+// ==========================================
+// 👮 INVIGILATOR ASSIGNMENT MODULE
+// ==========================================
+
+let targetRoomForInvig = null;
+
+// 1. Render the Main Assignment Panel
+window.renderInvigilationPanel = function() {
+    const section = document.getElementById('invigilator-assignment-section');
+    const list = document.getElementById('invigilator-list-container');
+    const sessionKey = allotmentSessionSelect.value;
+
+    if (!sessionKey || !currentSessionAllotment || currentSessionAllotment.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    // Load saved mapping
+    const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+    currentInvigMapping = allMappings[sessionKey] || {};
     
+    section.classList.remove('hidden');
+    list.innerHTML = '';
+
+    // Get Rooms sorted by Serial Number
+    const serialMap = getRoomSerialMap(sessionKey);
+    
+    // Create sorted array of room objects
+    const sortedRooms = [...currentSessionAllotment].sort((a, b) => {
+        return (serialMap[a.roomName] || 999) - (serialMap[b.roomName] || 999);
+    });
+
+    sortedRooms.forEach(room => {
+        const roomName = room.roomName;
+        const assignedName = currentInvigMapping[roomName];
+        const serial = serialMap[roomName];
+        
+        const statusClass = assignedName ? "bg-green-50 border-green-200" : "bg-white border-gray-200";
+        const btnHtml = assignedName 
+            ? `<div class="flex items-center gap-2">
+                 <span class="text-xs font-bold text-green-700 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    ${assignedName}
+                 </span>
+                 <button onclick="openInvigModal('${roomName}')" class="text-[10px] text-gray-400 hover:text-indigo-600 underline">Change</button>
+               </div>`
+            : `<button onclick="openInvigModal('${roomName}')" class="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded text-xs font-bold hover:bg-indigo-100 transition">Assign</button>`;
+
+        list.innerHTML += `
+            <div class="flex justify-between items-center p-3 border rounded-lg shadow-sm ${statusClass}">
+                <div class="flex items-center gap-3">
+                    <span class="bg-gray-100 text-gray-500 font-bold text-xs w-8 h-8 flex items-center justify-center rounded-full">#${serial}</span>
+                    <div>
+                        <div class="font-bold text-gray-800 text-sm">${roomName}</div>
+                        <div class="text-[10px] text-gray-500">${room.students.length} Students</div>
+                    </div>
+                </div>
+                ${btnHtml}
+            </div>
+        `;
+    });
+}
+
+// 2. Open Modal
+window.openInvigModal = function(roomName) {
+    targetRoomForInvig = roomName;
+    const modal = document.getElementById('invigilator-select-modal');
+    const list = document.getElementById('invig-options-list');
+    const input = document.getElementById('invig-search-input');
+    const sessionKey = allotmentSessionSelect.value;
+
+    document.getElementById('invig-modal-subtitle').textContent = `Assigning to: ${roomName}`;
+    input.value = "";
+    modal.classList.remove('hidden');
+    input.focus();
+
+    // Get Staff Logic
+    const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+    
+    const slot = invigSlots[sessionKey];
+    if (!slot || !slot.assigned || slot.assigned.length === 0) {
+        list.innerHTML = '<p class="text-xs text-red-500 text-center py-2">No staff assigned to this session in Portal.</p>';
+        return;
+    }
+
+    // Get currently assigned staff to mark them
+    const assignedSet = new Set(Object.values(currentInvigMapping));
+
+    const renderList = (filter = "") => {
+        list.innerHTML = "";
+        const q = filter.toLowerCase();
+        
+        slot.assigned.forEach(email => {
+            const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: 'Unknown' };
+            
+            if (staff.name.toLowerCase().includes(q)) {
+                const isTaken = assignedSet.has(staff.name) && currentInvigMapping[targetRoomForInvig] !== staff.name;
+                const bgClass = isTaken ? "bg-gray-50 opacity-50 cursor-not-allowed" : "hover:bg-indigo-50 cursor-pointer";
+                const status = isTaken ? '<span class="text-[9px] text-red-500 font-bold">Busy</span>' : '';
+                
+                const div = document.createElement('div');
+                div.className = `p-2 rounded border border-gray-100 flex justify-between items-center ${bgClass}`;
+                div.innerHTML = `
+                    <div>
+                        <div class="text-sm font-bold text-gray-800">${staff.name}</div>
+                        <div class="text-[10px] text-gray-500">${staff.dept}</div>
+                    </div>
+                    ${status}
+                `;
+                
+                if (!isTaken) {
+                    div.onclick = () => {
+                        saveInvigAssignment(roomName, staff.name);
+                        modal.classList.add('hidden');
+                    };
+                }
+                list.appendChild(div);
+            }
+        });
+    };
+
+    renderList();
+    input.oninput = (e) => renderList(e.target.value);
+}
+
+// 3. Save Assignment
+function saveInvigAssignment(room, name) {
+    const sessionKey = allotmentSessionSelect.value;
+    currentInvigMapping[room] = name;
+    
+    // Save Global
+    const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+    allMappings[sessionKey] = currentInvigMapping;
+    localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
+    
+    // Sync
+    if(typeof syncDataToCloud === 'function') syncDataToCloud();
+    
+    renderInvigilationPanel();
+}
+
+// 4. Auto-Assign (Simple FCFS)
+window.autoAssignInvigilators = function() {
+    const sessionKey = allotmentSessionSelect.value;
+    const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+    const slot = invigSlots[sessionKey];
+
+    if (!slot || !slot.assigned) return alert("No staff available in portal.");
+
+    const availableStaff = [...slot.assigned]; // Copy emails
+    const usedNames = new Set(Object.values(currentInvigMapping));
+    
+    let changeCount = 0;
+
+    // Iterate rooms needing assignment
+    currentSessionAllotment.forEach(room => {
+        if (!currentInvigMapping[room.roomName]) {
+            // Find a free staff
+            const freeEmail = availableStaff.find(e => {
+                const name = (staffData.find(s => s.email === e) || {}).name || e;
+                return !usedNames.has(name);
+            });
+
+            if (freeEmail) {
+                const name = (staffData.find(s => s.email === freeEmail) || {}).name || freeEmail;
+                currentInvigMapping[room.roomName] = name;
+                usedNames.add(name);
+                changeCount++;
+            }
+        }
+    });
+
+    if (changeCount > 0) {
+        const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+        allMappings[sessionKey] = currentInvigMapping;
+        localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
+        if(typeof syncDataToCloud === 'function') syncDataToCloud();
+        renderInvigilationPanel();
+        alert(`Auto-assigned ${changeCount} invigilators.`);
+    } else {
+        alert("No available staff found to assign.");
+    }
+}
+
+// 5. Print List
+window.printInvigilatorList = function() {
+    const sessionKey = allotmentSessionSelect.value;
+    const [date, time] = sessionKey.split(' | ');
+    const serialMap = getRoomSerialMap(sessionKey);
+    
+    let rows = "";
+    const sortedRooms = [...currentSessionAllotment].sort((a, b) => (serialMap[a.roomName] || 999) - (serialMap[b.roomName] || 999));
+
+    sortedRooms.forEach(room => {
+        const name = currentInvigMapping[room.roomName] || "-";
+        rows += `
+            <tr>
+                <td style="border:1px solid #000; padding:5px; text-align:center;">${serialMap[room.roomName]}</td>
+                <td style="border:1px solid #000; padding:5px;">${room.roomName}</td>
+                <td style="border:1px solid #000; padding:5px;">${name}</td>
+            </tr>`;
+    });
+
+    const w = window.open('', '_blank');
+    w.document.write(`
+        <html><head><style>
+            body { font-family: sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background: #eee; border: 1px solid #000; padding: 8px; }
+        </style></head><body>
+            <h2 style="text-align:center; margin-bottom:5px;">${currentCollegeName}</h2>
+            <h3 style="text-align:center; margin-top:0;">Hall vs Invigilator Assignment</h3>
+            <p style="text-align:center;">${date} (${time})</p>
+            <table>
+                <thead><tr><th width="10%">Sl</th><th width="40%">Hall</th><th width="50%">Invigilator</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <script>window.onload = () => window.print();<\/script>
+        </body></html>
+    `);
+    w.document.close();
+}
 // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
 // --- NEW: Restore Last Active Tab ---
