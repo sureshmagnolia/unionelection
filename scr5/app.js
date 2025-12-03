@@ -12117,8 +12117,10 @@ window.removeScribeRoom = function(regNo) {
     if (typeof syncDataToCloud === 'function') syncDataToCloud();
     renderScribeAllotmentList(currentSessionKey);
 };    
+
+
 // ==========================================
-// 👮 INVIGILATOR ASSIGNMENT MODULE
+// 👮 INVIGILATOR ASSIGNMENT MODULE (V2: Scribe & Stream Aware)
 // ==========================================
 
 let targetRoomForInvig = null;
@@ -12129,49 +12131,105 @@ window.renderInvigilationPanel = function() {
     const list = document.getElementById('invigilator-list-container');
     const sessionKey = allotmentSessionSelect.value;
 
-    if (!sessionKey || !currentSessionAllotment || currentSessionAllotment.length === 0) {
+    // Check if session is selected
+    if (!sessionKey) {
         section.classList.add('hidden');
         return;
     }
 
-    // Load saved mapping
-    const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-    currentInvigMapping = allMappings[sessionKey] || {};
+    // 1. Consolidate Rooms (Regular + Scribe)
+    const roomDataMap = {}; // Object to track unique rooms: { "RoomName": { count: 0, streams: Set(), isScribe: bool } }
     
+    // A. Regular Allotments
+    if (currentSessionAllotment && currentSessionAllotment.length > 0) {
+        currentSessionAllotment.forEach(room => {
+            if (!roomDataMap[room.roomName]) {
+                roomDataMap[room.roomName] = { name: room.roomName, count: 0, streams: new Set(), isScribe: false };
+            }
+            roomDataMap[room.roomName].count += room.students.length;
+            roomDataMap[room.roomName].streams.add(room.stream || "Regular");
+        });
+    }
+
+    // B. Scribe Allotments
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+    
+    Object.values(sessionScribeMap).forEach(roomName => {
+        if (!roomDataMap[roomName]) {
+            roomDataMap[roomName] = { name: roomName, count: 0, streams: new Set(), isScribe: true };
+        }
+        roomDataMap[roomName].count += 1; // Count scribes
+        roomDataMap[roomName].streams.add("Scribe");
+    });
+
+    const allRooms = Object.values(roomDataMap);
+
+    if (allRooms.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    // 2. Prepare UI
     section.classList.remove('hidden');
     list.innerHTML = '';
 
-    // Get Rooms sorted by Serial Number
-    const serialMap = getRoomSerialMap(sessionKey);
-    
-    // Create sorted array of room objects
-    const sortedRooms = [...currentSessionAllotment].sort((a, b) => {
-        return (serialMap[a.roomName] || 999) - (serialMap[b.roomName] || 999);
-    });
+    // Load saved assignments
+    const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+    currentInvigMapping = allMappings[sessionKey] || {};
 
-    sortedRooms.forEach(room => {
-        const roomName = room.roomName;
+    // 3. Sort by Serial Number
+    const serialMap = getRoomSerialMap(sessionKey);
+    allRooms.sort((a, b) => (serialMap[a.name] || 999) - (serialMap[b.name] || 999));
+
+    // 4. Render Rows
+    allRooms.forEach(room => {
+        const roomName = room.name;
         const assignedName = currentInvigMapping[roomName];
-        const serial = serialMap[roomName];
+        const serial = serialMap[roomName] || '-';
         
+        // Fetch Location
+        const roomInfo = currentRoomConfig[roomName] || {};
+        const location = roomInfo.location || "";
+
+        // Generate Badges
+        const streamBadges = Array.from(room.streams).map(s => {
+            let color = "bg-blue-100 text-blue-800 border-blue-200";
+            if(s === "Scribe") color = "bg-orange-100 text-orange-800 border-orange-200";
+            else if(s !== "Regular") color = "bg-purple-100 text-purple-800 border-purple-200";
+            return `<span class="text-[9px] px-1.5 py-0.5 rounded border ${color} font-bold uppercase tracking-wide">${s}</span>`;
+        }).join(' ');
+
         const statusClass = assignedName ? "bg-green-50 border-green-200" : "bg-white border-gray-200";
         const btnHtml = assignedName 
             ? `<div class="flex items-center gap-2">
-                 <span class="text-xs font-bold text-green-700 flex items-center gap-1">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                    ${assignedName}
-                 </span>
-                 <button onclick="openInvigModal('${roomName}')" class="text-[10px] text-gray-400 hover:text-indigo-600 underline">Change</button>
+                 <div class="flex flex-col items-end">
+                     <span class="text-xs font-bold text-green-700 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                        ${assignedName}
+                     </span>
+                     <button onclick="openInvigModal('${roomName}')" class="text-[10px] text-gray-400 hover:text-indigo-600 underline leading-none mt-0.5">Change</button>
+                 </div>
                </div>`
-            : `<button onclick="openInvigModal('${roomName}')" class="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded text-xs font-bold hover:bg-indigo-100 transition">Assign</button>`;
+            : `<button onclick="openInvigModal('${roomName}')" class="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded text-xs font-bold hover:bg-indigo-100 transition shadow-sm">Assign</button>`;
 
         list.innerHTML += `
-            <div class="flex justify-between items-center p-3 border rounded-lg shadow-sm ${statusClass}">
+            <div class="flex justify-between items-center p-3 border rounded-lg shadow-sm ${statusClass} hover:shadow-md transition">
                 <div class="flex items-center gap-3">
-                    <span class="bg-gray-100 text-gray-500 font-bold text-xs w-8 h-8 flex items-center justify-center rounded-full">#${serial}</span>
+                    <div class="flex flex-col items-center justify-center w-9 h-9 bg-gray-100 text-gray-600 rounded font-bold text-xs border border-gray-200">
+                        <span>#${serial}</span>
+                    </div>
                     <div>
-                        <div class="font-bold text-gray-800 text-sm">${roomName}</div>
-                        <div class="text-[10px] text-gray-500">${room.students.length} Students</div>
+                        <div class="font-bold text-gray-800 text-sm flex items-baseline gap-2">
+                            ${roomName}
+                            <span class="text-xs text-gray-400 font-normal">${location ? `(${location})` : ''}</span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-[10px] text-gray-500 font-semibold bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
+                                👥 ${room.count}
+                            </span>
+                            ${streamBadges}
+                        </div>
                     </div>
                 </div>
                 ${btnHtml}
@@ -12180,7 +12238,7 @@ window.renderInvigilationPanel = function() {
     });
 }
 
-// 2. Open Modal
+// 2. Open Modal (Same as before, logic reusable)
 window.openInvigModal = function(roomName) {
     targetRoomForInvig = roomName;
     const modal = document.getElementById('invigilator-select-modal');
@@ -12193,17 +12251,15 @@ window.openInvigModal = function(roomName) {
     modal.classList.remove('hidden');
     input.focus();
 
-    // Get Staff Logic
     const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-    
     const slot = invigSlots[sessionKey];
+
     if (!slot || !slot.assigned || slot.assigned.length === 0) {
-        list.innerHTML = '<p class="text-xs text-red-500 text-center py-2">No staff assigned to this session in Portal.</p>';
+        list.innerHTML = '<p class="text-xs text-red-500 text-center py-4 bg-red-50 rounded border border-red-100">No staff assigned to this session in Invigilation Portal.</p>';
         return;
     }
 
-    // Get currently assigned staff to mark them
     const assignedSet = new Set(Object.values(currentInvigMapping));
 
     const renderList = (filter = "") => {
@@ -12215,11 +12271,11 @@ window.openInvigModal = function(roomName) {
             
             if (staff.name.toLowerCase().includes(q)) {
                 const isTaken = assignedSet.has(staff.name) && currentInvigMapping[targetRoomForInvig] !== staff.name;
-                const bgClass = isTaken ? "bg-gray-50 opacity-50 cursor-not-allowed" : "hover:bg-indigo-50 cursor-pointer";
-                const status = isTaken ? '<span class="text-[9px] text-red-500 font-bold">Busy</span>' : '';
+                const bgClass = isTaken ? "bg-gray-50 opacity-60 cursor-not-allowed" : "hover:bg-indigo-50 cursor-pointer bg-white";
+                const status = isTaken ? '<span class="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded">Busy</span>' : '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded">Free</span>';
                 
                 const div = document.createElement('div');
-                div.className = `p-2 rounded border border-gray-100 flex justify-between items-center ${bgClass}`;
+                div.className = `p-2 rounded border-b border-gray-100 last:border-0 flex justify-between items-center transition ${bgClass}`;
                 div.innerHTML = `
                     <div>
                         <div class="text-sm font-bold text-gray-800">${staff.name}</div>
@@ -12243,40 +12299,41 @@ window.openInvigModal = function(roomName) {
     input.oninput = (e) => renderList(e.target.value);
 }
 
-// 3. Save Assignment
-function saveInvigAssignment(room, name) {
-    const sessionKey = allotmentSessionSelect.value;
-    currentInvigMapping[room] = name;
-    
-    // Save Global
-    const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-    allMappings[sessionKey] = currentInvigMapping;
-    localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-    
-    // Sync
-    if(typeof syncDataToCloud === 'function') syncDataToCloud();
-    
-    renderInvigilationPanel();
-}
-
-// 4. Auto-Assign (Simple FCFS)
+// 3. Auto-Assign (Updated to include Scribe Rooms)
 window.autoAssignInvigilators = function() {
     const sessionKey = allotmentSessionSelect.value;
+    if (!sessionKey) return;
+
     const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
     const slot = invigSlots[sessionKey];
 
     if (!slot || !slot.assigned) return alert("No staff available in portal.");
 
-    const availableStaff = [...slot.assigned]; // Copy emails
+    const availableStaff = [...slot.assigned];
     const usedNames = new Set(Object.values(currentInvigMapping));
     
     let changeCount = 0;
 
-    // Iterate rooms needing assignment
-    currentSessionAllotment.forEach(room => {
-        if (!currentInvigMapping[room.roomName]) {
-            // Find a free staff
+    // 1. Build Full Room List (Regular + Scribe)
+    const allRoomNames = new Set();
+    
+    // Add Regular
+    if (currentSessionAllotment) {
+        currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
+    }
+    // Add Scribe
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+    Object.values(sessionScribeMap).forEach(r => allRoomNames.add(r));
+
+    // 2. Sort by Serial
+    const serialMap = getRoomSerialMap(sessionKey);
+    const sortedRooms = Array.from(allRoomNames).sort((a, b) => (serialMap[a] || 999) - (serialMap[b] || 999));
+
+    // 3. Assign
+    sortedRooms.forEach(roomName => {
+        if (!currentInvigMapping[roomName]) {
             const freeEmail = availableStaff.find(e => {
                 const name = (staffData.find(s => s.email === e) || {}).name || e;
                 return !usedNames.has(name);
@@ -12284,7 +12341,7 @@ window.autoAssignInvigilators = function() {
 
             if (freeEmail) {
                 const name = (staffData.find(s => s.email === freeEmail) || {}).name || freeEmail;
-                currentInvigMapping[room.roomName] = name;
+                currentInvigMapping[roomName] = name;
                 usedNames.add(name);
                 changeCount++;
             }
@@ -12299,41 +12356,58 @@ window.autoAssignInvigilators = function() {
         renderInvigilationPanel();
         alert(`Auto-assigned ${changeCount} invigilators.`);
     } else {
-        alert("No available staff found to assign.");
+        alert("No additional free staff found to assign.");
     }
 }
 
-// 5. Print List
+// 4. Print List (Updated with Location)
 window.printInvigilatorList = function() {
     const sessionKey = allotmentSessionSelect.value;
+    if (!sessionKey) return;
+
     const [date, time] = sessionKey.split(' | ');
     const serialMap = getRoomSerialMap(sessionKey);
     
-    let rows = "";
-    const sortedRooms = [...currentSessionAllotment].sort((a, b) => (serialMap[a.roomName] || 999) - (serialMap[b.roomName] || 999));
+    // Re-build Full List
+    const allRoomNames = new Set();
+    if (currentSessionAllotment) currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+    Object.values(sessionScribeMap).forEach(r => allRoomNames.add(r));
 
-    sortedRooms.forEach(room => {
-        const name = currentInvigMapping[room.roomName] || "-";
+    const sortedRooms = Array.from(allRoomNames).sort((a, b) => (serialMap[a] || 999) - (serialMap[b] || 999));
+
+    let rows = "";
+    sortedRooms.forEach(roomName => {
+        const name = currentInvigMapping[roomName] || "-";
+        const roomInfo = currentRoomConfig[roomName] || {};
+        const location = roomInfo.location ? `<br><span style="font-size:8pt; color:#555;">(${roomInfo.location})</span>` : "";
+        
         rows += `
             <tr>
-                <td style="border:1px solid #000; padding:5px; text-align:center;">${serialMap[room.roomName]}</td>
-                <td style="border:1px solid #000; padding:5px;">${room.roomName}</td>
-                <td style="border:1px solid #000; padding:5px;">${name}</td>
+                <td style="border:1px solid #000; padding:6px; text-align:center; font-weight:bold;">${serialMap[roomName]}</td>
+                <td style="border:1px solid #000; padding:6px;">
+                    <strong>${roomName}</strong>
+                    ${location}
+                </td>
+                <td style="border:1px solid #000; padding:6px; font-size:10pt;">${name}</td>
+                <td style="border:1px solid #000; padding:6px;"></td>
             </tr>`;
     });
 
     const w = window.open('', '_blank');
     w.document.write(`
-        <html><head><style>
+        <html><head><title>Hall vs Invigilator - ${date}</title><style>
             body { font-family: sans-serif; padding: 20px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background: #eee; border: 1px solid #000; padding: 8px; }
+            th { background: #eee; border: 1px solid #000; padding: 8px; text-align: left; }
+            h1, h2, h3 { text-align: center; margin: 5px; }
         </style></head><body>
-            <h2 style="text-align:center; margin-bottom:5px;">${currentCollegeName}</h2>
-            <h3 style="text-align:center; margin-top:0;">Hall vs Invigilator Assignment</h3>
-            <p style="text-align:center;">${date} (${time})</p>
+            <h1>${currentCollegeName}</h1>
+            <h2>Hall vs Invigilator Assignment</h2>
+            <h3>${date} (${time})</h3>
             <table>
-                <thead><tr><th width="10%">Sl</th><th width="40%">Hall</th><th width="50%">Invigilator</th></tr></thead>
+                <thead><tr><th width="5%" style="text-align:center;">Sl</th><th width="30%">Hall / Location</th><th width="40%">Invigilator</th><th width="25%">Signature</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
             <script>window.onload = () => window.print();<\/script>
@@ -12341,6 +12415,10 @@ window.printInvigilatorList = function() {
     `);
     w.document.close();
 }
+
+
+
+    
 // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
 // --- NEW: Restore Last Active Tab ---
