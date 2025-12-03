@@ -413,7 +413,7 @@ if (window.firebase && window.firebase.auth) {
             logoutBtn.classList.add('hidden');
             userInfoDiv.classList.add('hidden');
             adminBtn.classList.add('hidden'); // Hide admin button
-
+            if (btnInvigilation) btnInvigilation.classList.add('hidden');
             // --- FIX: Load Local Data even if not logged in ---
             loadInitialData(); 
             // -------------------------------------------------
@@ -1958,8 +1958,14 @@ function updateDashboard() {
     // 5. REFRESH CALENDAR & SETTINGS
     if (typeof renderCalendar === 'function') renderCalendar();
     if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
-    // Check for Invigilation Slots for Today
-    renderDashboardInvigilation();
+    
+    // --- NEW: Check for Invigilation Slots (Only if Logged In) ---
+    if (currentUser) {
+        renderDashboardInvigilation();
+    } else {
+        const invigWrapper = document.getElementById('dashboard-invigilation-wrapper');
+        if (invigWrapper) invigWrapper.classList.add('hidden');
+    }
 }
 
 // ==========================================
