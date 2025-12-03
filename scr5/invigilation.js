@@ -1735,14 +1735,25 @@ window.confirmUnavailable = async function() {
 
 window.waNotify = function(key) {
     const slot = invigilationSlots[key];
-    if(slot.assigned.length === 0) return alert("No staff assigned.");
-    const phones = slot.assigned.map(email => {
+    if(!slot || slot.assigned.length === 0) return alert("No staff assigned.");
+    
+    // Get first valid phone with prefix
+    let phone = "";
+    for (const email of slot.assigned) {
         const s = staffData.find(st => st.email === email);
-        return s ? s.phone : "";
-    }).filter(p => p);
-    if(phones.length === 0) return alert("No phones found.");
+        if (s && s.phone) {
+            let p = s.phone.replace(/\D/g, '');
+            if (p.length === 10) p = "91" + p;
+            if (p.length >= 10) {
+                phone = p;
+                break;
+            }
+        }
+    }
+
+    if(!phone) return alert("No valid phone numbers found.");
     const msg = encodeURIComponent(`Exam Duty: ${key}.`);
-    window.open(`https://wa.me/${phones[0]}?text=${msg}`, '_blank');
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
 window.calculateSlotsFromSchedule = async function() {
     const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
@@ -1932,10 +1943,8 @@ function pruneAssignments(slot, countToRemove) {
     // 5. Return details for notification
     return toRemove;
 }
-
 // --- Helper: Show Removal Notification ---
 function showRemovalNotification(log) {
-    // Re-use the Inconvenience Modal for this report
     const list = document.getElementById('inconvenience-list');
     const modalTitle = document.getElementById('inconvenience-modal-subtitle');
     
@@ -1945,8 +1954,13 @@ function showRemovalNotification(log) {
         
         list.innerHTML = '';
         log.forEach(item => {
+            // Fix Phone Format
+            let phone = item.phone ? item.phone.replace(/\D/g, '') : "";
+            if (phone.length === 10) phone = "91" + phone;
+            const hasValidPhone = phone.length >= 10;
+
             const msg = encodeURIComponent(`Exam Duty Update: Your invigilation duty for ${item.session} has been CANCELLED due to a reduction in required slots.`);
-            const waLink = item.phone ? `https://wa.me/${item.phone}?text=${msg}` : "#";
+            const waLink = hasValidPhone ? `https://wa.me/${phone}?text=${msg}` : "#";
             
             list.innerHTML += `
                 <div class="bg-orange-50 border border-orange-200 p-3 rounded-lg flex justify-between items-center">
@@ -1954,7 +1968,7 @@ function showRemovalNotification(log) {
                         <div class="font-bold text-gray-800 text-sm">${item.name}</div>
                         <div class="text-xs text-gray-500">${item.session}</div>
                     </div>
-                    ${item.phone ? 
+                    ${hasValidPhone ? 
                         `<a href="${waLink}" target="_blank" class="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-green-700 shadow-sm">Notify WA</a>` : 
                         `<span class="text-xs text-gray-400">No Phone</span>`
                     }
@@ -1967,6 +1981,7 @@ function showRemovalNotification(log) {
         alert("Staff removed: \n" + log.map(l => `${l.name} (${l.session})`).join('\n'));
     }
 }
+
 // --- MAIN AUTO-ALLOCATION (Smart Weighted Algorithm) ---
 window.runAutoAllocation = async function() {
     if(!confirm("⚡ Run GLOBAL Auto-Assignment for ALL unlocked slots?\n\nThis uses the SMART ALGORITHM:\n1. Prioritizes High Pending Duties\n2. Enforces Max 3/Week (Soft Limit)\n3. Avoids Same Day & Adjacent Day Conflicts\n4. Prevents Dept Saturation (>60%)\n\nThis may take a moment.")) return;
@@ -2311,22 +2326,29 @@ window.removeRoleFromStaff = async function(sIdx, rIdx) {
 
 
 
-
 window.openInconvenienceModal = function(key) {
     const slot = invigilationSlots[key];
     if (!slot || !slot.unavailable) return;
     document.getElementById('inconvenience-modal-subtitle').textContent = key;
     const list = document.getElementById('inconvenience-list');
     list.innerHTML = '';
+    
     slot.unavailable.forEach(u => {
         const email = (typeof u === 'string') ? u : u.email;
         const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
         const details = (typeof u === 'object' && u.details) ? u.details : "No details.";
         const s = staffData.find(st => st.email === email) || { name: email, phone: "", dept: "Unknown" };
-        list.innerHTML += `<div class="bg-red-50 border border-red-100 p-3 rounded-lg"><div class="flex justify-between items-start mb-1"><div><div class="font-bold text-gray-800 text-sm">${s.name}</div><div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div></div><span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">${reason}</span></div><div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">"${details}"</div><div class="text-right">${s.phone ? `<a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1">WhatsApp</a>` : ''}</div></div>`;
+        
+        // Fix Phone Format
+        let phone = s.phone ? s.phone.replace(/\D/g, '') : "";
+        if (phone.length === 10) phone = "91" + phone;
+        const hasPhone = phone.length >= 10;
+
+        list.innerHTML += `<div class="bg-red-50 border border-red-100 p-3 rounded-lg"><div class="flex justify-between items-start mb-1"><div><div class="font-bold text-gray-800 text-sm">${s.name}</div><div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div></div><span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">${reason}</span></div><div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">"${details}"</div><div class="text-right">${hasPhone ? `<a href="https://wa.me/${phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1">WhatsApp</a>` : ''}</div></div>`;
     });
     window.openModal('inconvenience-modal');
 }
+
 // --- MISSING HELPER FUNCTIONS ---
 
 // 1. Get Name from Email (Fixes your console error)
