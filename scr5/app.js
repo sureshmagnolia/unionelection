@@ -12120,10 +12120,8 @@ window.removeScribeRoom = function(regNo) {
 
 
 // ==========================================
-// 👮 INVIGILATOR ASSIGNMENT MODULE (V2: Scribe & Stream Aware)
+// 👮 INVIGILATOR ASSIGNMENT MODULE (FIXED V3)
 // ==========================================
-
-let targetRoomForInvig = null;
 
 // 1. Render the Main Assignment Panel
 window.renderInvigilationPanel = function() {
@@ -12131,16 +12129,15 @@ window.renderInvigilationPanel = function() {
     const list = document.getElementById('invigilator-list-container');
     const sessionKey = allotmentSessionSelect.value;
 
-    // Check if session is selected
     if (!sessionKey) {
-        section.classList.add('hidden');
+        if(section) section.classList.add('hidden');
         return;
     }
 
-    // 1. Consolidate Rooms (Regular + Scribe)
-    const roomDataMap = {}; // Object to track unique rooms: { "RoomName": { count: 0, streams: Set(), isScribe: bool } }
+    // A. Consolidate Rooms (Regular + Scribe)
+    const roomDataMap = {}; 
     
-    // A. Regular Allotments
+    // Regular Allotments
     if (currentSessionAllotment && currentSessionAllotment.length > 0) {
         currentSessionAllotment.forEach(room => {
             if (!roomDataMap[room.roomName]) {
@@ -12151,7 +12148,7 @@ window.renderInvigilationPanel = function() {
         });
     }
 
-    // B. Scribe Allotments
+    // Scribe Allotments
     const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
     const sessionScribeMap = allScribeAllotments[sessionKey] || {};
     
@@ -12159,7 +12156,7 @@ window.renderInvigilationPanel = function() {
         if (!roomDataMap[roomName]) {
             roomDataMap[roomName] = { name: roomName, count: 0, streams: new Set(), isScribe: true };
         }
-        roomDataMap[roomName].count += 1; // Count scribes
+        roomDataMap[roomName].count += 1; 
         roomDataMap[roomName].streams.add("Scribe");
     });
 
@@ -12170,7 +12167,7 @@ window.renderInvigilationPanel = function() {
         return;
     }
 
-    // 2. Prepare UI
+    // B. Prepare UI
     section.classList.remove('hidden');
     list.innerHTML = '';
 
@@ -12178,21 +12175,21 @@ window.renderInvigilationPanel = function() {
     const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
     currentInvigMapping = allMappings[sessionKey] || {};
 
-    // 3. Sort by Serial Number
+    // Sort by Serial Number
     const serialMap = getRoomSerialMap(sessionKey);
     allRooms.sort((a, b) => (serialMap[a.name] || 999) - (serialMap[b.name] || 999));
 
-    // 4. Render Rows
+    // C. Render Rows
     allRooms.forEach(room => {
         const roomName = room.name;
         const assignedName = currentInvigMapping[roomName];
         const serial = serialMap[roomName] || '-';
         
-        // Fetch Location
         const roomInfo = currentRoomConfig[roomName] || {};
         const location = roomInfo.location || "";
+        const safeRoomName = roomName.replace(/'/g, "\\'"); // Escape for onclick
 
-        // Generate Badges
+        // Generate Stream Badges
         const streamBadges = Array.from(room.streams).map(s => {
             let color = "bg-blue-100 text-blue-800 border-blue-200";
             if(s === "Scribe") color = "bg-orange-100 text-orange-800 border-orange-200";
@@ -12201,6 +12198,7 @@ window.renderInvigilationPanel = function() {
         }).join(' ');
 
         const statusClass = assignedName ? "bg-green-50 border-green-200" : "bg-white border-gray-200";
+        
         const btnHtml = assignedName 
             ? `<div class="flex items-center gap-2">
                  <div class="flex flex-col items-end">
@@ -12208,10 +12206,10 @@ window.renderInvigilationPanel = function() {
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                         ${assignedName}
                      </span>
-                     <button onclick="openInvigModal('${roomName}')" class="text-[10px] text-gray-400 hover:text-indigo-600 underline leading-none mt-0.5">Change</button>
+                     <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="text-[10px] text-gray-400 hover:text-indigo-600 underline leading-none mt-0.5">Change</button>
                  </div>
                </div>`
-            : `<button onclick="openInvigModal('${roomName}')" class="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded text-xs font-bold hover:bg-indigo-100 transition shadow-sm">Assign</button>`;
+            : `<button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded text-xs font-bold hover:bg-indigo-100 transition shadow-sm">Assign</button>`;
 
         list.innerHTML += `
             <div class="flex justify-between items-center p-3 border rounded-lg shadow-sm ${statusClass} hover:shadow-md transition">
@@ -12238,19 +12236,22 @@ window.renderInvigilationPanel = function() {
     });
 }
 
-// 2. Open Modal (Same as before, logic reusable)
+// 2. Open Modal (Populates List)
 window.openInvigModal = function(roomName) {
-    targetRoomForInvig = roomName;
     const modal = document.getElementById('invigilator-select-modal');
     const list = document.getElementById('invig-options-list');
     const input = document.getElementById('invig-search-input');
     const sessionKey = allotmentSessionSelect.value;
 
-    document.getElementById('invig-modal-subtitle').textContent = `Assigning to: ${roomName}`;
+    if(document.getElementById('invig-modal-subtitle')) {
+        document.getElementById('invig-modal-subtitle').textContent = `Assigning to: ${roomName}`;
+    }
+    
     input.value = "";
     modal.classList.remove('hidden');
-    input.focus();
+    setTimeout(() => input.focus(), 100);
 
+    // Get Data
     const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
     const slot = invigSlots[sessionKey];
@@ -12262,44 +12263,77 @@ window.openInvigModal = function(roomName) {
 
     const assignedSet = new Set(Object.values(currentInvigMapping));
 
+    // Render Function
     const renderList = (filter = "") => {
-        list.innerHTML = "";
+        let html = "";
         const q = filter.toLowerCase();
-        
+        let hasResults = false;
+
         slot.assigned.forEach(email => {
             const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: 'Unknown' };
             
             if (staff.name.toLowerCase().includes(q)) {
-                const isTaken = assignedSet.has(staff.name) && currentInvigMapping[targetRoomForInvig] !== staff.name;
+                hasResults = true;
+                // Check if assigned to another room
+                const isTaken = assignedSet.has(staff.name) && currentInvigMapping[roomName] !== staff.name;
+                
                 const bgClass = isTaken ? "bg-gray-50 opacity-60 cursor-not-allowed" : "hover:bg-indigo-50 cursor-pointer bg-white";
-                const status = isTaken ? '<span class="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded">Busy</span>' : '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded">Free</span>';
+                const status = isTaken 
+                    ? '<span class="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded border border-red-100">Busy</span>' 
+                    : '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded border border-green-100">Select</span>';
                 
-                const div = document.createElement('div');
-                div.className = `p-2 rounded border-b border-gray-100 last:border-0 flex justify-between items-center transition ${bgClass}`;
-                div.innerHTML = `
-                    <div>
-                        <div class="text-sm font-bold text-gray-800">${staff.name}</div>
-                        <div class="text-[10px] text-gray-500">${staff.dept}</div>
+                // Escape strings for safety
+                const safeRoom = roomName.replace(/'/g, "\\'");
+                const safeName = staff.name.replace(/'/g, "\\'");
+                
+                // DIRECT ONCLICK (Fixes the click issue)
+                const clickAction = isTaken ? "" : `onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')"`;
+
+                html += `
+                    <div ${clickAction} class="p-2 rounded border-b border-gray-100 last:border-0 flex justify-between items-center transition ${bgClass}">
+                        <div>
+                            <div class="text-sm font-bold text-gray-800">${staff.name}</div>
+                            <div class="text-[10px] text-gray-500">${staff.dept}</div>
+                        </div>
+                        ${status}
                     </div>
-                    ${status}
                 `;
-                
-                if (!isTaken) {
-                    div.onclick = () => {
-                        saveInvigAssignment(roomName, staff.name);
-                        modal.classList.add('hidden');
-                    };
-                }
-                list.appendChild(div);
             }
         });
+
+        if (!hasResults) {
+            html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
+        }
+        list.innerHTML = html;
     };
 
     renderList();
     input.oninput = (e) => renderList(e.target.value);
 }
 
-// 3. Auto-Assign (Updated to include Scribe Rooms)
+// 3. Save Assignment (And Close Modal)
+window.saveInvigAssignment = function(room, name) {
+    const sessionKey = allotmentSessionSelect.value;
+    if (!sessionKey) return;
+
+    currentInvigMapping[room] = name;
+    
+    // Save Global
+    const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+    allMappings[sessionKey] = currentInvigMapping;
+    localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
+    
+    // Sync
+    if(typeof syncDataToCloud === 'function') syncDataToCloud();
+    
+    // Hide Modal
+    document.getElementById('invigilator-select-modal').classList.add('hidden');
+    
+    // Refresh UI
+    window.renderInvigilationPanel();
+}
+
+// 4. Auto-Assign
 window.autoAssignInvigilators = function() {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
@@ -12315,14 +12349,9 @@ window.autoAssignInvigilators = function() {
     
     let changeCount = 0;
 
-    // 1. Build Full Room List (Regular + Scribe)
+    // 1. Build Full Room List
     const allRoomNames = new Set();
-    
-    // Add Regular
-    if (currentSessionAllotment) {
-        currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
-    }
-    // Add Scribe
+    if (currentSessionAllotment) currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
     const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
     const sessionScribeMap = allScribeAllotments[sessionKey] || {};
     Object.values(sessionScribeMap).forEach(r => allRoomNames.add(r));
@@ -12334,6 +12363,7 @@ window.autoAssignInvigilators = function() {
     // 3. Assign
     sortedRooms.forEach(roomName => {
         if (!currentInvigMapping[roomName]) {
+            // Find a free staff
             const freeEmail = availableStaff.find(e => {
                 const name = (staffData.find(s => s.email === e) || {}).name || e;
                 return !usedNames.has(name);
@@ -12360,7 +12390,7 @@ window.autoAssignInvigilators = function() {
     }
 }
 
-// 4. Print List (Updated with Location)
+// 5. Print List
 window.printInvigilatorList = function() {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
@@ -12415,8 +12445,6 @@ window.printInvigilatorList = function() {
     `);
     w.document.close();
 }
-
-
 
     
 // Initial Call (in case we start on settings page or refresh)
