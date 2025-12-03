@@ -8437,22 +8437,21 @@ function renderStudentEditTable() {
     // --- LOCK STATE STYLES ---
     const btnState = isEditDataLocked ? 'disabled' : '';
     const btnOpacity = isEditDataLocked ? 'opacity-50 cursor-not-allowed' : '';
-    // -------------------------
 
     let tableHtml = `
         <div class="overflow-hidden border-b border-gray-200 sm:rounded-lg">
-        <table class="min-w-full divide-y divide-gray-200">
+        <table class="min-w-full divide-y divide-gray-200 w-full">
             <thead class="bg-gray-50 hidden md:table-header-group">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
-                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
-                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
-                    <th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group">
+            <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group w-full">
     `;
 
     pageStudents.forEach((student, index) => {
@@ -8461,7 +8460,7 @@ function renderStudentEditTable() {
         const streamDisplay = student.Stream || "Regular";
         
         tableHtml += `
-            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row mb-3 md:mb-0 bg-white border border-gray-200 md:border-0 rounded-xl md:rounded-none shadow-sm md:shadow-none mx-2 md:mx-0 overflow-hidden hover:shadow-md transition-shadow">
+            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row mb-3 md:mb-0 bg-white border border-gray-200 md:border-0 rounded-lg md:rounded-none shadow-sm md:shadow-none w-full">
                 
                 <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${serialNo}</td>
                 <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
@@ -8481,37 +8480,40 @@ function renderStudentEditTable() {
                     <button class="delete-row-btn text-red-600 hover:text-red-900 font-bold ${btnOpacity}" ${btnState}>Delete</button>
                 </td>
 
-                <td class="md:hidden block p-3">
-                    <div class="flex justify-between items-start mb-2">
-                        <div class="flex items-center gap-3">
-                            <div class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-200">
+                <td class="md:hidden block p-3 w-full">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3 overflow-hidden">
+                            <div class="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-100 to-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-sm shrink-0 border border-indigo-200">
                                 ${student.Name.charAt(0)}
                             </div>
                             <div class="min-w-0">
-                                <div class="text-sm font-bold text-gray-900 leading-tight truncate pr-2">${student.Name}</div>
-                                <div class="text-xs text-indigo-600 font-mono font-bold">${student['Register Number']}</div>
+                                <div class="text-sm font-bold text-gray-900 truncate">${student.Name}</div>
+                                <div class="text-xs text-gray-500 font-mono">${student['Register Number']}</div>
                             </div>
                         </div>
-                        <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 uppercase tracking-wide">
-                            ${streamDisplay}
-                        </span>
+                        <span class="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">#${serialNo}</span>
                     </div>
 
-                    <div class="bg-gray-50 rounded-lg p-2 border border-gray-100 mb-3 text-xs text-gray-600 grid grid-cols-2 gap-y-1 gap-x-2">
-                        <div><span class="text-gray-400">Date:</span> <span class="font-medium text-gray-800">${student.Date}</span></div>
-                        <div><span class="text-gray-400">Time:</span> <span class="font-medium text-gray-800">${student.Time}</span></div>
-                        <div class="col-span-2 border-t border-gray-200 mt-1 pt-1 truncate">
-                            <span class="text-gray-400">Course:</span> <span class="font-medium text-gray-800" title="${student.Course}">${student.Course}</span>
+                    <div class="bg-gray-50 rounded-md p-2 text-xs border border-gray-100 mb-3">
+                        <div class="flex justify-between border-b border-gray-200 pb-1 mb-1">
+                            <span class="text-gray-500">Date:</span>
+                            <span class="font-medium text-gray-800">${student.Date}</span>
+                        </div>
+                        <div class="flex justify-between border-b border-gray-200 pb-1 mb-1">
+                            <span class="text-gray-500">Time:</span>
+                            <span class="font-medium text-gray-800">${student.Time}</span>
+                        </div>
+                        <div class="pt-0.5">
+                            <span class="text-gray-500 block mb-0.5">Course:</span>
+                            <span class="font-medium text-gray-800 block leading-tight">${student.Course}</span>
                         </div>
                     </div>
 
                     <div class="flex gap-2">
-                        <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 ${btnOpacity}" ${btnState}>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+                        <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs font-bold py-2 rounded-md shadow-sm flex items-center justify-center gap-1 ${btnOpacity}" ${btnState}>
                             Edit
                         </button>
-                        <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 ${btnOpacity}" ${btnState}>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                        <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-700 hover:bg-red-50 text-xs font-bold py-2 rounded-md shadow-sm flex items-center justify-center gap-1 ${btnOpacity}" ${btnState}>
                             Delete
                         </button>
                     </div>
