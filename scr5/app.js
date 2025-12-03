@@ -7177,7 +7177,7 @@ function saveRoomAllotment() {
     localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 }
 
-// Update display (Auto-Save Version)
+// Update display (Auto-Save Version + Button Disable Logic)
 function updateAllotmentDisplay() {
     const [date, time] = currentSessionKey.split(' | ');
     const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -7243,9 +7243,35 @@ function updateAllotmentDisplay() {
         container.insertAdjacentHTML('beforeend', cardHtml);
     });
 
+    // 3. Handle Add Room Button State
     const totalRemaining = Object.values(streamStats).reduce((sum, s) => sum + (s.total - s.allotted), 0);
     const addSection = document.getElementById('add-room-section');
-    if (addSection) addSection.classList.remove('hidden');
+    
+    if (addSection) {
+        addSection.classList.remove('hidden');
+        const addBtn = document.getElementById('add-room-allotment-button');
+        
+        if (addBtn) {
+            if (totalRemaining <= 0) {
+                // Disable Button
+                addBtn.disabled = true;
+                addBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+                addBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                addBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                    All Students Allotted
+                `;
+            } else {
+                // Enable Button
+                addBtn.disabled = false;
+                addBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+                addBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+                addBtn.textContent = "+ Add Room";
+            }
+        }
+    }
 
     renderAllottedRooms();
     
