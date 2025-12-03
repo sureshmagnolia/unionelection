@@ -11660,10 +11660,7 @@ if (btnCopyPortal) {
     });
 }
 
-// ==========================================
-// 🖨️ DASHBOARD INVIGILATION PRINTER
-// ==========================================
-
+// Updated: Dashboard Invigilation Widget (Opens Modal instead of Print)
 function renderDashboardInvigilation() {
     const wrapper = document.getElementById('dashboard-invigilation-wrapper');
     const container = document.getElementById('dashboard-invigilation-buttons');
@@ -11674,20 +11671,19 @@ function renderDashboardInvigilation() {
 
     const slots = JSON.parse(slotsJson);
     
-    // --- FIX: Robust Date Matching (Padded & Unpadded) ---
+    // Robust Date Matching (Matches "01.12.2025" or "1.12.2025")
     const today = new Date();
     const d = today.getDate();
     const m = today.getMonth() + 1;
     const y = today.getFullYear();
-
     const pad = (n) => String(n).padStart(2, '0');
-    const todayStrPadded = `${pad(d)}.${pad(m)}.${y}`; // e.g. 01.12.2025
-    const todayStrSimple = `${d}.${m}.${y}`;           // e.g. 1.12.2025
+    
+    const todayStrPadded = `${pad(d)}.${pad(m)}.${y}`; 
+    const todayStrSimple = `${d}.${m}.${y}`;
 
     const todayKeys = Object.keys(slots).filter(k => 
         k.startsWith(todayStrPadded) || k.startsWith(todayStrSimple)
     );
-    // -----------------------------------------------------
     
     if (todayKeys.length === 0) {
         wrapper.classList.add('hidden');
@@ -11700,15 +11696,106 @@ function renderDashboardInvigilation() {
     todayKeys.forEach(key => {
         const timePart = key.split(' | ')[1];
         const btn = document.createElement('button');
-        btn.className = "bg-white text-indigo-700 hover:bg-indigo-50 font-bold py-2 px-4 rounded shadow-sm text-xs flex items-center gap-2 transition";
-        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg> Print ${timePart}`;
-        btn.onclick = () => printDashboardSession(key, slots[key]);
+        // Styling: Cute, clickable button
+        btn.className = "bg-white text-indigo-700 hover:bg-indigo-50 font-bold py-2 px-4 rounded-lg shadow-sm text-xs flex items-center gap-2 transition transform hover:scale-105";
+        
+        // Icon: Eye/View instead of Printer
+        btn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            View ${timePart}
+        `;
+        
+        // Action: Open Modal
+        btn.onclick = () => openDashboardInvigModal(key);
         container.appendChild(btn);
     });
 
     wrapper.classList.remove('hidden');
 }
 
+// --- NEW: Dashboard Invigilator Modal Logic ---
+window.openDashboardInvigModal = function(sessionKey) {
+    const slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+    const slot = slots[sessionKey];
+
+    if (!slot) return;
+
+    const [datePart, timePart] = sessionKey.split(' | ');
+    document.getElementById('dash-modal-title').textContent = timePart;
+    document.getElementById('dash-modal-subtitle').textContent = `${datePart} • ${slot.assigned.length} Staff Assigned`;
+
+    const listContainer = document.getElementById('dash-invig-list');
+    listContainer.innerHTML = '';
+
+    if (!slot.assigned || slot.assigned.length === 0) {
+        listContainer.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-8 text-gray-400">
+                <svg class="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                <p class="text-sm">No invigilators assigned yet.</p>
+            </div>`;
+    } else {
+        // Sort alphabetically
+        slot.assigned.sort();
+
+        slot.assigned.forEach(email => {
+            const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: "Unknown", phone: "" };
+            
+            // Phone & WhatsApp Logic
+            let phoneDisplay = staff.phone || "No Phone";
+            let waLink = "#";
+            let waClass = "opacity-50 cursor-not-allowed grayscale";
+
+            if (staff.phone) {
+                // Clean number: remove all non-digits
+                let cleanNum = staff.phone.replace(/\D/g, '');
+                
+                // Ensure it has 91 prefix
+                if (cleanNum.length === 10) {
+                    cleanNum = '91' + cleanNum;
+                }
+                
+                // Valid length check (10 digit + 91 = 12 digits)
+                if (cleanNum.length >= 10) {
+                    waLink = `https://wa.me/${cleanNum}`;
+                    waClass = "hover:bg-green-600 hover:text-white text-green-600 bg-green-50 border-green-200";
+                }
+            }
+
+            const card = document.createElement('div');
+            card.className = "bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition";
+            
+            card.innerHTML = `
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
+                        ${staff.name.charAt(0)}
+                    </div>
+                    <div class="min-w-0">
+                        <h4 class="font-bold text-gray-800 text-sm truncate">${staff.name}</h4>
+                        <p class="text-xs text-gray-500 truncate">${staff.dept}</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2 pl-2">
+                    ${staff.phone ? `<a href="tel:${staff.phone}" class="p-2 rounded-full bg-gray-50 text-gray-500 hover:bg-blue-50 hover:text-blue-600 border border-gray-100 transition"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></a>` : ''}
+                    
+                    <a href="${waLink}" target="_blank" class="p-2 rounded-full border transition flex items-center justify-center ${waClass}">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    </a>
+                </div>
+            `;
+            listContainer.appendChild(card);
+        });
+    }
+
+    // Open
+    const modal = document.getElementById('dashboard-invig-modal');
+    modal.classList.remove('hidden');
+}
+    
 // Standalone Print Function (Does not depend on invigilation.js variables)
 function printDashboardSession(key, slot) {
     const [datePart, timePart] = key.split(' | ');
