@@ -4494,18 +4494,22 @@ window.clearOldData = async function() {
 
 window.openAddStaffModal = function() {
     // Clear Form
-    document.getElementById('stf-edit-index').value = ""; // Empty = New Mode
+    document.getElementById('stf-edit-index').value = ""; 
     document.getElementById('stf-name').value = "";
     document.getElementById('stf-email').value = "";
-    document.getElementById('stf-email').disabled = false; // Enable email
+    document.getElementById('stf-email').disabled = false; 
     document.getElementById('stf-phone').value = "";
     document.getElementById('stf-dept').value = "";
     document.getElementById('stf-designation').value = "";
     document.getElementById('stf-join').value = "";
     
+    // Reset Days (Default: Mon-Sat Checked)
+    document.querySelectorAll('.stf-day-chk').forEach(c => c.checked = true);
+
     document.getElementById('staff-modal-title').textContent = "Add New Invigilator";
     window.openModal('add-staff-modal');
 }
+
 
 window.editStaff = function(index) {
     const staff = staffData[index];
