@@ -499,27 +499,57 @@
         </div>
     </div>
 
+
+
     <div id="add-staff-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
-        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4">
-            <h3 id="staff-modal-title" class="text-lg font-bold text-gray-800 mb-4">Add New Invigilator</h3>
-            <div class="space-y-3">
-                <input type="hidden" id="stf-edit-index"> <input type="text" id="stf-name" placeholder="Full Name" class="w-full p-2 border rounded text-sm">
-                <input type="email" id="stf-email" placeholder="Gmail ID" class="w-full p-2 border rounded text-sm">
-                <input type="text" id="stf-phone" placeholder="WhatsApp (91xxxxx)" class="w-full p-2 border rounded text-sm">
-                <select id="stf-dept" class="w-full p-2 border rounded text-sm bg-white">
-                    <option value="">Select Department...</option>
-                </select>
-                <div class="grid grid-cols-2 gap-2">
-                    <div><label class="text-xs text-gray-500">Designation</label><select id="stf-designation" class="w-full p-2 border rounded text-sm bg-white"></select></div>
-                    <div><label class="text-xs text-gray-500">Joining Date</label><input type="date" id="stf-join" class="w-full p-2 border rounded text-sm"></div>
+    <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4">
+        <h3 id="staff-modal-title" class="text-lg font-bold text-gray-800 mb-4">Add New Invigilator</h3>
+        
+        <div class="space-y-3">
+            <input type="hidden" id="stf-edit-index"> 
+            <input type="text" id="stf-name" placeholder="Full Name" class="w-full p-2 border rounded text-sm">
+            <input type="email" id="stf-email" placeholder="Gmail ID" class="w-full p-2 border rounded text-sm">
+            <input type="text" id="stf-phone" placeholder="WhatsApp (91xxxxx)" class="w-full p-2 border rounded text-sm">
+            
+            <select id="stf-dept" class="w-full p-2 border rounded text-sm bg-white">
+                <option value="">Select Department...</option>
+            </select>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs text-gray-500">Designation</label>
+                    <select id="stf-designation" class="w-full p-2 border rounded text-sm bg-white"></select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">Joining Date</label>
+                    <input type="date" id="stf-join" class="w-full p-2 border rounded text-sm">
                 </div>
             </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button onclick="closeModal('add-staff-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded text-sm">Cancel</button>
-                <button onclick="saveNewStaff()" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold">Save</button>
+
+            <div class="pt-2 border-t border-gray-100">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Available Days (Weekly)</label>
+                <div class="flex flex-wrap gap-3 bg-gray-50 p-2 rounded border border-gray-100" id="stf-days-container">
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="1" checked> Mon</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="2" checked> Tue</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="3" checked> Wed</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="4" checked> Thu</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="5" checked> Fri</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="6" checked> Sat</label>
+                </div>
+                <p class="text-[9px] text-gray-400 mt-1 italic">Unchecking a day excludes the staff from Auto & Manual allocation on that day.</p>
             </div>
+            </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+            <button onclick="closeModal('add-staff-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded text-sm">Cancel</button>
+            <button onclick="saveNewStaff()" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold">Save</button>
         </div>
     </div>
+</div>
+
+
+
+    
 
     <div id="role-assignment-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
         <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4">
