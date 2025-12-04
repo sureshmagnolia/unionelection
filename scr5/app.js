@@ -712,7 +712,7 @@ async function syncDataToCloud() {
         // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE) ---
         // Calculates requirements locally but preserves cloud assignments
 
-        // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE - V2 Scribe Aware) ---
+                // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE - V3 Stream & Scribe Aware) ---
         // Calculates requirements locally but preserves cloud assignments
         const localBaseData = localStorage.getItem('examBaseData');
         if (localBaseData) {
@@ -724,17 +724,19 @@ async function syncDataToCloud() {
 
             const sessionStats = {};
             
-            // 2. Count Candidates vs Scribes per Session
+            // 2. Count Candidates (By Stream) vs Scribes per Session
             students.forEach(s => {
                 const key = `${s.Date} | ${s.Time}`;
                 if (!sessionStats[key]) {
-                    sessionStats[key] = { candidates: 0, scribes: 0 };
+                    sessionStats[key] = { streams: {}, scribes: 0 };
                 }
                 
                 if (scribeRegNos.has(s['Register Number'])) {
                     sessionStats[key].scribes++;
                 } else {
-                    sessionStats[key].candidates++;
+                    const strm = s.Stream || "Regular";
+                    if (!sessionStats[key].streams[strm]) sessionStats[key].streams[strm] = 0;
+                    sessionStats[key].streams[strm]++;
                 }
             });
 
@@ -742,18 +744,27 @@ async function syncDataToCloud() {
             const cloudSlots = JSON.parse(cloudData.examInvigilationSlots || '{}');
             const mergedSlots = { ...cloudSlots };
 
-            // 4. Update Requirements (Match Invigilation.js Logic)
+            // 4. Update Requirements (Exact Match to Invigilation.js)
             Object.keys(sessionStats).forEach(key => {
                 const stats = sessionStats[key];
                 
-                // Logic: (Candidates / 30) + (Scribes / 5)
-                const candidateReq = Math.ceil(stats.candidates / 30);
+                // A. Candidates: Calculate per stream (1 per 30 ceiling)
+                let candidateReq = 0;
+                Object.values(stats.streams).forEach(count => {
+                    candidateReq += Math.ceil(count / 30);
+                });
+
+                // B. Scribes: 1 per 5 ceiling
                 const scribeReq = Math.ceil(stats.scribes / 5);
+                
+                // C. Base
                 const baseReq = candidateReq + scribeReq;
                 
-                // Reserve: 10% of Base
+                // D. Reserve: 10% of Base (Rounded Up)
                 const reserve = Math.ceil(baseReq * 0.10);
                 const totalRequired = baseReq + reserve;
+
+                const studentCount = Object.values(stats.streams).reduce((a, b) => a + b, 0) + stats.scribes;
 
                 if (!mergedSlots[key]) {
                     // New Session
@@ -762,14 +773,14 @@ async function syncDataToCloud() {
                         assigned: [], 
                         unavailable: [], 
                         isLocked: false,
-                        scribeCount: stats.scribes, // Keep metadata updated
-                        studentCount: stats.candidates + stats.scribes
+                        scribeCount: stats.scribes,
+                        studentCount: studentCount
                     };
                 } else {
                     // Existing: Update Requirement & Metadata
                     mergedSlots[key].required = totalRequired;
                     mergedSlots[key].scribeCount = stats.scribes;
-                    mergedSlots[key].studentCount = stats.candidates + stats.scribes;
+                    mergedSlots[key].studentCount = studentCount;
                 }
             });
 
