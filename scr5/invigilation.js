@@ -4510,24 +4510,31 @@ window.openAddStaffModal = function() {
     window.openModal('add-staff-modal');
 }
 
-
 window.editStaff = function(index) {
     const staff = staffData[index];
     if (!staff) return;
 
     // Populate Form
-    document.getElementById('stf-edit-index').value = index; // Set Index = Edit Mode
+    document.getElementById('stf-edit-index').value = index; 
     document.getElementById('stf-name').value = staff.name;
     document.getElementById('stf-email').value = staff.email;
-    document.getElementById('stf-email').disabled = false; // Allow email change
+    document.getElementById('stf-email').disabled = false; 
     document.getElementById('stf-phone').value = staff.phone || "";
     document.getElementById('stf-dept').value = staff.dept;
     document.getElementById('stf-designation').value = staff.designation;
     document.getElementById('stf-join').value = staff.joiningDate || "";
 
+    // Populate Days (Default to [1..6] if property doesn't exist yet)
+    const days = staff.preferredDays || [1, 2, 3, 4, 5, 6];
+    document.querySelectorAll('.stf-day-chk').forEach(c => {
+        c.checked = days.includes(parseInt(c.value));
+    });
+
     document.getElementById('staff-modal-title').textContent = "Edit Staff Profile";
     window.openModal('add-staff-modal');
 }
+
+
 
 // --- HELPER: Professional Email Template ---
 function generateProfessionalEmail(name, dutiesArray, title) {
