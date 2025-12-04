@@ -426,29 +426,46 @@ function initStaffDashboard(me) {
     };
 }
 
+
 // --- HELPERS ---
 function isUserUnavailable(slot, email, key) {
-    // 1. Check Slot Specific Unavailability
+    // 1. Check Global Weekly Preference (Guest Lecturer Logic)
+    if (key) {
+        const date = parseDate(key);
+        const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+        const staff = staffData.find(s => s.email === email);
+        
+        if (staff) {
+            // Default to Mon-Sat (1-6) if not set
+            const allowedDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
+            if (!allowedDays.includes(dayOfWeek)) {
+                return true; // Automatically unavailable on this day of week
+            }
+        }
+    }
+
+    // 2. Check Slot Specific Unavailability (Manual Calendar Blocks)
     if (slot && slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email))) return true;
 
-    // 2. Check Advance Unavailability (if key is provided)
+    // 3. Check Advance Unavailability (OD/DL/Leave)
     if (key) {
         const [dateStr, timeStr] = key.split(' | ');
         if (advanceUnavailability[dateStr]) {
-            // Determine Session
             let session = "FN";
             const t = timeStr ? timeStr.toUpperCase() : "";
             if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
             
             const list = advanceUnavailability[dateStr][session];
             if (list) {
-                // Check if email exists in the list of objects
                 return list.some(u => u.email === email);
             }
         }
     }
     return false;
 }
+
+
+
 // --- DATE HELPERS ---
 function parseDate(key) {
     try {
