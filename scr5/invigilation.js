@@ -727,12 +727,20 @@ function renderStaffTable() {
     const filter = document.getElementById('staff-search').value.toLowerCase();
     const today = new Date(); 
 
-    // 1. Filter & Map Data
+    // 1. Filter & Map Data (Updated to include Designation search)
     const filteredItems = staffData
         .map((staff, i) => ({ ...staff, originalIndex: i }))
         .filter(item => {
             if (item.status === 'archived') return false;
-            if (filter && !item.name.toLowerCase().includes(filter) && !item.dept.toLowerCase().includes(filter)) return false;
+            
+            // Search Logic: Name OR Dept OR Designation
+            if (filter) {
+                const matchName = item.name.toLowerCase().includes(filter);
+                const matchDept = item.dept.toLowerCase().includes(filter);
+                const matchDesig = (item.designation || "").toLowerCase().includes(filter); // <--- NEW CHECK
+                
+                if (!matchName && !matchDept && !matchDesig) return false;
+            }
             return true;
         });
 
@@ -744,6 +752,8 @@ function renderStaffTable() {
     const start = (currentStaffPage - 1) * STAFF_PER_PAGE;
     const end = start + STAFF_PER_PAGE;
     const pageItems = filteredItems.slice(start, end);
+
+    // ... rest of the function remains the same ...
 
     // Update Controls
     const pageInfo = document.getElementById('staff-page-info');
