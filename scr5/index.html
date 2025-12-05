@@ -1577,12 +1577,6 @@
     <div id="json-data-store" class="hidden"></div>
     <div id="q-paper-data-store" class="hidden"></div>
 </main> 
-<py-config>
-        packages = ["pandas", "pdfplumber==0.9.0"]
-</py-config>
-<py-script src="main.py"></py-script>  
-<script src="app.js"></script> 
-
 
     
 <div id="admin-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
@@ -1818,6 +1812,10 @@
         </div>
     </div>
 </div>
-    
+<py-config>
+        packages = ["pandas", "pdfplumber==0.9.0"]
+</py-config>
+<py-script src="main.py"></py-script>  
+<script src="app.js"></script> 
 </body>   
 </html>
