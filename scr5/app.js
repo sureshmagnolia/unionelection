@@ -1545,7 +1545,7 @@ function renderExamRulesInModal() {
     const lockBtn = document.getElementById('toggle-exam-rules-lock');
     if(lockBtn) lockBtn.addEventListener('click', () => { isExamRulesLocked = !isExamRulesLocked; renderExamRulesInModal(); });
 
-    const addBtn = document.getElementById('add-rule-btn');
+   const addBtn = document.getElementById('add-rule-btn');
     if(addBtn) {
         addBtn.addEventListener('click', () => {
             const name = document.getElementById('rule-name').value.trim();
