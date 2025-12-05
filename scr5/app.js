@@ -6260,8 +6260,11 @@ filterAllRadio.addEventListener('change', () => {
 
 
 // ==========================================
-// ☁️ SMART SYNC (ONE BUTTON LOGIC)
+// ☁️ ADVANCED SMART SYNC (Auto-Poll & Cache)
 // ==========================================
+
+let cachedCloudHandle = null; // Stores folder access for this session
+let cloudPollInterval = null; // Stores the timer ID
 
 const smartSyncBtn = document.getElementById('smart-sync-btn');
 
@@ -6269,96 +6272,195 @@ if (smartSyncBtn) {
     smartSyncBtn.addEventListener('click', async () => {
         // 1. Browser Support Check
         if (!('showDirectoryPicker' in window)) {
-            alert("Your browser does not support direct folder access. Please use Chrome, Edge, or Opera.");
+            alert("Browser not supported. Please use Chrome, Edge, or Opera.");
             return;
         }
 
         try {
-            // 2. Open Folder Picker (Browser remembers ID location)
-            smartSyncBtn.textContent = "Scanning Folder...";
-            const rootHandle = await window.showDirectoryPicker({
-                id: 'examflow_backup_location', 
-                mode: 'readwrite',
-                startIn: 'documents'
-            });
+            let rootHandle;
 
-            // 3. Get/Create Subfolder
-            const projectFolderHandle = await rootHandle.getDirectoryHandle('ExamFlow_Backups', { create: true });
-
-            // 4. Find Latest Cloud File
-            let latestFileHandle = null;
-            let cloudTime = 0;
-
-            for await (const entry of projectFolderHandle.values()) {
-                if (entry.kind === 'file' && entry.name.endsWith('.json') && entry.name.includes('ExamFlow_Backup')) {
-                    const file = await entry.getFile();
-                    if (file.lastModified > cloudTime) {
-                        cloudTime = file.lastModified;
-                        latestFileHandle = entry;
-                    }
+            // 2. GET FOLDER HANDLE (Cached or New)
+            if (cachedCloudHandle) {
+                // A. Use Cached Handle
+                // We must verify we still have permission (browsers sometimes revoke it)
+                const perm = await verifyPermission(cachedCloudHandle, true);
+                if (!perm) return; // User denied re-access
+                rootHandle = cachedCloudHandle;
+            } else {
+                // B. Open New Picker
+                smartSyncBtn.textContent = "Connecting...";
+                rootHandle = await window.showDirectoryPicker({
+                    id: 'examflow_backup_location', 
+                    mode: 'readwrite',
+                    startIn: 'documents'
+                });
+                
+                // Cache it for future clicks and polling
+                cachedCloudHandle = rootHandle;
+                
+                // Start Auto-Polling (Checks every 60 seconds)
+                if (!cloudPollInterval) {
+                    startCloudPolling(rootHandle);
                 }
             }
 
-            // 5. Get Local Timestamp
-            const localStr = localStorage.getItem('lastUpdated');
-            const localTime = localStr ? new Date(localStr).getTime() : 0;
-
-            // 6. Decision Logic
-            let userChoice = "";
-            
-            const dateOptions = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-            const cloudDateStr = cloudTime > 0 ? new Date(cloudTime).toLocaleString('en-GB', dateOptions) : "None";
-            const localDateStr = localTime > 0 ? new Date(localTime).toLocaleString('en-GB', dateOptions) : "None";
-
-            if (cloudTime === 0) {
-                // Scenario A: No Backups found
-                if (confirm(`No backups found in this folder.\n\nCreate a new backup now?`)) userChoice = "BACKUP";
-            
-            } else if (localTime > cloudTime) {
-                // Scenario B: Local is Newer -> Suggest Backup
-                const msg = `📂 SYNC STATUS: LOCAL IS NEWER\n\n` +
-                            `💻 Local Data:  ${localDateStr} (Latest)\n` +
-                            `☁️ Cloud File:  ${cloudDateStr}\n\n` +
-                            `Do you want to UPDATE the backup?`;
-                if (confirm(msg)) userChoice = "BACKUP";
-            
-            } else if (cloudTime > localTime) {
-                // Scenario C: Cloud is Newer -> Suggest Restore
-                const msg = `📂 SYNC STATUS: BACKUP IS NEWER\n\n` +
-                            `☁️ Cloud File:  ${cloudDateStr} (Latest)\n` +
-                            `💻 Local Data:  ${localDateStr}\n\n` +
-                            `Do you want to RESTORE from backup? (Current data will be replaced)`;
-                if (confirm(msg)) userChoice = "RESTORE";
-            
-            } else {
-                // Scenario D: Synced
-                if (confirm(`✅ Data is already synced! (${localDateStr})\n\nForce create a new backup anyway?`)) userChoice = "BACKUP";
-            }
-
-            // 7. Execute Action
-            if (userChoice === "BACKUP") {
-                smartSyncBtn.textContent = "Backing Up...";
-                await performSmartBackup(projectFolderHandle);
-            } else if (userChoice === "RESTORE") {
-                smartSyncBtn.textContent = "Restoring...";
-                await performSmartRestore(latestFileHandle);
-            }
+            // 3. RUN SYNC LOGIC
+            await performSyncCheck(rootHandle, true); // true = interactive mode (show prompts)
 
         } catch (err) {
             if (err.name !== 'AbortError') {
                 console.error("Sync Error:", err);
                 alert("Sync Error: " + err.message);
             }
-        } finally {
-            smartSyncBtn.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                ☁️ Smart Sync (Backup / Restore)
-            `;
+            smartSyncBtn.innerHTML = getDefaultButtonContent();
+            smartSyncBtn.className = "w-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-3 rounded-md text-sm font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition shadow-sm mb-2";
         }
     });
 }
 
-// --- HELPER: PERFORM BACKUP ---
+// --- CORE SYNC LOGIC ---
+async function performSyncCheck(rootHandle, isInteractive) {
+    try {
+        // 1. Get/Create Subfolder
+        const projectFolderHandle = await rootHandle.getDirectoryHandle('ExamFlow_Backups', { create: true });
+
+        // 2. Find Latest Cloud File
+        let latestFileHandle = null;
+        let cloudTime = 0;
+
+        for await (const entry of projectFolderHandle.values()) {
+            if (entry.kind === 'file' && entry.name.endsWith('.json') && entry.name.includes('ExamFlow_Backup')) {
+                const file = await entry.getFile();
+                if (file.lastModified > cloudTime) {
+                    cloudTime = file.lastModified;
+                    latestFileHandle = entry;
+                }
+            }
+        }
+
+        // 3. Get Local Timestamp
+        const localStr = localStorage.getItem('lastUpdated');
+        const localTime = localStr ? new Date(localStr).getTime() : 0;
+
+        // 4. Determine State
+        const dateOpt = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        const cloudDateStr = cloudTime > 0 ? new Date(cloudTime).toLocaleString('en-GB', dateOpt) : "None";
+        
+        // UI UPDATES BASED ON STATE
+        if (cloudTime > localTime) {
+            // STATE: Update Available
+            updateButtonState("restore", cloudDateStr);
+            
+            if (isInteractive) {
+                const msg = `☁️ NEW UPDATE FOUND!\n\n` +
+                            `Cloud File: ${cloudDateStr}\n` +
+                            `Your Data:  ${localTime > 0 ? new Date(localTime).toLocaleString('en-GB', dateOpt) : "Empty"}\n\n` +
+                            `Do you want to RESTORE this data?`;
+                if (confirm(msg)) {
+                    smartSyncBtn.textContent = "Restoring...";
+                    await performSmartRestore(latestFileHandle);
+                }
+            }
+        } 
+        else if (localTime > cloudTime) {
+            // STATE: Unsaved Changes
+            updateButtonState("backup");
+            
+            if (isInteractive) {
+                 const msg = `💾 UNSAVED LOCAL CHANGES\n\n` +
+                            `Your data is newer than the backup.\n` +
+                            `Do you want to UPDATE the cloud backup?`;
+                if (confirm(msg)) {
+                    smartSyncBtn.textContent = "Backing Up...";
+                    await performSmartBackup(projectFolderHandle);
+                }
+            }
+        } 
+        else {
+            // STATE: Synced
+            updateButtonState("synced");
+            if (isInteractive) {
+                if (confirm(`✅ System is already synced.\n\nForce create a new backup?`)) {
+                    smartSyncBtn.textContent = "Backing Up...";
+                    await performSmartBackup(projectFolderHandle);
+                }
+            }
+        }
+
+    } catch (e) {
+        console.error("Check Failed", e);
+    }
+}
+
+// --- BACKGROUND POLLING ---
+function startCloudPolling(handle) {
+    console.log("Started Cloud Polling...");
+    
+    // Run immediately
+    performSyncCheck(handle, false); // false = silent mode (no alerts, just button update)
+
+    // Run every 30 seconds
+    cloudPollInterval = setInterval(async () => {
+        // Verify permission silently
+        if ((await handle.queryPermission({ mode: 'read' })) === 'granted') {
+            performSyncCheck(handle, false);
+        }
+    }, 30000); 
+}
+
+// --- UI HELPERS ---
+function updateButtonState(state, extraInfo) {
+    if (!smartSyncBtn) return;
+
+    if (state === "restore") {
+        // RED ALERT: Incoming Data
+        smartSyncBtn.className = "w-full bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-md text-sm font-bold hover:bg-red-200 flex items-center justify-center gap-2 transition shadow-md mb-2 animate-pulse";
+        smartSyncBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            📢 New Update Available! (${extraInfo})
+        `;
+    } else if (state === "backup") {
+        // BLUE ALERT: Unsaved Work
+        smartSyncBtn.className = "w-full bg-blue-50 border border-blue-300 text-blue-800 px-4 py-3 rounded-md text-sm font-bold hover:bg-blue-100 flex items-center justify-center gap-2 transition shadow-sm mb-2";
+        smartSyncBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+            💾 Save Changes to Cloud
+        `;
+    } else {
+        // GREEN: All Good
+        smartSyncBtn.className = "w-full bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm font-bold hover:bg-green-100 flex items-center justify-center gap-2 transition shadow-sm mb-2";
+        smartSyncBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            ✅ System Synced
+        `;
+    }
+}
+
+function getDefaultButtonContent() {
+    return `
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        ☁️ Smart Sync (Backup / Restore)
+    `;
+}
+
+// --- PERMISSION HELPER ---
+async function verifyPermission(fileHandle, withWrite) {
+    const options = {};
+    if (withWrite) {
+        options.mode = 'readwrite';
+    }
+    if ((await fileHandle.queryPermission(options)) === 'granted') {
+        return true;
+    }
+    if ((await fileHandle.requestPermission(options)) === 'granted') {
+        return true;
+    }
+    return false;
+}
+
+// --- ACTION HELPERS ---
 async function performSmartBackup(folderHandle) {
     const backupData = {};
     const ALL_DATA_KEYS = [
@@ -6368,7 +6470,6 @@ async function performSmartBackup(folderHandle) {
         'examRulesConfig', 'examInvigilatorMapping', 'examInvigilationSlots', 'examStaffData'
     ];
 
-    // Update Timestamp before saving
     const now = new Date().toISOString();
     localStorage.setItem('lastUpdated', now);
     
@@ -6376,7 +6477,7 @@ async function performSmartBackup(folderHandle) {
         const data = localStorage.getItem(key);
         if (data) backupData[key] = data;
     });
-    backupData['lastUpdated'] = now; // Ensure it's in the file
+    backupData['lastUpdated'] = now;
 
     const jsonString = JSON.stringify(backupData, null, 2);
     const dateStr = new Date().toISOString().split('T')[0];
@@ -6386,20 +6487,17 @@ async function performSmartBackup(folderHandle) {
     const writable = await fileHandle.createWritable();
     await writable.write(jsonString);
     await writable.close();
-
+    
+    // Update UI immediately
+    performSyncCheck(cachedCloudHandle, false);
     alert("✅ Backup Complete!");
 }
 
-// --- HELPER: PERFORM RESTORE ---
 async function performSmartRestore(fileHandle) {
     const file = await fileHandle.getFile();
     const text = await file.text();
     const restoredData = JSON.parse(text);
 
-    // Wipe & Replace
-    // localStorage.clear(); // Optional: Safer to clear, but might lose unrelated keys.
-    // Better to overwrite known keys:
-    
     for (const key in restoredData) {
         localStorage.setItem(key, restoredData[key]);
     }
@@ -6408,6 +6506,7 @@ async function performSmartRestore(fileHandle) {
     window.location.reload();
 }
 
+    
     
     // ==========================================
     // 💍 MASTER CSV DOWNLOAD (ONE RING TO RULE THEM ALL)
