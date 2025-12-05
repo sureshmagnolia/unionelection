@@ -11457,60 +11457,45 @@ window.removeScribeRoom = function(regNo) {
 
 let swapSourceRoom = null; // Track which room is selected for swapping
 
-// 1. Render the Main Assignment Panel
+// 1. Render the Main Assignment Panel (Fixed: Keeps Names Visible in Swap Mode)
 window.renderInvigilationPanel = function() {
     const section = document.getElementById('invigilator-assignment-section');
     const list = document.getElementById('invigilator-list-container');
     const sessionKey = allotmentSessionSelect.value;
 
-    // Check if session is selected
     if (!sessionKey) {
         if(section) section.classList.add('hidden');
         return;
     }
 
-    // A. Consolidate Rooms (Regular + Scribe)
+    // A. Consolidate Rooms
     const roomDataMap = {}; 
-    
-    // Regular Allotments
     if (currentSessionAllotment && currentSessionAllotment.length > 0) {
         currentSessionAllotment.forEach(room => {
-            if (!roomDataMap[room.roomName]) {
-                roomDataMap[room.roomName] = { name: room.roomName, count: 0, streams: new Set(), isScribe: false };
-            }
+            if (!roomDataMap[room.roomName]) roomDataMap[room.roomName] = { name: room.roomName, count: 0, streams: new Set(), isScribe: false };
             roomDataMap[room.roomName].count += room.students.length;
             roomDataMap[room.roomName].streams.add(room.stream || "Regular");
         });
     }
-
-    // Scribe Allotments
     const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
     const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-    
     Object.values(sessionScribeMap).forEach(roomName => {
-        if (!roomDataMap[roomName]) {
-            roomDataMap[roomName] = { name: roomName, count: 0, streams: new Set(), isScribe: true };
-        }
+        if (!roomDataMap[roomName]) roomDataMap[roomName] = { name: roomName, count: 0, streams: new Set(), isScribe: true };
         roomDataMap[roomName].count += 1; 
         roomDataMap[roomName].streams.add("Scribe");
     });
 
     const allRooms = Object.values(roomDataMap);
-
     if (allRooms.length === 0) {
         section.classList.add('hidden');
         return;
     }
 
-    // B. Prepare UI
     section.classList.remove('hidden');
     list.innerHTML = '';
 
-    // Load saved assignments
     const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
     currentInvigMapping = allMappings[sessionKey] || {};
-
-    // Sort by Serial Number
     const serialMap = getRoomSerialMap(sessionKey);
     allRooms.sort((a, b) => (serialMap[a.name] || 999) - (serialMap[b.name] || 999));
 
@@ -11537,7 +11522,6 @@ window.renderInvigilationPanel = function() {
         const location = roomInfo.location || "";
         const safeRoomName = roomName.replace(/'/g, "\\'");
 
-        // Generate Badges
         const streamBadges = Array.from(room.streams).map(s => {
             let color = "bg-blue-100 text-blue-800 border-blue-200";
             if(s === "Scribe") color = "bg-orange-100 text-orange-800 border-orange-200";
@@ -11545,43 +11529,60 @@ window.renderInvigilationPanel = function() {
             return `<span class="text-[9px] px-1.5 py-0.5 rounded border ${color} font-bold uppercase tracking-wide whitespace-nowrap">${s}</span>`;
         }).join(' ');
 
-        // Visual State Logic
         let cardBorder = assignedName ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white";
         if (swapSourceRoom === roomName) cardBorder = "border-orange-400 ring-2 ring-orange-100 bg-orange-50";
 
-        // ACTION BUTTONS LOGIC
+        // --- NAME DISPLAY HELPER ---
+        const getNameHtml = (name) => `
+            <div class="flex items-center gap-2 min-w-0 mb-2 sm:mb-0 sm:mr-2">
+                 <div class="bg-green-100 text-green-700 p-1 rounded-full shrink-0">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                 </div>
+                 <span class="text-xs font-bold text-green-800 truncate max-w-[150px] sm:max-w-[200px]" title="${name}">${name}</span>
+            </div>`;
+
         let actionHtml = "";
         
         if (swapSourceRoom) {
-            // --- SWAP MODE ---
+            // === SWAP MODE ===
             if (swapSourceRoom === roomName) {
-                // This is the source room
+                // SOURCE ROOM (Show Name + Cancel)
                 actionHtml = `
-                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm">
-                        Cancel
-                    </button>`;
+                    <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto">
+                        ${getNameHtml(assignedName)}
+                        <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm">
+                            Cancel
+                        </button>
+                    </div>`;
             } else {
-                // This is a target room
+                // TARGET ROOM
                 const btnLabel = assignedName ? "Swap Here" : "Move Here";
                 const btnColor = assignedName ? "bg-indigo-600 hover:bg-indigo-700" : "bg-green-600 hover:bg-green-700";
                 
-                actionHtml = `
+                const btnHtml = `
                     <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto ${btnColor} text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold transition shadow-sm flex items-center justify-center gap-1">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                         ${btnLabel}
                     </button>`;
+
+                if (assignedName) {
+                    // Occupied Target: Show Name + Swap Button
+                    actionHtml = `
+                        <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto">
+                            ${getNameHtml(assignedName)}
+                            ${btnHtml}
+                        </div>`;
+                } else {
+                    // Empty Target: Just Move Button
+                    actionHtml = btnHtml;
+                }
             }
         } else {
-            // --- NORMAL MODE ---
+            // === NORMAL MODE ===
             if (assignedName) {
                 actionHtml = `
                     <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto gap-2 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-green-100 mt-2 sm:mt-0">
-                        <div class="flex items-center gap-2 min-w-0">
-                             <div class="bg-green-100 text-green-700 p-1 rounded-full shrink-0">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-                             </div>
-                             <span class="text-xs font-bold text-green-800 truncate max-w-[150px] sm:max-w-[200px]" title="${assignedName}">${assignedName}</span>
-                        </div>
+                        ${getNameHtml(assignedName)}
                         <div class="flex gap-1 w-full sm:w-auto">
                             <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100">Change</button>
                             <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>
@@ -11600,7 +11601,6 @@ window.renderInvigilationPanel = function() {
         list.innerHTML += `
             <div class="p-3 border rounded-lg shadow-sm ${cardBorder} hover:shadow-md transition mb-2">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-3">
-                    
                     <div class="flex items-start gap-3 min-w-0">
                         <div class="flex flex-col items-center justify-center w-10 h-10 bg-gray-100 text-gray-600 rounded-lg font-bold text-xs border border-gray-200 shrink-0">
                             <span class="text-[8px] text-gray-400 uppercase leading-none mb-0.5">Hall</span>
@@ -11619,7 +11619,6 @@ window.renderInvigilationPanel = function() {
                             </div>
                         </div>
                     </div>
-
                     <div class="sm:text-right min-w-[200px]">
                         ${actionHtml}
                     </div>
