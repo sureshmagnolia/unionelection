@@ -8191,13 +8191,34 @@ function renderStudentEditTable() {
         const uniqueRowIndex = start + index; 
         const serialNo = uniqueRowIndex + 1;
         const streamDisplay = student.Stream || "Regular";
+
+        // --- Desktop Row HTML (Restored) ---
+        const desktopRow = `
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                ${serialNo}
+            </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <div class="font-bold">${student.Date}</div>
+                <div class="text-xs text-gray-500">${student.Time}</div>
+            </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">
+                ${student['Register Number']}
+            </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                ${student.Name}
+            </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
+                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                    ${streamDisplay}
+                </span>
+            </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button class="edit-row-btn text-indigo-600 hover:text-indigo-900 mr-3 transition ${btnOpacity}" ${btnState}>Edit</button>
+                <button class="delete-row-btn text-red-600 hover:text-red-900 transition ${btnOpacity}" ${btnState}>Delete</button>
+            </td>
+        `;
         
-        // --- Mobile Card HTML (Optimized for Width) ---
-        // Changes: 
-        // 1. Added 'break-words' to Course Name so it wraps instead of overflowing.
-        // 2. Added 'break-all' fallback for very long strings (like continuous reg nos).
-        // 3. Ensured flex containers have 'min-w-0' to allow shrinking.
-        
+        // --- Mobile Card HTML (Optimized) ---
         const mobileCard = `
             <td class="md:hidden block p-3 w-full border-b border-gray-100 last:border-0 bg-white">
                 
