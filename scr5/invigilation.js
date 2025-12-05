@@ -279,6 +279,8 @@ function getDutiesDoneCount(email) {
     });
     return count;
 }
+
+
 function calculateStaffTarget(staff) {
     // 1. Get Academic Year Boundaries (June 1st to May 31st)
     const acYear = getCurrentAcademicYear();
@@ -299,24 +301,29 @@ function calculateStaffTarget(staff) {
         const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
         const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
         
-        // --- STEP A: SET BASELINE (Global Only) ---
-        // Designation is IRRELEVANT. Everyone starts with the Global Target.
+        // --- STEP A: SET BASELINE ---
         let monthlyRate = globalDutyTarget; 
 
-        // --- STEP B: CHECK FOR ROLE OVERRIDE ---
-        // Only applies if a role is active during THIS specific month.
-        if (staff.roleHistory && staff.roleHistory.length > 0) {
+        // *** NEW: Guest Lecturer Proportional Logic ***
+        if (staff.designation === "Guest Lecturer") {
+            // Default to 6 days if data missing, otherwise count checked days
+            const availableDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
+            const dayCount = availableDays.length;
             
+            // Formula: (Available Days / 5 Standard Days) * Global Target
+            monthlyRate = (dayCount / 5) * globalDutyTarget;
+        }
+        // ***********************************************
+
+        // --- STEP B: CHECK FOR ROLE OVERRIDE ---
+        if (staff.roleHistory && staff.roleHistory.length > 0) {
             const activeRoles = staff.roleHistory.filter(r => {
                 const rStart = new Date(r.start);
                 const rEnd = new Date(r.end);
-                // Check Overlap
                 return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
             });
 
             if (activeRoles.length > 0) {
-                // If active roles exist, find the one with the LOWEST target
-                // (e.g. If Global is 3, but HOD is 1, use 1)
                 let bestRoleTarget = monthlyRate;
                 let hasApplicableRole = false;
 
@@ -336,7 +343,7 @@ function calculateStaffTarget(staff) {
             }
         }
 
-        // Add this month's result to total
+        // Add to total
         totalTarget += monthlyRate;
         
         // Move to next month
@@ -346,8 +353,10 @@ function calculateStaffTarget(staff) {
         if (cursor.getFullYear() > calcEnd.getFullYear() + 1) break; 
     }
 
-    return totalTarget;
+    // *** UPDATED: Round UP to nearest whole number ***
+    return Math.ceil(totalTarget);
 }
+
 
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
