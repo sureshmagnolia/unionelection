@@ -429,22 +429,26 @@ function initStaffDashboard(me) {
 
 // --- HELPERS ---
 function isUserUnavailable(slot, email, key) {
-    // 1. Check Global Weekly Preference (Guest Lecturer Logic)
+    // 1. Check Global Weekly Preference (Applies to Guest Lecturers ONLY)
     if (key) {
         const date = parseDate(key);
         const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon ... 6=Sat
         const staff = staffData.find(s => s.email === email);
         
         if (staff) {
-            // Default to Mon-Sat (1-6) if not set
-            const allowedDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
-            if (!allowedDays.includes(dayOfWeek)) {
-                return true; // Automatically unavailable on this day of week
+            // *** LOGIC FIX: Only check days if Guest Lecturer ***
+            // Regular staff are assumed available Mon-Sat (1-6) regardless of saved preference
+            if (staff.designation === "Guest Lecturer") {
+                const allowedDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
+                if (!allowedDays.includes(dayOfWeek)) {
+                    return true; // Unavailable on this day
+                }
             }
         }
     }
 
     // 2. Check Slot Specific Unavailability (Manual Calendar Blocks)
+    // Handles mixed data types (string vs object)
     if (slot && slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email))) return true;
 
     // 3. Check Advance Unavailability (OD/DL/Leave)
@@ -457,7 +461,7 @@ function isUserUnavailable(slot, email, key) {
             
             const list = advanceUnavailability[dateStr][session];
             if (list) {
-                return list.some(u => u.email === email);
+                return list.some(u => (typeof u === 'string' ? u === email : u.email === email));
             }
         }
     }
@@ -2174,9 +2178,14 @@ window.saveNewStaff = async function() {
     const designation = document.getElementById('stf-designation').value;
     const date = document.getElementById('stf-join').value;
 
-    // Capture Available Days
-    const dayChecks = document.querySelectorAll('.stf-day-chk:checked');
-    const availableDays = Array.from(dayChecks).map(c => parseInt(c.value));
+    // --- LOGIC: Available Days ---
+    let availableDays = [1, 2, 3, 4, 5, 6]; // Default: Full Availability
+    
+    if (designation === "Guest Lecturer") {
+        // Only respect checkboxes for Guest Faculty
+        availableDays = Array.from(document.querySelectorAll('.stf-day-chk:checked')).map(c => parseInt(c.value));
+    }
+    // -----------------------------
 
     if (!name || !email) return alert("Name and Email are required.");
 
@@ -2187,107 +2196,66 @@ window.saveNewStaff = async function() {
 
         // 1. FULL EMAIL MIGRATION LOGIC
         if (oldEmail !== email) {
-            // Check for duplicates
             if (staffData.some(s => s.email === email && s !== oldData)) {
                 return alert("This email is already used by another staff member.");
             }
-            
             if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) return;
 
-            // A. Swap Permissions in Cloud
             await removeStaffAccess(oldEmail);
             await addStaffAccess(email);
 
-            // B. MIGRATE HISTORY (Deep Find & Replace in Slots)
+            // Deep Find & Replace in Slots (Migration)
             let slotsChanged = false;
-            
             Object.keys(invigilationSlots).forEach(key => {
                 const slot = invigilationSlots[key];
-
-                // Assignments
-                if (slot.assigned.includes(oldEmail)) {
-                    slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e);
-                    slotsChanged = true;
-                }
-
-                // Attendance
-                if (slot.attendance && slot.attendance.includes(oldEmail)) {
-                    slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e);
-                    slotsChanged = true;
-                }
-
-                // Exchange Requests
-                if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) {
-                    slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e);
-                    slotsChanged = true;
-                }
-
-                // Supervision (CS/SAS)
-                if (slot.supervision) {
-                    if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; }
-                    if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; }
-                }
-
-                // Slot Unavailability (Handle both strings and objects)
+                if (slot.assigned.includes(oldEmail)) { slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                if (slot.attendance && slot.attendance.includes(oldEmail)) { slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) { slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                if (slot.supervision) { if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; } if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; } }
                 if (slot.unavailable) {
                     let unavChanged = false;
                     slot.unavailable = slot.unavailable.map(u => {
-                        if (typeof u === 'string' && u === oldEmail) { 
-                            unavChanged = true; 
-                            return email; 
-                        }
-                        if (typeof u === 'object' && u.email === oldEmail) { 
-                            unavChanged = true; 
-                            return { ...u, email: email }; 
-                        }
+                        if (typeof u === 'string' && u === oldEmail) { unavChanged = true; return email; }
+                        if (typeof u === 'object' && u.email === oldEmail) { unavChanged = true; return { ...u, email: email }; }
                         return u;
                     });
                     if (unavChanged) slotsChanged = true;
                 }
             });
-
             if (slotsChanged) await syncSlotsToCloud();
 
-            // C. MIGRATE ADVANCE UNAVAILABILITY
+            // Migrate Advance Unavailability
             let advanceChanged = false;
             Object.keys(advanceUnavailability).forEach(dateKey => {
                 ['FN', 'AN'].forEach(sess => {
                     if (advanceUnavailability[dateKey] && advanceUnavailability[dateKey][sess]) {
                         advanceUnavailability[dateKey][sess] = advanceUnavailability[dateKey][sess].map(u => {
-                            if (u.email === oldEmail) {
-                                advanceChanged = true;
-                                return { ...u, email: email };
-                            }
+                            if (u.email === oldEmail) { advanceChanged = true; return { ...u, email: email }; }
                             return u;
                         });
                     }
                 });
             });
-
             if (advanceChanged) await saveAdvanceUnavailability();
         }
 
-        // 2. Update Local Array with NEW data
+        // 2. Update Local Array
         staffData[index] = {
             ...oldData,
             name, email, phone, dept, designation, joiningDate: date,
-            preferredDays: availableDays // <--- SAVING PREFERENCE HERE
+            preferredDays: availableDays // <--- SAVED HERE
         };
-
-        alert("Staff profile and records updated successfully.");
+        alert("Staff profile updated successfully.");
 
     } else {
         // --- ADD NEW STAFF ---
-        if (staffData.some(s => s.email === email)) {
-            return alert("Staff with this email already exists.");
-        }
+        if (staffData.some(s => s.email === email)) return alert("Staff with this email already exists.");
 
         const newObj = { 
             name, email, phone, dept, designation, joiningDate: date, 
             dutiesDone: 0, roleHistory: [], 
-            preferredDays: availableDays // <--- SAVING PREFERENCE HERE
+            preferredDays: availableDays 
         };
-        
         staffData.push(newObj);
         await addStaffAccess(email);
         alert("New staff added successfully.");
@@ -2303,31 +2271,6 @@ window.saveNewStaff = async function() {
     }
 }
 
-
-
-window.editStaff = function(index) {
-    const staff = staffData[index];
-    if (!staff) return;
-
-    // Populate Form
-    document.getElementById('stf-edit-index').value = index; 
-    document.getElementById('stf-name').value = staff.name;
-    document.getElementById('stf-email').value = staff.email;
-    document.getElementById('stf-email').disabled = false; 
-    document.getElementById('stf-phone').value = staff.phone || "";
-    document.getElementById('stf-dept').value = staff.dept;
-    document.getElementById('stf-designation').value = staff.designation;
-    document.getElementById('stf-join').value = staff.joiningDate || "";
-
-    // Populate Days (Default to [1..6] if property doesn't exist yet)
-    const days = staff.preferredDays || [1, 2, 3, 4, 5, 6];
-    document.querySelectorAll('.stf-day-chk').forEach(c => {
-        c.checked = days.includes(parseInt(c.value));
-    });
-
-    document.getElementById('staff-modal-title').textContent = "Edit Staff Profile";
-    window.openModal('add-staff-modal');
-}
 
 
 
@@ -4545,24 +4488,72 @@ window.clearOldData = async function() {
 
 // --- STAFF MANAGEMENT: ADD & EDIT ---
 
+// Helper to toggle weekly days visibility
+function toggleDaysVisibility() {
+    const desig = document.getElementById('stf-designation').value;
+    const wrapper = document.getElementById('weekly-availability-section');
+    if (wrapper) {
+        if (desig === "Guest Lecturer") {
+            wrapper.classList.remove('hidden');
+        } else {
+            wrapper.classList.add('hidden');
+        }
+    }
+}
+
 window.openAddStaffModal = function() {
     // Clear Form
-    document.getElementById('stf-edit-index').value = ""; // Empty = New Mode
+    document.getElementById('stf-edit-index').value = ""; 
     document.getElementById('stf-name').value = "";
     document.getElementById('stf-email').value = "";
-    document.getElementById('stf-email').disabled = false; // Enable email
+    document.getElementById('stf-email').disabled = false; 
     document.getElementById('stf-phone').value = "";
     document.getElementById('stf-dept').value = "";
     document.getElementById('stf-designation').value = "";
     document.getElementById('stf-join').value = "";
     
-    // Reset Days (Default: Mon-Sat Checked)
-    const dayChecks = document.querySelectorAll('.stf-day-chk');
-    if (dayChecks.length > 0) {
-        dayChecks.forEach(c => c.checked = true);
+    // Reset Days
+    document.querySelectorAll('.stf-day-chk').forEach(c => c.checked = true);
+
+    // Attach Listener for Designation Change
+    const desigSelect = document.getElementById('stf-designation');
+    if(desigSelect) {
+        desigSelect.onchange = toggleDaysVisibility;
     }
+    toggleDaysVisibility(); // Run once to set initial state
 
     document.getElementById('staff-modal-title').textContent = "Add New Invigilator";
+    window.openModal('add-staff-modal');
+}
+
+window.editStaff = function(index) {
+    const staff = staffData[index];
+    if (!staff) return;
+
+    // Populate Form
+    document.getElementById('stf-edit-index').value = index; 
+    document.getElementById('stf-name').value = staff.name;
+    document.getElementById('stf-email').value = staff.email;
+    document.getElementById('stf-email').disabled = false; 
+    document.getElementById('stf-phone').value = staff.phone || "";
+    document.getElementById('stf-dept').value = staff.dept;
+    document.getElementById('stf-designation').value = staff.designation;
+    document.getElementById('stf-join').value = staff.joiningDate || "";
+
+    // Populate Days
+    const days = staff.preferredDays || [1, 2, 3, 4, 5, 6];
+    document.querySelectorAll('.stf-day-chk').forEach(c => {
+        c.checked = days.includes(parseInt(c.value));
+    });
+
+    // Attach Listener
+    const desigSelect = document.getElementById('stf-designation');
+    if(desigSelect) {
+        desigSelect.onchange = toggleDaysVisibility;
+    }
+    toggleDaysVisibility(); // Run once to set correct state
+
+    document.getElementById('staff-modal-title').textContent = "Edit Staff Profile";
     window.openModal('add-staff-modal');
 }
 
