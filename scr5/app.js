@@ -1295,17 +1295,16 @@ if (toggleScribeAllotmentLockBtn) {
 const EXAM_NAMES_KEY = 'examSessionNames';
 let currentExamNames = {}; 
 
-// ==========================================
-// 🗓️ EXAM SCHEDULER (DATABASE MODE)
+    // ==========================================
+// 🗓️ EXAM SCHEDULER (SMART MATCHING FIX)
 // ==========================================
 
 // Helper to determine if a time string is FN or AN
 function getSessionType(timeStr) {
-    if (!timeStr) return "FN"; // Default
+    if (!timeStr) return "FN";
     const t = timeStr.toUpperCase().trim();
     
-    // Logic: PM or 12:xx or 13:xx+ implies AN. Everything else is FN.
-    // This covers standard times (1:30 PM) and 24h times (13:30)
+    // Logic: PM or 12:xx+ implies AN. Everything else is FN.
     if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.") || 
         t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:") || t.startsWith("16:")) {
         return "AN";
@@ -1313,25 +1312,19 @@ function getSessionType(timeStr) {
     return "FN";
 }
 
-// Helper to convert Date+Session to a strictly comparable number (YYYYMMDDS)
-// S: 1 for FN, 2 for AN. This avoids all Timezone/Date Object issues.
+// Helper to convert Date+Session to a strictly comparable integer
 function getSessionValue(dateStr, sessionType) {
     if (!dateStr) return 0;
     
     let y, m, d;
-    
-    // Handle YYYY-MM-DD (From Settings Input)
     if (dateStr.includes('-')) {
         [y, m, d] = dateStr.split('-');
-    } 
-    // Handle DD.MM.YYYY (From CSV Data)
-    else if (dateStr.includes('.')) {
+    } else if (dateStr.includes('.')) {
         [d, m, y] = dateStr.split('.');
     } else {
         return 0;
     }
     
-    // Ensure padding
     m = String(m).padStart(2, '0');
     d = String(d).padStart(2, '0');
     y = String(y);
@@ -1339,44 +1332,54 @@ function getSessionValue(dateStr, sessionType) {
     // 1 = FN, 2 = AN
     const sessionBit = (sessionType === 'AN') ? '2' : '1';
     
-    // Returns integer like 202511241 (FN) or 202511242 (AN)
     return parseInt(`${y}${m}${d}${sessionBit}`, 10);
 }
 
-// --- CORE: Get Exam Name by checking Rules Database ---
+// --- CORE: Get Exam Name (Prioritizes Specific Rules) ---
 function getExamName(date, time, stream) {
-    // 1. Load Rules if empty (Safety)
     if (!currentExamRules || currentExamRules.length === 0) {
         const saved = localStorage.getItem(EXAM_RULES_KEY);
         if (saved) currentExamRules = JSON.parse(saved);
     }
-
     if (currentExamRules.length === 0) return "";
 
-    // 2. Calculate Value for Current Student Record
-    // This is where the conversion happens: 2:00 PM -> AN -> 202511242
-    const currentSession = getSessionType(time); 
-    const currentValue = getSessionValue(date, currentSession); 
+    const currentSession = getSessionType(time);
+    const currentValue = getSessionValue(date, currentSession);
     const currentStream = stream || "Regular";
 
-    // 3. Find Matching Rule (Newest First)
+    let bestMatch = "";
+    let minDuration = Infinity; // To track how specific the rule is
+
+    // Iterate ALL rules to find the "Tightest" fit
     for (let i = currentExamRules.length - 1; i >= 0; i--) {
         const rule = currentExamRules[i];
         
-        // Stream Check
+        // 1. Stream Check
         if (rule.stream !== "All Streams" && rule.stream !== currentStream) continue;
 
-        // Date/Session Range Check
+        // 2. Range Check
         const startVal = getSessionValue(rule.startDate, rule.startSession);
         const endVal = getSessionValue(rule.endDate, rule.endSession);
 
         if (currentValue >= startVal && currentValue <= endVal) {
-            return rule.examName;
+            
+            // 3. Calculate Specificity (Duration)
+            // A specific session rule (Start=End) has duration 0.
+            // A whole day rule (FN to AN) has duration 1.
+            const duration = endVal - startVal;
+
+            // If this rule is MORE specific (shorter duration) than previous matches, pick it.
+            // Since we iterate newest-first, if durations are equal, we keep the newest.
+            if (duration < minDuration) {
+                minDuration = duration;
+                bestMatch = rule.examName;
+            }
         }
     }
 
-    return ""; // No match found
+    return bestMatch;
 }
+
 
 // --- NEW MODAL UI ELEMENTS ---
 const examSettingsModal = document.getElementById('exam-settings-modal');
