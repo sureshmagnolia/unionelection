@@ -11687,13 +11687,9 @@ Are you sure?
                     position: sticky; top: 10px; z-index: 9999;
                 }
 
-                /* --- THE ZOOM STRATEGY --- */
-                /* A4 Width = 210mm.
-                   To simulate 85% Zoom, we set width to 210 / 0.85 = ~247mm.
-                   The PDF engine will auto-shrink this to fit A4, effectively "zooming out".
-                */
+                /* PDF Wrapper - Exact A4 Width */
                 #pdf-wrapper {
-                    width: 245mm; 
+                    width: 210mm; 
                     background: white;
                     padding: 0; 
                     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
@@ -11706,7 +11702,7 @@ Are you sure?
                     height: auto !important;
                     min-height: 0 !important;
                     margin: 0 !important;
-                    padding: 15mm !important; /* Generous padding (shrinks on PDF) */
+                    padding: 10mm !important; /* Balanced padding for A4 */
                     border: none !important;
                     box-shadow: none !important;
                     /* Removed page-break-inside: avoid to allow natural flow */
@@ -11773,13 +11769,12 @@ Are you sure?
                     btn.disabled = true;
 
                     const opt = {
-                        // Tiny margins because the container padding (15mm) handles the spacing
-                        margin: [5, 5, 5, 5], 
+                        margin: [8, 8, 8, 8], 
                         filename: '${filename}',
                         image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 1000 }, 
+                        html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 850 }, 
                         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                        pagebreak: { mode: 'css', before: '.summary-box', avoid: ['tr', '.summary-box > div'] }
                     };
 
                     html2pdf().set(opt).from(element).save().then(() => {
