@@ -59,6 +59,7 @@ let isAdmin = false;
 let cloudUnsubscribe = null;
 let advanceUnavailability = {}; // Stores { "DD.MM.YYYY": { FN: [], AN: [] } }
 let globalDutyTarget = 2; // Default
+let guestGlobalTarget = 2; // Default (Guest Lecturer Base)
 let googleScriptUrl = "";
 let isEmailConfigLocked = true; // <--- NEW
 let isRoleLocked = true;
@@ -192,6 +193,12 @@ function setupLiveSync(collegeId, mode) {
                 globalDutyTarget = 2; // Default
             }
 
+            if (collegeData.invigGuestTarget !== undefined) {
+                guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
+            } else {
+                guestGlobalTarget = 2; // Default
+            }
+
             googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
 
             if (mode === 'admin') {
@@ -307,11 +314,13 @@ function calculateStaffTarget(staff) {
         // *** NEW: Guest Lecturer Proportional Logic ***
         if (staff.designation === "Guest Lecturer") {
             // Default to 6 days if data missing, otherwise count checked days
-            const availableDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
+            let availableDays = staff.preferredDays || [];
+            if (availableDays.length === 0) availableDays = [1, 2, 3, 4, 5, 6]; // Fallback to FULL availability
+
             const dayCount = availableDays.length;
 
-            // Formula: (Available Days / 5 Standard Days) * Global Target
-            monthlyRate = (dayCount / 5) * globalDutyTarget;
+            // Formula: (Available Days / 5 Standard Days) * Guest Global Target
+            monthlyRate = (dayCount / 5) * guestGlobalTarget;
         }
         // ***********************************************
 
@@ -1277,64 +1286,62 @@ window.openDayModal = function (dateStr, email) {
                     return `<div class="flex justify-between items-center text-xs ${rowClass} p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span>${reserveBadge}</span></div>`;
                 }).join('');
 
-                let notifyBtn = "";
-                if (isAdmin && reserves.length > 0) {
-                    notifyBtn = `<button onclick="notifySlotReserves('${key}')" class="text-[10px] text-indigo-600 font-bold hover:bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">Notify ${reserves.length} Reserves</button>`;
-                }
-
-                staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div>${notifyBtn}</div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
+                // (Legacy "Notify Reserves" button removed here)
             }
 
+            staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
+        }
+
             container.innerHTML += `<div class="bg-gray-50 p-3 rounded border border-gray-200 mb-2"><div class="flex justify-between items-center mb-2"><span class="font-bold text-gray-800 text-sm">${sessLabel} <span class="text-[10px] text-gray-500 font-normal ml-1">${key.split('|')[1]}</span></span><span class="text-xs bg-white border px-2 py-0.5 rounded">${filled}/${slot.required}</span></div><div class="mt-2">${actionHtml}</div>${staffListHtml}</div>`;
-        });
-    } else {
-        container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
+    });
+} else {
+    container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
+}
+
+// 2. ADVANCE / SESSION UNAVAILABILITY SECTION (With Logic to Disable if Assigned)
+const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
+
+// Current Status
+const fnUnavail = adv.FN && adv.FN.some(u => u.email === email);
+const anUnavail = adv.AN && adv.AN.some(u => u.email === email);
+const bothUnavail = fnUnavail && anUnavail;
+
+// Helper to generate button styles/states
+const getBtnState = (isAssigned, isMarked, label) => {
+    if (isAssigned) {
+        return {
+            disabled: 'disabled',
+            class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed',
+            text: `🚫 On Duty (${label})`
+        };
     }
-
-    // 2. ADVANCE / SESSION UNAVAILABILITY SECTION (With Logic to Disable if Assigned)
-    const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
-
-    // Current Status
-    const fnUnavail = adv.FN && adv.FN.some(u => u.email === email);
-    const anUnavail = adv.AN && adv.AN.some(u => u.email === email);
-    const bothUnavail = fnUnavail && anUnavail;
-
-    // Helper to generate button styles/states
-    const getBtnState = (isAssigned, isMarked, label) => {
-        if (isAssigned) {
-            return {
-                disabled: 'disabled',
-                class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed',
-                text: `🚫 On Duty (${label})`
-            };
-        }
-        if (isMarked) {
-            return {
-                disabled: '',
-                class: 'bg-red-600 text-white border-red-700 hover:bg-red-700',
-                text: `🚫 ${label} Unavailable`
-            };
-        }
+    if (isMarked) {
         return {
             disabled: '',
-            class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50',
-            text: `Mark ${label}`
+            class: 'bg-red-600 text-white border-red-700 hover:bg-red-700',
+            text: `🚫 ${label} Unavailable`
         };
+    }
+    return {
+        disabled: '',
+        class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50',
+        text: `Mark ${label}`
     };
+};
 
-    const fnBtn = getBtnState(isAssignedFN, fnUnavail, "FN");
-    const anBtn = getBtnState(isAssignedAN, anUnavail, "AN");
+const fnBtn = getBtnState(isAssignedFN, fnUnavail, "FN");
+const anBtn = getBtnState(isAssignedAN, anUnavail, "AN");
 
-    // Disable Whole Day if Assigned to ANY part of the day
-    const anyDuty = isAssignedFN || isAssignedAN;
-    const wholeClass = anyDuty
-        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-        : (bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100');
+// Disable Whole Day if Assigned to ANY part of the day
+const anyDuty = isAssignedFN || isAssignedAN;
+const wholeClass = anyDuty
+    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+    : (bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100');
 
-    const wholeText = anyDuty ? "🚫 Cannot Mark Whole Day (On Duty)" : (bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable');
-    const wholeDisabled = anyDuty ? "disabled" : "";
+const wholeText = anyDuty ? "🚫 Cannot Mark Whole Day (On Duty)" : (bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable');
+const wholeDisabled = anyDuty ? "disabled" : "";
 
-    container.innerHTML += `
+container.innerHTML += `
         <div class="mt-4 pt-4 border-t border-gray-200">
             <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2">
                 <span>🗓️</span> General Unavailability (OD/DL/Leave)
@@ -1363,7 +1370,7 @@ window.openDayModal = function (dateStr, email) {
         </div>
     `;
 
-    window.openModal('day-detail-modal');
+window.openModal('day-detail-modal');
 }
 
 // --- HELPERS & ACTIONS ---
@@ -2403,6 +2410,18 @@ window.openInconvenienceModal = function (key) {
 
 // --- MISSING HELPER FUNCTIONS ---
 
+// 0. Modal Helpers (Restored)
+window.openModal = function (id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('hidden');
+    else console.error("Modal not found:", id);
+}
+
+window.closeModal = function (id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+}
+
 // 1. Get Name from Email (Fixes your console error)
 function getNameFromEmail(email) {
     if (!staffData || staffData.length === 0) return email.split('@')[0];
@@ -2450,7 +2469,13 @@ window.openRoleConfigModal = function () {
     const targetInput = document.getElementById('global-duty-target');
     if (targetInput) {
         targetInput.value = globalDutyTarget;
-        targetInput.disabled = true; // <--- NEW
+        targetInput.disabled = true;
+    }
+
+    const guestInput = document.getElementById('guest-duty-target');
+    if (guestInput) {
+        guestInput.value = guestGlobalTarget;
+        guestInput.disabled = true;
     }
 
     // 4. Render Lists
@@ -2548,9 +2573,13 @@ window.deleteRoleConfig = function (role) {
 
 window.saveRoleConfig = async function () {
     const newGlobal = parseInt(document.getElementById('global-duty-target').value);
-    if (isNaN(newGlobal)) return alert("Invalid Global Target");
+    const newGuest = parseInt(document.getElementById('guest-duty-target').value);
+
+    if (isNaN(newGlobal) || newGlobal < 0) return alert("Invalid Global Target");
+    if (isNaN(newGuest) || newGuest < 0) return alert("Invalid Guest Target");
 
     globalDutyTarget = newGlobal;
+    guestGlobalTarget = newGuest;
 
     // CAPTURE URL
     const newUrl = document.getElementById('google-script-url').value.trim();
@@ -2562,7 +2591,8 @@ window.saveRoleConfig = async function () {
         invigRoles: JSON.stringify(rolesConfig),
         invigDepartments: JSON.stringify(departmentsConfig),
         invigGlobalTarget: globalDutyTarget,
-        invigGoogleScriptUrl: googleScriptUrl // <--- SAVED HERE
+        invigGuestTarget: guestGlobalTarget, // <--- SAVED HERE
+        invigGoogleScriptUrl: googleScriptUrl
     });
 
     window.closeModal('role-config-modal');
@@ -4437,7 +4467,7 @@ function processStaffCSV(csvText) {
                 // Defaults
                 dutiesDone: 0,
                 roleHistory: [],
-                preferredDays: []
+                preferredDays: [1, 2, 3, 4, 5, 6] // Default Full Availability
             });
         }
     }
@@ -4913,6 +4943,7 @@ if (subInput) {
 window.toggleGlobalTargetLock = function () {
     isGlobalTargetLocked = !isGlobalTargetLocked;
     const input = document.getElementById('global-duty-target');
+    const guestInput = document.getElementById('guest-duty-target');
     const btn = document.getElementById('global-target-lock-btn');
 
     if (input) {
@@ -4921,13 +4952,25 @@ window.toggleGlobalTargetLock = function () {
         if (!isGlobalTargetLocked) {
             input.classList.remove('text-gray-600');
             input.classList.add('text-black', 'bg-white');
-            input.focus();
         } else {
             input.classList.add('text-gray-600');
             input.classList.remove('text-black', 'bg-white');
         }
     }
+
+    if (guestInput) {
+        guestInput.disabled = isGlobalTargetLocked;
+        if (!isGlobalTargetLocked) {
+            guestInput.classList.remove('text-gray-600');
+            guestInput.classList.add('text-black', 'bg-white');
+        } else {
+            guestInput.classList.add('text-gray-600');
+            guestInput.classList.remove('text-black', 'bg-white');
+        }
+    }
+
     if (btn) updateLockIcon('global-target-lock-btn', isGlobalTargetLocked);
+    if (!isGlobalTargetLocked && input) input.focus();
 }
 // ==========================================
 // 💾 MASTER BACKUP & RESTORE SYSTEM
@@ -5353,6 +5396,32 @@ window.openManualAllocationModal = function (key) {
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
+
+            // --- DEPT SATURATION CHECK ---
+            // Calculate hypothetical saturation if we add this person
+            const assignedList = slot.assigned || [];
+            const totalAssigned = assignedList.length;
+            const myDeptCount = assignedList.filter(email => {
+                const member = staffData.find(st => st.email === email);
+                return member && member.dept === s.dept;
+            }).length;
+
+            // Exemption: Depts with only 1 person total
+            const totalInDept = staffData.filter(st => st.dept === s.dept).length;
+            const isExempt = (totalInDept === 1);
+
+            if (!isExempt) {
+                // If I am added, count becomes myDeptCount + 1
+                // Total becomes totalAssigned + 1
+                const potentialRatio = (myDeptCount + 1) / (totalAssigned + 1);
+
+                // Warn if saturation > 50%
+                if (potentialRatio > 0.5) {
+                    score -= 500; // soft penalty
+                    badges.push("Dept Saturation");
+                }
+            }
+            // -----------------------------
 
             return { ...s, pending, score, badges };
         })
