@@ -3145,6 +3145,13 @@ window.withdrawExchange = async function (key, email) {
         await syncSlotsToCloud();
     }
 }
+
+// --- EXPOSE DUTY FUNCTIONS TO WINDOW FOR HTML ONCLICK ---
+window.volunteer = volunteer;
+window.acceptExchange = acceptExchange;
+window.postForExchange = postForExchange;
+window.withdrawExchange = withdrawExchange;
+
 // --- DEPARTMENT MANAGEMENT FUNCTIONS ---
 
 function populateDepartmentSelect() {
