@@ -1298,26 +1298,263 @@
                     </h3>
                     <p class="text-xs text-gray-500 ml-10 -mt-1">App Guide & Exam Rules / നിർദ്ദേശങ്ങൾ</p>
                 </div>
-                <p class="text-xs text-gray-500 ml-10 -mt-1" id="hod-dept-name">Department Overview</p>
+                <button onclick="closeModal('help-modal')"
+                    class="bg-gray-100 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
             </div>
-            <button onclick="closeModal('hod-monitor-modal')"
-                class="bg-gray-100 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
 
-        <div id="hod-monitor-list" class="p-4 sm:p-6 overflow-y-auto custom-scroll bg-gray-50/50 space-y-4">
-        </div>
+            <div class="p-4 sm:p-6 overflow-y-auto custom-scroll bg-gray-50/50 space-y-8">
+                <!-- Part A: App Instructions -->
+                <div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Part A: App
+                            Instructions</span>
+                        <span class="h-px flex-1 bg-gray-200"></span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                            <h4 class="text-xs font-bold text-indigo-600 uppercase mb-2 flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span> How to Use
+                            </h4>
+                            <ul class="space-y-2 text-xs text-gray-600 leading-relaxed">
+                                <li><b>1. Calendar:</b> <span class="text-blue-600 font-bold">Blue</span>=Your Duty,
+                                    <span class="text-green-600 font-bold">Green</span>=Vacancy.
+                                </li>
+                                <li><b>2. Volunteer:</b> Click a Green date → "Volunteer".</li>
+                                <li><b>3. Leave:</b> Click a date → "Mark Unavailable". (Cannot mark leave if assigned;
+                                    use Exchange).</li>
+                                <li><b>4. Exchange:</b> Click your Blue slot → "Post for Exchange". You remain
+                                    responsible until accepted.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm font-malayalam">
+                            <h4 class="text-xs font-bold text-indigo-600 uppercase mb-2 flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span> ഉപയോഗക്രമം
+                            </h4>
+                            <ul class="space-y-2 text-xs text-gray-600 leading-relaxed">
+                                <li><b>1. കലണ്ടർ:</b> <span class="text-blue-600 font-bold">നീല</span>=ഡ്യൂട്ടി ഉണ്ട്,
+                                    <span class="text-green-600 font-bold">പച്ച</span>=ഒഴിവുണ്ട്.
+                                </li>
+                                <li><b>2. ഡ്യൂട്ടി എടുക്കാൻ:</b> പച്ച തീയതി ക്ലിക്ക് ചെയ്ത് "Volunteer" ചെയ്യുക.</li>
+                                <li><b>3. അവധി:</b> തീയതി ക്ലിക്ക് ചെയ്ത് "Mark Unavailable" നൽകുക. (ഡ്യൂട്ടി ഉണ്ടെങ്കിൽ
+                                    ലീവ് പറ്റില്ല, പകരം Exchange ചെയ്യണം).</li>
+                                <li><b>4. കൈമാറ്റം:</b> സ്ലോട്ടിൽ ക്ലിക്ക് ചെയ്ത് "Post for Exchange" ചെയ്യുക.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
 
-        <div class="p-4 border-t border-gray-200 bg-white shrink-0 flex justify-end">
-            <button onclick="closeModal('hod-monitor-modal')"
-                class="bg-gray-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-900 shadow-sm transition">Close
-                Monitor</button>
+                <!-- Part B: Official Rules -->
+                <div class="font-malayalam">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Part B: Official Rules /
+                            നിയമങ്ങൾ</span>
+                        <span class="h-px flex-1 bg-gray-200"></span>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
+                        <h3
+                            class="text-base font-bold text-indigo-900 mb-4 flex items-center gap-2 pb-3 border-b border-gray-100">
+                            <span class="text-xl">📜</span> ഇന്‍വിജിലേഷന്‍ ഡ്യൂട്ടി: പൊതു നിര്‍ദ്ദേശങ്ങൾ
+                        </h3>
+
+                        <p
+                            class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-blue-900 text-xs leading-relaxed mb-5">
+                            ഏറ്റവും പുതിയ യുജിസി റെഗുലേഷന്‍ അനുസരിച്ചും വിവിധ കോടതി വിധികള്‍ അനുസരിച്ചും പരീക്ഷാ
+                            ജോലികള്‍ അദ്ധ്യാപകരുടെ ജോലിയുടെ ഭാഗമാണ് (Part of Duty).
+                            പരീക്ഷാ ഡ്യൂട്ടി സംബന്ധിച്ച നിര്‍ദേശം ലഭിച്ചു കഴിഞ്ഞതിന് ശേഷം എന്തെങ്കിലും അസൌകര്യങ്ങള്‍
+                            ഉണ്ടെങ്കില്‍ ഡ്യൂട്ടി സ്വയം മറ്റ് ആരെയെങ്കിലും ഏല്‍പ്പിക്കുകയോ ബദല്‍ സംവിധാനം
+                            ഏര്‍പ്പെടുത്തുകയോ ചെയ്യേണ്ടതും, ആയത് ചീഫ് സൂപ്രണ്ടിനെയോ SAS നെയോ അറിയിക്കേണ്ടതും ആണ്.
+                        </p>
+
+                        <div class="space-y-6 text-sm text-gray-700 leading-relaxed font-malayalam">
+
+                            <!-- 1. PRE-EXAM -->
+                            <div class="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                <h5
+                                    class="font-bold text-gray-900 mb-3 flex items-center gap-2 text-sm border-b border-gray-100 pb-2">
+                                    <span
+                                        class="bg-gray-100 text-gray-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                                    പരീക്ഷ തുടങ്ങുന്നതിന് മുൻപ്
+                                </h5>
+                                <ul
+                                    class="list-disc list-outside ml-4 space-y-2 text-xs sm:text-sm text-gray-600 marker:text-gray-300">
+                                    <li>പരീക്ഷ തുടങ്ങുന്നതിന് <strong>അര മണിക്കൂര്‍ മുന്‍പ്</strong> എങ്കിലും ചീഫ്
+                                        സൂപ്രണ്ടിന്റെ ഒഫീസില്‍ ഹാജരാകേണ്ടതും സാധന സാമഗ്രികള്‍ കൈപ്പറ്റേണ്ടതുമാണ്.</li>
+                                    <li>പ്രത്യേക നിര്‍ദേശങ്ങള്‍ ശ്രദ്ധാപൂര്‍വ്വം കേട്ടു മനസിലാക്കി സംശയ നിവാരണം
+                                        വരുത്തിയതിന് ശേഷം മാത്രം ഓഫീസ് വിടുക.</li>
+                                    <li>ഉത്തരക്കടലാസ് ബുക്ക്‌ലെറ്റുകൾ (Booklets) എണ്ണി തിട്ടപ്പെടുത്തുക.</li>
+                                    <li>RNBB-യില്‍ (Attendance Sheet) ഹാളിലേക്ക് അനുവദിക്കപ്പെട്ടിട്ടുള്ള
+                                        വിദ്യാര്‍ഥികളുടെ റെജിസ്റ്റര്‍ നമ്പര്‍ ക്രമമായി രേഖപ്പെടുത്തുക.</li>
+                                    <li>ചോദ്യ പേപ്പര്‍ ലഭിച്ചാലുടന്‍ എണ്ണി തിട്ടപെടുത്തുക. പ്രിൻ്റിംഗ് തകരാറുകൾ
+                                        ഇല്ലെന്ന് ഉറപ്പ് വരുത്തുക.</li>
+                                    <li>പരീക്ഷ തുടങ്ങുന്നതിന് <strong>10 മിനിറ്റ് മുന്നേ</strong> എങ്കിലും പരീക്ഷാ
+                                        ഹാളില്‍ എത്തേണ്ടതാണ്.</li>
+                                </ul>
+                            </div>
+
+                            <!-- 2. IN HALL -->
+                            <div class="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                <h5
+                                    class="font-bold text-gray-900 mb-3 flex items-center gap-2 text-sm border-b border-gray-100 pb-2">
+                                    <span
+                                        class="bg-gray-100 text-gray-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                                    പരീക്ഷാ ഹാളിലെ നടപടിക്രമങ്ങൾ
+                                </h5>
+                                <ul
+                                    class="list-disc list-outside ml-4 space-y-2 text-xs sm:text-sm text-gray-600 marker:text-gray-300">
+                                    <li>അനുവദിക്കപ്പെട്ട കുട്ടികള്‍ തന്നെയല്ലേ സീറ്റില്‍ ഇരിക്കുന്നത് എന്ന്
+                                        ഉറപ്പുവരുത്തുക.</li>
+                                    <li>പുസ്തകങ്ങള്‍, പേപ്പറുകള്‍, മൊബൈല്‍ ഫോണ്‍ എന്നിവ മാറ്റി വെക്കാന്‍ ആവശ്യപ്പെടുക.
+                                    </li>
+                                    <li>ബുക്ക്‌ലെറ്റിൽ (Booklet) റജിസ്റ്റര്‍ നമ്പര്‍ തെറ്റാതെ രേഖപ്പെടുത്താന്‍ നിര്‍ദേശം
+                                        നല്‍കുക.</li>
+                                    <li>ബെല്ലടിക്കുമ്പോള്‍ ചോദ്യ പേപ്പര്‍ വിതരണം ചെയ്യുക. ഒരേ പേപ്പര്‍ വ്യത്യസ്ഥ
+                                        വര്‍ഷങ്ങള്‍ ഉണ്ടെങ്കില്‍ ശ്രദ്ധിക്കുക.</li>
+                                    <li>ചോദ്യപേപ്പര്‍ കോഡ് ഹാള്‍ ടിക്കറ്റുമായി ഒത്തുനോക്കി ഉറപ്പുവരുത്തുക.
+                                        വ്യത്യാസമുണ്ടെങ്കിൽ പരീക്ഷാ വിഭാഗത്തെ അറിയിക്കുക.</li>
+                                    <li>ചോദ്യപേപ്പറില്‍ പേരും രെജിസ്റ്റര്‍ നമ്പരും എഴുതാന്‍ കുട്ടികളോട് ആവശ്യപ്പെടുക.
+                                        ഇടത് വശത്തുള്ള പേപ്പര്‍ കോഡ് ഉത്തര കടലാസില്‍ രേഖപ്പെടുത്താന്‍ നിര്‍ദ്ദേശിക്കുക.
+                                    </li>
+                                    <li>ഓരോ വിദ്യാര്‍ഥിയുടെയും അരികില്‍ ചെന്നു ഹാള്‍ ടിക്കറ്റ് വെരിഫൈ ചെയ്യുക.
+                                        ബുക്ക്‌ലെറ്റിലെ വിവരങ്ങൾ (Reg No, QP Code, Barcode) ശരിയാണെന്ന് ഉറപ്പാക്കുക.
+                                    </li>
+                                    <li>എല്ലാം ശരിയാണെന്ന് ഉറപ്പാക്കിയ ശേഷം മാത്രം അറ്റെന്‍ഡെന്‍സ് ഷീറ്റിലും ഹാൾ
+                                        ടിക്കറ്റിലും ഒപ്പിടുക.</li>
+                                </ul>
+                            </div>
+
+                            <!-- WARNING BLOCK -->
+                            <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                                <h5 class="text-sm font-bold text-red-800 mb-3 flex items-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                                        </path>
+                                    </svg>
+                                    പ്രത്യേകം ശ്രദ്ധിക്കുക (Absentees Marking)
+                                </h5>
+                                <ul
+                                    class="list-disc list-outside ml-4 space-y-2 text-xs sm:text-sm text-red-800 font-medium">
+                                    <li>പരീക്ഷ തുടങ്ങി <strong>അര മണിക്കൂറിന് ശേഷം</strong> കുട്ടികളെ ഹാളില്‍ കയറാന്‍
+                                        ഒരു കാരണവശാലും അനുവദിക്കരുത്.</li>
+                                    <li>അര മണിക്കൂർ കഴിഞ്ഞതിനു ശേഷം മാത്രം Absent ആയ കുട്ടികളുടെ നമ്പറിന് നേരെ <span
+                                            class="bg-red-100 px-1 rounded text-red-900 font-bold text-[10px] border border-red-200">ABSENT</span>
+                                        എന്ന് <strong>ചുവന്ന മഷിയില്‍</strong> രേഖപ്പെടുത്തുക.</li>
+                                    <li>ആ നമ്പറുകള്‍ ഹാളില്‍ ഉറക്കെ വായിച്ചു അവര്‍ ഹാളില്‍ ഇല്ല എന്നു രണ്ടു വട്ടം ഉറപ്പ്
+                                        വരുത്തുക.</li>
+                                    <li class="bg-white p-3 rounded border border-red-300 mt-1 text-red-700">
+                                        <strong>മുന്നറിയിപ്പ്:</strong> അബ്സെന്റീസ് മാർക്ക് ചെയ്യുന്നതിൽ വരുന്ന
+                                        തെറ്റുകള്‍ക്ക് 01/02/2022 മുതല്‍ യൂണിവേഴ്സിറ്റി <strong>5000 രൂപ ഫൈന്‍</strong>
+                                        ഈടാക്കും. ഇത് അതാത് ഇന്‍വിലേറ്റര്‍മാരുടെ കയ്യില്‍ നിന്നും ഈടാക്കും
+                                        എന്നുള്ളതിനാല്‍ അതീവ ജാഗ്രത പാലിക്കുക.
+                                    </li>
+                                    <li>Absent ആയ കുട്ടികളുടെ QP Code തനത് കോളത്തിൽ ഇൻവിജിലേറ്റർ രേഖപ്പെടുത്തേണ്ടതാണ്.
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <!-- 3. DURING & AFTER -->
+                            <div class="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                <h5
+                                    class="font-bold text-gray-900 mb-3 flex items-center gap-2 text-sm border-b border-gray-100 pb-2">
+                                    <span
+                                        class="bg-gray-100 text-gray-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                                    പരീക്ഷാ സമയത്തും അവസാനവും
+                                </h5>
+                                <ul
+                                    class="list-disc list-outside ml-4 space-y-2 text-xs sm:text-sm text-gray-600 marker:text-gray-300">
+                                    <li>പരീക്ഷാ ഹാളില്‍ പൂര്‍ണ നിശബ്ദത പാലിക്കുക. ഫോണ്‍ <strong>Silent Mode</strong>-ല്‍
+                                        സൂക്ഷിക്കുക. അടിയന്തിര ആവശ്യങ്ങള്‍ക്ക് മാത്രം ഉപയോഗിക്കുക.</li>
+                                    <li>ക്രമക്കേടുകള്‍ കണ്ടെത്തുന്ന പക്ഷം തെളിവുകള്‍ സഹിതം ചീഫ് സൂപ്രണ്ടിന്
+                                        റിപ്പോര്‍ട്ട് ചെയ്യുക.</li>
+                                    <li>പരീക്ഷ തുടങ്ങി ഒരു മണിക്കൂറിന് ശേഷം മാത്രമേ കുട്ടികളെ ഹാള്‍ വിടാന്‍
+                                        അനുവദിക്കാവൂ.</li>
+                                    <li>പരീക്ഷ അവസാനിക്കുന്നതിന് അര മണിക്കൂര്‍ മുന്നേ പോകുന്നവരില്‍ നിന്നും ചോദ്യ
+                                        പേപ്പര്‍ തിരികെ വാങ്ങുക.</li>
+                                    <li>ഭിന്ന ശേഷിക്കാരായ കുട്ടികള്‍ക്ക് മണിക്കൂറിന് 20 മിനിറ്റ് എന്ന തോതില്‍ അധിക സമയം
+                                        അനുവദിക്കുക.</li>
+                                    <li>സമയം കഴിഞ്ഞയുടന്‍ പേപ്പറുകള്‍ നേരിട്ട് വാങ്ങി ക്രമത്തിലാക്കുക. പരീക്ഷാ പേപ്പര്‍
+                                        ഒരു കാരണവശാലും ടേബിളില്‍ വെച്ചു പോകാന്‍ അനുവദിക്കരുത്.</li>
+                                </ul>
+                            </div>
+
+                            <!-- SUBMISSION -->
+                            <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                                <p class="font-bold text-green-900 text-sm mb-2">സബ്മിഷൻ (തിരികെ ഏൽപ്പിക്കുമ്പോൾ)</p>
+                                <div class="text-green-800 text-xs sm:text-sm space-y-2">
+                                    <p>ബുക്ക്‌ലെറ്റുകളുടെ അക്കൌണ്ട് ക്ലോസ് ചെയ്തു, Total രേഖപ്പെടുത്തി, പേരെഴുതി
+                                        ഒപ്പിട്ട് 5 മിനിറ്റിനുള്ളിൽ ചീഫ് സൂപ്രണ്ടിനെ ഏല്‍പ്പിക്കുക. ഉത്തരക്കടലാസുകൾ താഴെ
+                                        പറയുന്ന ക്രമത്തിൽ അടുക്കി വെക്കുക:</p>
+                                    <ul class="list-disc list-outside ml-4 space-y-1 font-semibold">
+                                        <li>
+                                            <span class="underline decoration-green-300">Barcode ഉള്ളത്:</span> QP Code
+                                            അടിസ്ഥാനത്തിൽ തരംതിരിക്കുക.
+                                        </li>
+                                        <li>
+                                            <span class="underline decoration-green-300">Barcode ഇല്ലാത്തത്:</span>
+                                            രജിസ്റ്റർ നമ്പർ ക്രമത്തിൽ അടുക്കുക.
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-200 bg-white shrink-0">
+                <div class="flex justify-end w-full">
+                    <button onclick="closeModal('help-modal')"
+                        class="bg-gray-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-900 shadow-sm transition transform active:scale-95 w-full sm:w-auto">
+                        Close Guide
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
+
+
+    <!-- HoD Monitor Modal -->
+    <div id="hod-monitor-modal"
+        class="hidden fixed inset-0 bg-gray-900/60 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 backdrop-blur-sm transition-opacity">
+        <div
+            class="bg-white w-full max-w-4xl h-[95vh] sm:h-auto sm:max-h-[90vh] rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col overflow-hidden animate-slide-up sm:animate-none">
+
+            <div class="flex justify-between items-center p-4 border-b border-gray-100 bg-white shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span
+                            class="bg-purple-100 text-purple-600 w-8 h-8 rounded-full flex items-center justify-center text-lg">👁️</span>
+                        Department Monitor
+                    </h3>
+                    <p class="text-xs text-gray-500 ml-10 -mt-1" id="hod-dept-name">Department Overview</p>
+                </div>
+                <button onclick="closeModal('hod-monitor-modal')"
+                    class="bg-gray-100 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div id="hod-monitor-list" class="p-4 sm:p-6 overflow-y-auto custom-scroll bg-gray-50/50 space-y-4">
+            </div>
+
+            <div class="p-4 border-t border-gray-200 bg-white shrink-0 flex justify-end">
+                <button onclick="closeModal('hod-monitor-modal')"
+                    class="bg-gray-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-900 shadow-sm transition">Close
+                    Monitor</button>
+            </div>
+        </div>
     </div>
+
 
 
 
