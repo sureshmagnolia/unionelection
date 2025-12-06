@@ -1514,6 +1514,10 @@ async function saveManualSlot() {
     renderSlotsGridAdmin();
 }
 
+// Expose to window for HTML onclick handlers
+window.openAddSlotModal = openAddSlotModal;
+window.saveManualSlot = saveManualSlot;
+
 // --- NEW: Delete Slot Function ---
 window.deleteSlot = async function (key) {
     // 1. Security Check
