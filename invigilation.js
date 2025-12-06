@@ -677,44 +677,66 @@ function renderSlotsGridAdmin() {
 
         group.items.forEach(({ key, slot }) => {
             const filled = slot.assigned.length;
-            let statusColor = slot.isLocked ? "border-red-500 bg-red-50" : (filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50");
-            let statusIcon = slot.isLocked ? "🔒" : (filled >= slot.required ? "✅" : "🔓");
+
+            // 3D PLASTICKY THEME LOGIC
+            // We use gradients and stronger borders to create depth
+            let themeClasses = "";
+            let statusIcon = "";
+
+            if (slot.isLocked) {
+                themeClasses = "border-red-500 bg-gradient-to-br from-white via-red-50 to-red-100 shadow-red-100";
+                statusIcon = "🔒";
+            } else if (filled >= slot.required) {
+                themeClasses = "border-green-500 bg-gradient-to-br from-white via-green-50 to-green-100 shadow-green-100";
+                statusIcon = "✅";
+            } else {
+                themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100 shadow-orange-100";
+                statusIcon = "🔓";
+            }
 
             // Unavailability Button
             let unavButton = "";
             if (slot.unavailable && slot.unavailable.length > 0) {
-                unavButton = `<button onclick="openInconvenienceModal('${key}')" class="mt-1.5 w-full flex items-center justify-center gap-1 bg-white text-red-700 border border-red-200 px-2 py-1 rounded-[4px] text-[10px] font-bold hover:bg-red-50 transition shadow-sm"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> ${slot.unavailable.length} Issue(s)</button>`;
+                unavButton = `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-1 bg-white/80 backdrop-blur text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 transition shadow-sm hover:shadow active:scale-95"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> ${slot.unavailable.length} Issue(s)</button>`;
             }
 
             const hasLog = slot.allocationLog ? "" : "opacity-50 cursor-not-allowed";
 
             ui.adminSlotsGrid.innerHTML += `
-                <div class="glass-card border-l-4 ${statusColor} bg-white/60 p-3 rounded shadow-sm slot-card flex flex-col justify-between transition-all mx-1 mb-2">
-                    <div>
-                        <div class="flex justify-between items-start mb-1.5">
-                            <h4 class="font-bold text-gray-800 text-xs w-2/3 break-words leading-tight">${statusIcon} ${key}</h4>
-                            <div class="flex items-center bg-white border border-gray-300 rounded text-[10px] shadow-sm shrink-0">
-                                <button onclick="changeSlotReq('${key}', -1)" class="px-1.5 py-0.5 hover:bg-gray-100 border-r text-gray-600 font-bold">-</button>
-                                <span class="px-1.5 font-bold text-gray-800" title="Filled / Required">${filled}/${slot.required}</span>
-                                <button onclick="changeSlotReq('${key}', 1)" class="px-1.5 py-0.5 hover:bg-gray-100 border-l text-gray-600 font-bold">+</button>
+                <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group slot-card">
+                    <!-- Glossy Highlight Effect -->
+                    <div class="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/60 to-transparent opacity-50 rounded-t-xl pointer-events-none"></div>
+
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-black text-gray-800 text-xs w-2/3 break-words leading-tight flex items-center gap-1">
+                                <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
+                                <span class="drop-shadow-sm">${key}</span>
+                            </h4>
+                            <div class="flex items-center bg-white/90 backdrop-blur border border-gray-200 rounded-lg text-[10px] shadow-sm shrink-0 overflow-hidden">
+                                <button onclick="changeSlotReq('${key}', -1)" class="px-2 py-1 hover:bg-gray-100 border-r border-gray-200 text-gray-600 font-bold active:bg-gray-200 transition">-</button>
+                                <span class="px-2 font-bold text-gray-800" title="Filled / Required">${filled}/${slot.required}</span>
+                                <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l border-gray-200 text-gray-600 font-bold active:bg-gray-200 transition">+</button>
                             </div>
                         </div>
-                        <div class="text-[10px] text-gray-600 mb-1 leading-tight">
-                            <strong>Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "<span class='text-gray-400'>None</span>"}
+                        
+                        <div class="text-[10px] text-gray-600 mb-2 leading-tight bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm">
+                            <strong class="text-gray-800">Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "<span class='text-gray-400 italic'>None Assigned</span>"}
                         </div>
+                        
                         ${unavButton}
                     </div>
                     
-                    <div class="grid grid-cols-4 gap-1 mt-2">
-                         <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded py-1 hover:bg-green-100 font-bold transition text-center" title="Reminder">🔔</button>
-                         <button onclick="printSessionReport('${key}')" class="col-span-1 text-[10px] bg-gray-100 text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-200 font-bold transition text-center" title="Print">🖨️</button>
-                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-100 font-bold transition text-center" title="Edit">Edit</button>
-                         <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded py-1 hover:bg-orange-100 font-bold transition text-center ${hasLog}" title="Log">📜</button>
+                    <div class="grid grid-cols-4 gap-1.5 mt-3 relative z-10">
+                         <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-[10px] bg-white text-green-700 border border-green-200 rounded-lg py-1.5 hover:bg-green-50 font-bold transition shadow-sm hover:shadow" title="Reminder">🔔</button>
+                         <button onclick="printSessionReport('${key}')" class="col-span-1 text-[10px] bg-white text-gray-700 border border-gray-300 rounded-lg py-1.5 hover:bg-gray-50 font-bold transition shadow-sm hover:shadow" title="Print">🖨️</button>
+                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-white text-indigo-700 border border-indigo-200 rounded-lg py-1.5 hover:bg-indigo-50 font-bold transition shadow-sm hover:shadow" title="Edit">Edit</button>
+                         <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-white text-orange-700 border border-orange-200 rounded-lg py-1.5 hover:bg-orange-50 font-bold transition shadow-sm hover:shadow ${hasLog}" title="Log">📜</button>
                     </div>
-                    <div class="flex gap-1 mt-1.5">
-                        <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-300 rounded py-1 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
-                        <button onclick="openRescheduleModal('${key}')" class="px-2 text-[10px] border border-orange-200 rounded py-1 hover:bg-orange-50 text-orange-600 font-bold transition shadow-sm bg-white" title="Reschedule">📅</button>
-                        <button onclick="deleteSlot('${key}')" class="px-2 text-[10px] border border-red-200 rounded py-1 hover:bg-red-50 text-red-600 font-bold transition shadow-sm bg-white" title="Delete">🗑️</button>
+                    <div class="flex gap-1.5 mt-2 relative z-10">
+                        <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold transition shadow-sm bg-white hover:shadow active:scale-95">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
+                        <button onclick="openRescheduleModal('${key}')" class="px-2.5 text-[10px] border border-orange-200 rounded-lg py-1.5 hover:bg-orange-50 text-orange-600 font-bold transition shadow-sm bg-white hover:shadow active:scale-95" title="Reschedule">📅</button>
+                        <button onclick="deleteSlot('${key}')" class="px-2.5 text-[10px] border border-red-200 rounded-lg py-1.5 hover:bg-red-50 text-red-600 font-bold transition shadow-sm bg-white hover:shadow active:scale-95" title="Delete">🗑️</button>
                     </div>                
                 </div>`;
         });
