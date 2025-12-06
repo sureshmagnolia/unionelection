@@ -1057,7 +1057,7 @@ function renderStaffCalendar(myEmail) {
 
         // Base Cell Style - "Glassy Plasticky"
         let cellClass = "relative bg-white/80 hover:bg-white border border-white/60 hover:border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 min-h-[6rem] md:min-h-[8rem] rounded-xl m-0.5 overflow-hidden group flex flex-col shadow-sm backdrop-blur-md";
-        let dateClass = "absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-inner";
+        let dateClass = "absolute top-2 left-1/2 -translate-x-1/2 w-7 h-7 flex items-center justify-center rounded-full bg-white/90 text-xs font-bold text-gray-800 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-md border border-gray-200 group-hover:border-indigo-400 z-20";
 
         let contentHtml = "";
 
