@@ -1048,7 +1048,7 @@ function renderStaffCalendar(myEmail) {
     let html = "";
     // Empty cells for previous month
     for (let i = 0; i < firstDayIndex; i++) {
-        html += `<div class="bg-gray-50/30 border border-gray-100/50 min-h-[6rem] md:min-h-[8rem] rounded-xl m-0.5 backdrop-blur-sm"></div>`;
+        html += `<div class="bg-gray-50/30 border border-gray-100/50 min-h-[4.5rem] md:min-h-[8rem] rounded-md md:rounded-xl m-0.5 backdrop-blur-sm"></div>`;
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
@@ -1060,18 +1060,20 @@ function renderStaffCalendar(myEmail) {
         const isToday = (day === today.getDate() && month === today.getMonth() && year === today.getFullYear());
 
         // Base Cell Style - "Glassy Plasticky"
-        let cellClass = "relative bg-white/80 hover:bg-white border border-white/60 hover:border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 min-h-[6rem] md:min-h-[8rem] rounded-xl m-0.5 overflow-hidden group flex flex-col shadow-sm backdrop-blur-md";
+        // UPDATED: Smaller min-height and border radius on mobile
+        let cellClass = "relative bg-white/80 hover:bg-white border border-white/60 hover:border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 min-h-[4.5rem] md:min-h-[8rem] rounded-md md:rounded-xl m-px md:m-0.5 overflow-hidden group flex flex-col shadow-sm backdrop-blur-md";
 
         // Date Circle - Highlight today with dark red
         let dateClass = isToday
-            ? "absolute top-2 left-1/2 -translate-x-1/2 w-7 h-7 flex items-center justify-center rounded-full bg-red-700 text-xs font-bold text-white transition-colors duration-300 shadow-lg border border-red-800 z-20"
-            : "absolute top-2 left-1/2 -translate-x-1/2 w-7 h-7 flex items-center justify-center rounded-full bg-white/90 text-xs font-bold text-gray-800 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-md border border-gray-200 group-hover:border-indigo-400 z-20";
+            ? "absolute top-1 md:top-2 left-1/2 -translate-x-1/2 w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-red-700 text-[10px] md:text-xs font-bold text-white transition-colors duration-300 shadow-lg border border-red-800 z-20"
+            : "absolute top-1 md:top-2 left-1/2 -translate-x-1/2 w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-white/90 text-[10px] md:text-xs font-bold text-gray-800 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-md border border-gray-200 group-hover:border-indigo-400 z-20";
 
         let contentHtml = "";
 
         // --- RENDER SLOTS ---
         if (slots.length > 0) {
-            contentHtml += `<div class="flex flex-col gap-1.5 p-2 mt-6">`;
+            // UPDATED: Tighter margins and gaps for mobile
+            contentHtml += `<div class="flex flex-col gap-0.5 md:gap-1.5 p-0.5 md:p-2 mt-7 md:mt-8 w-full">`;
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
 
             slots.forEach(slot => {
@@ -1129,17 +1131,18 @@ function renderStaffCalendar(myEmail) {
                     statusText = "Full";
                 }
 
+                // UPDATED: Compact Card Layout for Mobile
                 contentHtml += `
-                    <div class="relative overflow-hidden rounded-lg border ${badgeClass} p-1 md:p-1.5 shadow-sm transition-transform hover:scale-105 ${glowClass} flex flex-col md:flex-row items-start md:items-center justify-between gap-0.5 md:gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
-                        <!-- Glossy Shine -->
+                    <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} p-0.5 md:p-1.5 shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-center md:justify-between gap-0.5 md:gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
                         <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none"></div>
                         
-                        <div class="flex items-center gap-1 md:gap-1.5 z-10">
+                        <div class="flex items-center gap-0.5 z-10">
                             <span class="text-[8px] md:text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
                         </div>
+                        
                         <div class="flex items-center gap-0.5 md:gap-1 z-10">
-                            <span class="text-[7px] md:text-[9px] font-bold opacity-90 whitespace-normal break-words leading-tight">${statusText}</span>
-                            <span class="text-[9px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
+                            <span class="hidden md:inline text-[9px] font-bold opacity-90 whitespace-normal break-words leading-tight">${statusText}</span>
+                            <span class="text-[8px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
                         </div>
                     </div>`;
             });
@@ -1149,15 +1152,18 @@ function renderStaffCalendar(myEmail) {
             const adv = advanceUnavailability[dateStr];
             if (adv) {
                 let hasUnavail = false;
-                let unavailHtml = `<div class="flex flex-col gap-1 p-2 mt-6">`;
+                // UPDATED: Tighter margins
+                let unavailHtml = `<div class="flex flex-col gap-0.5 p-0.5 md:p-2 mt-7 md:mt-8 w-full">`;
 
-                if (adv.FN && adv.FN.some(u => u.email === myEmail)) {
+                if (adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === email : u.email === email))) {
                     hasUnavail = true;
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded-lg p-1 text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition">FN ⛔ Unavail</div>`;
+                    // UPDATED: Simplified Mobile Label
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ⛔</span><span class="hidden md:inline">FN ⛔ Unavail</span></div>`;
                 }
-                if (adv.AN && adv.AN.some(u => u.email === myEmail)) {
+                if (adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === email : u.email === email))) {
                     hasUnavail = true;
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded-lg p-1 text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition">AN ⛔ Unavail</div>`;
+                    // UPDATED: Simplified Mobile Label
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">AN ⛔</span><span class="hidden md:inline">AN ⛔ Unavail</span></div>`;
                 }
                 unavailHtml += `</div>`;
 
