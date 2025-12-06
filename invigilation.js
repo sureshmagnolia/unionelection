@@ -1059,11 +1059,10 @@ function renderStaffCalendar(myEmail) {
         const today = new Date();
         const isToday = (day === today.getDate() && month === today.getMonth() && year === today.getFullYear());
 
-        // Base Cell Style - "Glassy Plasticky"
-        // UPDATED: Smaller min-height and border radius on mobile
+        // Base Cell Style
         let cellClass = "relative bg-white/80 hover:bg-white border border-white/60 hover:border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 min-h-[4.5rem] md:min-h-[8rem] rounded-md md:rounded-xl m-px md:m-0.5 overflow-hidden group flex flex-col shadow-sm backdrop-blur-md";
 
-        // Date Circle - Highlight today with dark red
+        // Date Circle
         let dateClass = isToday
             ? "absolute top-1 md:top-2 left-1/2 -translate-x-1/2 w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-red-700 text-[10px] md:text-xs font-bold text-white transition-colors duration-300 shadow-lg border border-red-800 z-20"
             : "absolute top-1 md:top-2 left-1/2 -translate-x-1/2 w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-white/90 text-[10px] md:text-xs font-bold text-gray-800 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-md border border-gray-200 group-hover:border-indigo-400 z-20";
@@ -1072,7 +1071,6 @@ function renderStaffCalendar(myEmail) {
 
         // --- RENDER SLOTS ---
         if (slots.length > 0) {
-            // UPDATED: Tighter margins and gaps for mobile
             contentHtml += `<div class="flex flex-col gap-0.5 md:gap-1.5 p-0.5 md:p-2 mt-7 md:mt-8 w-full">`;
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
 
@@ -1087,7 +1085,7 @@ function renderStaffCalendar(myEmail) {
                 const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
 
-                // "Plasticky" Badge Styles
+                // Badge Styles
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
                 let statusText = `${Math.max(0, needed - filled)} Left`;
@@ -1131,15 +1129,13 @@ function renderStaffCalendar(myEmail) {
                     statusText = "Full";
                 }
 
-                // UPDATED: Compact Card Layout for Mobile
+                // Compact Card Layout
                 contentHtml += `
                     <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} p-0.5 md:p-1.5 shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-center md:justify-between gap-0.5 md:gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
                         <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none"></div>
-                        
                         <div class="flex items-center gap-0.5 z-10">
                             <span class="text-[8px] md:text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
                         </div>
-                        
                         <div class="flex items-center gap-0.5 md:gap-1 z-10">
                             <span class="hidden md:inline text-[9px] font-bold opacity-90 whitespace-normal break-words leading-tight">${statusText}</span>
                             <span class="text-[8px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
@@ -1152,17 +1148,15 @@ function renderStaffCalendar(myEmail) {
             const adv = advanceUnavailability[dateStr];
             if (adv) {
                 let hasUnavail = false;
-                // UPDATED: Tighter margins
                 let unavailHtml = `<div class="flex flex-col gap-0.5 p-0.5 md:p-2 mt-7 md:mt-8 w-full">`;
 
-                if (adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === email : u.email === email))) {
+                // *** FIX: Changed 'email' to 'myEmail' below ***
+                if (adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === myEmail : u.email === myEmail))) {
                     hasUnavail = true;
-                    // UPDATED: Simplified Mobile Label
                     unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ⛔</span><span class="hidden md:inline">FN ⛔ Unavail</span></div>`;
                 }
-                if (adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === email : u.email === email))) {
+                if (adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === myEmail : u.email === myEmail))) {
                     hasUnavail = true;
-                    // UPDATED: Simplified Mobile Label
                     unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">AN ⛔</span><span class="hidden md:inline">AN ⛔ Unavail</span></div>`;
                 }
                 unavailHtml += `</div>`;
@@ -1171,7 +1165,7 @@ function renderStaffCalendar(myEmail) {
             }
         }
 
-        // Add 'Empty' Click Handler for blank days to allow adding unavailability
+        // Add 'Empty' Click Handler
         let clickAttr = `onclick="openDayDetail('${dateStr}', '${myEmail}')"`;
 
         html += `
