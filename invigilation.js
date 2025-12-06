@@ -671,9 +671,98 @@ function renderSlotsGridAdmin() {
                     </div>
                 </div>
             </div>`;
-        // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
-        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
+
+        // Render Slots for this Week
+        group.slots.forEach((slot, index) => {
+            const slotDate = new Date(slot.dateKey);
+            const dateNum = slotDate.getDate();
+            const dayName = slotDate.toLocaleDateString('en-US', { weekday: 'short' });
+
+            // Status Logic
+            const assignedCount = slot.invigilators ? slot.invigilators.length : 0;
+            const requiredCount = slot.required || 2;
+            let statusColor = "bg-white border-gray-200";
+            let statusBadge = `<span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] font-bold border border-gray-200">Processing...</span>`;
+
+            if (assignedCount >= requiredCount) {
+                statusColor = "bg-green-50 border-green-200 shadow-sm"; // Full
+                statusBadge = `<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold border border-green-200 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> FILLED
+                </span>`;
+            } else if (assignedCount > 0) {
+                statusColor = "bg-yellow-50 border-yellow-200 shadow-sm"; // Partial
+                statusBadge = `<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-[10px] font-bold border border-yellow-200 flex items-center gap-1">
+                     <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></span> PARTIAL
+                </span>`;
+            } else {
+                statusColor = "bg-white border-red-200 shadow-sm hover:border-red-300"; // Empty
+                statusBadge = `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> EMPTY
+                </span>`;
+            }
+
+
+            // Generate Card HTML
+            ui.adminSlotsGrid.innerHTML += `
+            <div class="relative group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${statusColor} rounded-xl overflow-hidden flex flex-col">
+                
+                <!-- Status Stripe -->
+                <div class="absolute top-0 left-0 w-1.5 h-full ${assignedCount >= requiredCount ? 'bg-green-500' : (assignedCount > 0 ? 'bg-yellow-400' : 'bg-red-400')}"></div>
+
+                <div class="p-4 flex gap-4 h-full">
+                    
+                    <!-- 3D Date Box -->
+                    <div class="shrink-0 flex flex-col items-center justify-center w-16 h-16 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl shadow-md transform rotate-2 group-hover:rotate-0 transition-transform duration-300">
+                         <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">${dayName}</span>
+                         <span class="text-2xl font-black text-gray-800 leading-none drop-shadow-sm mt-0.5">${dateNum}</span>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0 flex flex-col">
+                        <div class="flex justify-between items-start mb-2">
+                             <div>
+                                <h4 class="text-sm font-bold text-gray-800 truncate">${slot.time.replace(/\./g, ':')}</h4>
+                                <p class="text-[10px] text-gray-500 truncate mt-0.5">${slot.sessionName || 'Exam Session'}</p>
+                            </div>
+                            ${statusBadge}
+                        </div>
+
+                        <!-- Progress Bar (The "Tube") -->
+                        <div class="w-full bg-gray-200 rounded-full h-2 mb-3 overflow-hidden shadow-inner ring-1 ring-black/5">
+                             <div class="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                                  style="width: ${(assignedCount / requiredCount) * 100}%"></div>
+                        </div>
+
+                        <!-- Assigned Avatars / Count -->
+                        <div class="mt-auto flex justify-between items-center">
+                            <div class="flex -space-x-2 overflow-hidden py-1">
+                                ${generateAvatarStack(slot.invigilators)}
+                            </div>
+                            <span class="text-[10px] font-bold text-gray-400">
+                                ${assignedCount}/${requiredCount} <span class="font-normal text-gray-300">Staff</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Footer -->
+                <div class="bg-gray-50/50 border-t border-gray-100 p-2 flex gap-2 justify-end backdrop-blur-sm">
+                    <button onclick="deleteSlot('${slot.id}')" 
+                        class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="Delete Slot">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                    <button onclick="openAssignModal('${slot.id}')" 
+                        class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg shadow-sm shadow-indigo-200 transition flex items-center gap-1 group/btn">
+                        <span>Manage</span>
+                        <svg class="w-3 h-3 group-hover/btn:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+            </div>`;
+        });
     });
+
+    // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
+    ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
 // Updated: Render Staff List with Clickable Done Count
 function renderStaffTable() {
