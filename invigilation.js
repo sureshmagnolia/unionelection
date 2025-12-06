@@ -503,6 +503,14 @@ function parseDate(key) {
     } catch (e) { return new Date(0); }
 }
 
+// Parse date string in DD.MM.YYYY format (without time)
+function parseDate2(dateStr) {
+    try {
+        const [d, m, y] = dateStr.split('.');
+        return new Date(y, m - 1, d);
+    } catch (e) { return new Date(0); }
+}
+
 function getWeekOfMonth(date) {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
     const dayOfWeek = firstDay.getDay(); // 0 (Sun) to 6 (Sat)
@@ -1644,7 +1652,9 @@ window.toggleAdvance = async function (dateStr, email, session) {
 
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
+        document.getElementById('unav-todate').value = "";
         document.getElementById('unav-details-container').classList.add('hidden');
+        document.getElementById('unav-todate-container').classList.add('hidden');
 
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
@@ -1693,7 +1703,9 @@ window.toggleWholeDay = async function (dateStr, email) {
 
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
+        document.getElementById('unav-todate').value = "";
         document.getElementById('unav-details-container').classList.add('hidden');
+        document.getElementById('unav-todate-container').classList.add('hidden');
 
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
@@ -1756,14 +1768,24 @@ window.cancelDuty = async function (key, email, isLocked) {
 }
 function toggleUnavDetails() {
     const reasonEl = document.getElementById('unav-reason');
-    const container = document.getElementById('unav-details-container');
-    if (!reasonEl || !container) return;
+    const detailsContainer = document.getElementById('unav-details-container');
+    const toDateContainer = document.getElementById('unav-todate-container');
+    if (!reasonEl || !detailsContainer || !toDateContainer) return;
 
     const reason = reasonEl.value;
+
+    // Show details field for OD, DL, Medical
     if (['OD', 'DL', 'Medical'].includes(reason)) {
-        container.classList.remove('hidden');
+        detailsContainer.classList.remove('hidden');
     } else {
-        container.classList.add('hidden');
+        detailsContainer.classList.add('hidden');
+    }
+
+    // Show To Date field for Commuted Leave
+    if (reason === 'Commuted Leave') {
+        toDateContainer.classList.remove('hidden');
+    } else {
+        toDateContainer.classList.add('hidden');
     }
 }
 window.setAvailability = async function (key, email, isAvailable) {
@@ -1784,7 +1806,9 @@ window.setAvailability = async function (key, email, isAvailable) {
         document.getElementById('unav-email').value = email;
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
+        document.getElementById('unav-todate').value = "";
         document.getElementById('unav-details-container').classList.add('hidden');
+        document.getElementById('unav-todate-container').classList.add('hidden');
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
     }
@@ -1794,6 +1818,7 @@ window.confirmUnavailable = async function () {
     const email = document.getElementById('unav-email').value;
     const reason = document.getElementById('unav-reason').value;
     const details = document.getElementById('unav-details').value.trim();
+    const toDateValue = document.getElementById('unav-todate').value; // Get To Date
 
     if (!reason) return alert("Select a reason.");
     if (['OD', 'DL', 'Medical'].includes(reason) && !details) return alert("Details required.");
@@ -1804,27 +1829,82 @@ window.confirmUnavailable = async function () {
         // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
         const [_, dateStr, session] = key.split('|');
 
-        // Ensure structure
-        if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-        if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
-        if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
+        // Check if this is Commuted Leave with a To Date
+        const isDateRange = (reason === 'Commuted Leave' && toDateValue);
 
-        if (session === 'WHOLE') {
-            // Remove existing to avoid duplicates
-            advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
-            advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
+        if (isDateRange) {
+            // MARK DATE RANGE
+            const fromDate = parseDate2(dateStr); // Use helper to parse DD.MM.YYYY
+            const toDate = new Date(toDateValue); // To Date is in YYYY-MM-DD format from input
 
-            advanceUnavailability[dateStr].FN.push(entry);
-            advanceUnavailability[dateStr].AN.push(entry);
+            if (toDate < fromDate) {
+                return alert("'To Date' must be after or equal to the selected date.");
+            }
 
-            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
+            // Iterate through each date in the range
+            let currentDate = new Date(fromDate);
+            let markedDates = [];
+
+            while (currentDate <= toDate) {
+                // Skip Sundays (day 0)
+                if (currentDate.getDay() !== 0) {
+                    const dd = String(currentDate.getDate()).padStart(2, '0');
+                    const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
+                    const yyyy = currentDate.getFullYear();
+                    const iterDateStr = `${dd}.${mm}.${yyyy}`;
+
+                    // Ensure structure
+                    if (!advanceUnavailability[iterDateStr]) advanceUnavailability[iterDateStr] = { FN: [], AN: [] };
+                    if (!advanceUnavailability[iterDateStr].FN) advanceUnavailability[iterDateStr].FN = [];
+                    if (!advanceUnavailability[iterDateStr].AN) advanceUnavailability[iterDateStr].AN = [];
+
+                    if (session === 'WHOLE') {
+                        // Remove existing to avoid duplicates
+                        advanceUnavailability[iterDateStr].FN = advanceUnavailability[iterDateStr].FN.filter(u => u.email !== email);
+                        advanceUnavailability[iterDateStr].AN = advanceUnavailability[iterDateStr].AN.filter(u => u.email !== email);
+
+                        advanceUnavailability[iterDateStr].FN.push({ ...entry });
+                        advanceUnavailability[iterDateStr].AN.push({ ...entry });
+                    } else {
+                        // Single Session
+                        if (!advanceUnavailability[iterDateStr][session]) advanceUnavailability[iterDateStr][session] = [];
+                        advanceUnavailability[iterDateStr][session] = advanceUnavailability[iterDateStr][session].filter(u => u.email !== email);
+                        advanceUnavailability[iterDateStr][session].push({ ...entry });
+                    }
+
+                    markedDates.push(iterDateStr);
+                }
+
+                // Move to next day
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            logActivity("Commuted Leave Range", `Marked ${getNameFromEmail(email)} unavailable from ${dateStr} to ${toDateValue} (${markedDates.length} days). Reason: ${reason}`);
+
         } else {
-            // Single Session
-            if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
-            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
-            advanceUnavailability[dateStr][session].push(entry);
+            // SINGLE DATE (Original logic)
+            // Ensure structure
+            if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
+            if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
+            if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
 
-            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
+            if (session === 'WHOLE') {
+                // Remove existing to avoid duplicates
+                advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
+                advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
+
+                advanceUnavailability[dateStr].FN.push(entry);
+                advanceUnavailability[dateStr].AN.push(entry);
+
+                logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
+            } else {
+                // Single Session
+                if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+                advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
+                advanceUnavailability[dateStr][session].push(entry);
+
+                logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
+            }
         }
 
         await saveAdvanceUnavailability();
