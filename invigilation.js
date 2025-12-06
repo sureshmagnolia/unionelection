@@ -6686,19 +6686,33 @@ window.filterStaffTable = function () {
     renderStaffTable();
 }
 window.switchAdminTab = function (tabName) {
-    // Hide All
-    document.getElementById('tab-content-staff').classList.add('hidden');
-    document.getElementById('tab-content-slots').classList.add('hidden');
-    document.getElementById('tab-content-attendance').classList.add('hidden'); // <--- NEW
+    // 1. Hide All Content
+    ['staff', 'slots', 'attendance'].forEach(t => {
+        document.getElementById(`tab-content-${t}`).classList.add('hidden');
+    });
 
-    // Reset Buttons
-    document.getElementById('tab-btn-staff').classList.replace('border-indigo-600', 'border-transparent');
-    document.getElementById('tab-btn-slots').classList.replace('border-indigo-600', 'border-transparent');
-    document.getElementById('tab-btn-attendance').classList.replace('border-indigo-600', 'border-transparent'); // <--- NEW
+    // 2. Manage Button Styles
+    const tabs = ['staff', 'slots', 'attendance'];
+    const activeClasses = ['bg-white', 'text-indigo-600', 'shadow'];
+    const inactiveClasses = ['text-gray-500', 'hover:bg-gray-200'];
 
-    // Show Target
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        if (t === tabName) {
+            // activate
+            btn.classList.add(...activeClasses);
+            btn.classList.remove(...inactiveClasses);
+        } else {
+            // deactivate
+            btn.classList.remove(...activeClasses);
+            btn.classList.add(...inactiveClasses);
+        }
+    });
+
+    // 3. Show Target Content
     document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
-    document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
+}
+document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
 }
 
 
