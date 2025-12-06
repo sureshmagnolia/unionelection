@@ -808,9 +808,7 @@ function renderSlotsGridAdmin() {
                 return start <= today && end >= today;
             });
             if (activeRole) {
-            if (activeRole) {
                 activeRoleLabel = `< span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold" > ${ activeRole.role }</span > `;
-            }
             }
         }
 
