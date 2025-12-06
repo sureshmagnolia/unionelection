@@ -6712,8 +6712,7 @@ window.switchAdminTab = function (tabName) {
     // 3. Show Target Content
     document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
 }
-document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
-}
+
 
 
 function showView(viewName) {
