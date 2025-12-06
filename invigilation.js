@@ -1626,29 +1626,31 @@ window.toggleAdvance = async function(dateStr, email, session) {
     if (existingEntry) {
         // REMOVE (Simple Confirm)
         if(confirm(`Remove 'Unavailable' status for ${session}?`)) {
+            // A. UPDATE LOCAL DATA INSTANTLY
+            advanceUnavailability[dateStr][session] = list.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+            
+            // B. UPDATE UI INSTANTLY
             try {
-                // Filter out the user (handle both string and object)
-                advanceUnavailability[dateStr][session] = list.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-                
-                // Safe Logging (Prevent crash if staffData is messy)
+                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
+                if(typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+            } catch(e) { console.error("UI Update failed", e); }
+
+            // C. CLOSE MODAL INSTANTLY
+            window.closeModal('day-detail-modal'); 
+
+            // D. SYNC TO CLOUD (Background)
+            try {
+                // Logging (Safe)
                 try {
                     const staffName = getNameFromEmail(email);
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from ${dateStr} (${session}) unavailability list.`);
-                } catch (logErr) { console.warn("Logging failed", logErr); }
-                
+                } catch (e) {}
+
                 await saveAdvanceUnavailability();
-                
-                // Update UI safely
-                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
-                if(typeof renderStaffUpcomingSummary === 'function') {
-                    try { renderStaffUpcomingSummary(email); } catch(e) { console.error("Summary update failed", e); }
-                }
             } catch (err) {
-                console.error("Toggle Error:", err);
-                alert("An error occurred while updating status. Please try again.");
-            } finally {
-                // ALWAYS Close Modal
-                window.closeModal('day-detail-modal'); 
+                console.error("Cloud Save Error:", err);
+                // Optional: Alert user if save failed, but UI is already updated
+                updateSyncStatus("Save Failed", "error");
             }
         }
     } else {
@@ -1680,27 +1682,30 @@ window.toggleWholeDay = async function(dateStr, email) {
     if (isFullDay) {
         // CLEAR BOTH
         if(confirm("Clear unavailability for the WHOLE DAY?")) {
+            // A. UPDATE LOCAL DATA INSTANTLY
+            advanceUnavailability[dateStr].FN = fnList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+            advanceUnavailability[dateStr].AN = anList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+            
+            // B. UPDATE UI INSTANTLY
             try {
-                // Filter out the user
-                advanceUnavailability[dateStr].FN = fnList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-                advanceUnavailability[dateStr].AN = anList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-                
+                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
+                if(typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+            } catch(e) { console.error("UI Update failed", e); }
+
+            // C. CLOSE MODAL INSTANTLY
+            window.closeModal('day-detail-modal');
+
+            // D. SYNC TO CLOUD (Background)
+            try {
                 try {
                     const staffName = getNameFromEmail(email);
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from Whole Day ${dateStr}.`);
-                } catch (logErr) { console.warn("Logging failed", logErr); }
+                } catch (e) {}
 
                 await saveAdvanceUnavailability();
-                
-                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
-                if(typeof renderStaffUpcomingSummary === 'function') {
-                    try { renderStaffUpcomingSummary(email); } catch(e) { console.error("Summary update failed", e); }
-                }
             } catch (err) {
-                console.error("Toggle Whole Day Error:", err);
-            } finally {
-                // ALWAYS Close Modal
-                window.closeModal('day-detail-modal');
+                console.error("Cloud Save Error:", err);
+                updateSyncStatus("Save Failed", "error");
             }
         }
     } else {
@@ -1717,6 +1722,8 @@ window.toggleWholeDay = async function(dateStr, email) {
         window.openModal('unavailable-modal');
     }
 }
+
+
 // --- STANDARD EXPORTS ---
 window.toggleLock = async function (key) {
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
