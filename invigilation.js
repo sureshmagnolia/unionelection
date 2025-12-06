@@ -667,82 +667,89 @@ function renderSlotsGridAdmin() {
                     
                     <div class="flex rounded shadow-sm">
                         <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-red-600 px-2 py-1 rounded-l hover:bg-red-50 font-bold border-r-0">🔒</button>
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-green-600 px-2 py-1 rounded-r hover:bg-green-50 font-bold">🔓</button>
                     </div>
                 </div>
             </div>`;
 
-        // Render Slots for this Week
-        group.items.forEach((item, index) => {
-            const slot = item.slot;
-            // Ensure ID/DateKey are set for the actions
-            slot.id = item.key;
-            slot.dateKey = item.key;
+        // Render Slots
+        group.items.sort((a, b) => a.date - b.date);
 
-            const slotDate = item.date;
-            const dateNum = slotDate.getDate();
-            const dayName = slotDate.toLocaleDateString('en-US', { weekday: 'short' });
+        group.items.forEach(({ key, slot }) => {
+            const filled = slot.assigned.length;
 
-            // Status Logic
-            const assignedCount = slot.invigilators ? slot.invigilators.length : 0;
-            const requiredCount = slot.required || 2;
-            let statusColor = "bg-white border-gray-200";
-            let statusBadge = `<span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] font-bold border border-gray-200">Processing...</span>`;
+            // 3D PLASTICKY THEME LOGIC
+            // We use gradients and stronger borders to create depth
+            let themeClasses = "";
+            let statusIcon = "";
 
-            if (assignedCount >= requiredCount) {
-                statusColor = "bg-green-50 border-green-200 shadow-sm"; // Full
-                statusBadge = `<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold border border-green-200 flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> FILLED
-                </span>`;
-            } else if (assignedCount > 0) {
-                statusColor = "bg-yellow-50 border-yellow-200 shadow-sm"; // Partial
-                statusBadge = `<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-[10px] font-bold border border-yellow-200 flex items-center gap-1">
-                     <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></span> PARTIAL
-                </span>`;
+            if (slot.isLocked) {
+                themeClasses = "border-red-500 bg-gradient-to-br from-white via-red-50 to-red-100 shadow-red-100";
+                statusIcon = "🔒";
+            } else if (filled >= slot.required) {
+                themeClasses = "border-green-500 bg-gradient-to-br from-white via-green-50 to-green-100 shadow-green-100";
+                statusIcon = "✅";
             } else {
-                statusColor = "bg-white border-red-200 shadow-sm hover:border-red-300"; // Empty
-                statusBadge = `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> EMPTY
-                </span>`;
+                themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100 shadow-orange-100";
+                statusIcon = "🔓";
             }
 
-            // Generate Card HTML
+            // Unavailability Button
+            let unavButton = "";
+            if (slot.unavailable && slot.unavailable.length > 0) {
+                unavButton = `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-1 bg-white/80 backdrop-blur text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 transition shadow-sm hover:shadow active:scale-95"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> ${slot.unavailable.length} Issue(s)</button>`;
+            }
+
+            const hasLog = slot.allocationLog ? "" : "opacity-50 cursor-not-allowed";
+
             ui.adminSlotsGrid.innerHTML += `
-            <div class="relative group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${statusColor} rounded-xl overflow-hidden flex flex-col">
-                
-                <!-- Status Stripe -->
-                <div class="absolute top-0 left-0 w-1.5 h-full ${assignedCount >= requiredCount ? 'bg-green-500' : (assignedCount > 0 ? 'bg-yellow-400' : 'bg-red-400')}"></div>
+                <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group slot-card">
+                    <!-- Glossy Highlight Effect -->
+                    <div class="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/60 to-transparent opacity-50 rounded-t-xl pointer-events-none"></div>
 
-                <div class="p-4 flex gap-4 h-full">
-                    
-                    <!-- 3D Date Box -->
-                    <div class="shrink-0 flex flex-col items-center justify-center w-16 h-16 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl shadow-md transform rotate-2 group-hover:rotate-0 transition-transform duration-300">
-                         <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">${dayName}</span>
-                         <span class="text-2xl font-black text-gray-800 leading-none drop-shadow-sm mt-0.5">${dateNum}</span>
-                    </div>
-
-                    <!-- Content -->
-                    <div class="flex-1 min-w-0 flex flex-col">
+                    <div class="relative z-10">
                         <div class="flex justify-between items-start mb-2">
-                             <div>
-                                <h4 class="text-sm font-bold text-gray-800 truncate">${slot.time.replace(/\./g, ':')}</h4>
-                                <p class="text-[10px] text-gray-500 truncate mt-0.5">${slot.sessionName || 'Exam Session'}</p>
+                            <h4 class="font-black text-gray-800 text-xs w-2/3 break-words leading-tight flex items-center gap-1">
+                                <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
+                                <span class="drop-shadow-sm">${key}</span>
+                            </h4>
+                            <div class="flex items-center bg-white/90 backdrop-blur border border-gray-200 rounded-lg text-[10px] shadow-sm shrink-0 overflow-hidden">
+                                <button onclick="changeSlotReq('${key}', -1)" class="px-2 py-1 hover:bg-gray-100 border-r border-gray-200 text-gray-600 font-bold active:bg-gray-200 transition">-</button>
+                                <span class="px-2 font-bold text-gray-800" title="Filled / Required">${filled}/${slot.required}</span>
+                                <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l border-gray-200 text-gray-600 font-bold active:bg-gray-200 transition">+</button>
                             </div>
-                            ${statusBadge}
                         </div>
-
-                        <!-- Progress Bar (The "Tube") -->
-                        <div class="w-full bg-gray-200 rounded-full h-2 mb-3 overflow-hidden shadow-inner ring-1 ring-black/5">
-                             <div class="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                                  style="width: ${(assignedCount / requiredCount) * 100}%"></div>
+                        
+                        <div class="text-[10px] text-gray-600 mb-2 leading-tight bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm">
+                            <strong class="text-gray-800">Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "<span class='text-gray-400 italic'>None Assigned</span>"}
                         </div>
+                        
+                        ${unavButton}
+                    </div>
+                    
+                    <div class="grid grid-cols-4 gap-1.5 mt-3 relative z-10">
+                         <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-[10px] bg-white text-green-700 border border-green-200 rounded-lg py-1.5 hover:bg-green-50 font-bold transition shadow-sm hover:shadow" title="Reminder">🔔</button>
+                         <button onclick="printSessionReport('${key}')" class="col-span-1 text-[10px] bg-white text-gray-700 border border-gray-300 rounded-lg py-1.5 hover:bg-gray-50 font-bold transition shadow-sm hover:shadow" title="Print">🖨️</button>
+                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-white text-indigo-700 border border-indigo-200 rounded-lg py-1.5 hover:bg-indigo-50 font-bold transition shadow-sm hover:shadow" title="Edit">Edit</button>
+                         <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-white text-orange-700 border border-orange-200 rounded-lg py-1.5 hover:bg-orange-50 font-bold transition shadow-sm hover:shadow ${hasLog}" title="Log">📜</button>
+                    </div>
+                    <div class="flex gap-1.5 mt-2 relative z-10">
+                        <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold transition shadow-sm bg-white hover:shadow active:scale-95">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
+                        <button onclick="openRescheduleModal('${key}')" class="px-2.5 text-[10px] border border-orange-200 rounded-lg py-1.5 hover:bg-orange-50 text-orange-600 font-bold transition shadow-sm bg-white hover:shadow active:scale-95" title="Reschedule">📅</button>
+                        <button onclick="deleteSlot('${key}')" class="px-2.5 text-[10px] border border-red-200 rounded-lg py-1.5 hover:bg-red-50 text-red-600 font-bold transition shadow-sm bg-white hover:shadow active:scale-95" title="Delete">🗑️</button>
+                    </div>                
+                </div>`;
+        });
+    });
 
-                        <!-- Assigned Avatars / Count -->
-                        <div class="mt-auto flex justify-between items-center">
-                            <div class="flex -space-x-2 overflow-hidden py-1">
-                                ${generateAvatarStack(slot.invigilators)}
-                            </div>
-                            <span class="text-[10px] font-bold text-gray-400">
-                                ${assignedCount}/${requiredCount} <span class="font-normal text-gray-300">Staff</span>
+    // 7. BOTTOM SPACER (The Fix)
+    // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
+    ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
+}
+// Updated: Render Staff List with Clickable Done Count
+function renderStaffTable() {
+    if (!ui.staffTableBody) return;
+    ui.staffTableBody.innerHTML = '';
 
     const filter = document.getElementById('staff-search').value.toLowerCase();
     const today = new Date();
@@ -785,7 +792,7 @@ function renderSlotsGridAdmin() {
 
     // Update Controls
     const pageInfo = document.getElementById('staff-page-info');
-    if (pageInfo) pageInfo.textContent = "Page " + currentStaffPage + " of " + totalPages + " (" + filteredItems.length + " Staff)";
+    if (pageInfo) pageInfo.textContent = `Page ${currentStaffPage} of ${totalPages} (${filteredItems.length} Staff)`;
     const prevBtn = document.getElementById('btn-staff-prev');
     const nextBtn = document.getElementById('btn-staff-next');
     if (prevBtn) prevBtn.disabled = (currentStaffPage === 1);
@@ -808,7 +815,7 @@ function renderSlotsGridAdmin() {
                 return start <= today && end >= today;
             });
             if (activeRole) {
-                activeRoleLabel = `< span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold" > ${ activeRole.role }</span > `;
+                activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
             }
         }
 
@@ -817,11 +824,10 @@ function renderSlotsGridAdmin() {
         // Lock Logic
         let actionButtons = "";
         if (isStaffListLocked) {
-            actionButtons = `< div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0" > <span class="text-gray-400 text-xs italic mr-2">Locked</span></div > `;
+            actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
         } else {
             actionButtons = `
-            actionButtons = `
-            <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
+                <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
                     <button onclick="editStaff(${index})" class="flex-1 md:flex-none text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 transition text-xs font-bold text-center">Edit</button>
                     <button onclick="openRoleAssignmentModal(${index})" class="flex-1 md:flex-none text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition text-xs font-bold text-center">Role</button>
                     <button onclick="deleteStaff(${index})" class="flex-1 md:flex-none text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition bg-white border border-red-100 text-center">&times;</button>
@@ -902,7 +908,7 @@ function renderSlotsGridAdmin() {
 
     const spacer = document.createElement('tr');
     spacer.className = "block md:hidden h-32 border-none bg-transparent pointer-events-none";
-    spacer.innerHTML = `< td class="block border-none p-0" ></td > `;
+    spacer.innerHTML = `<td class="block border-none p-0"></td>`;
     ui.staffTableBody.appendChild(spacer);
 }
 
@@ -936,18 +942,18 @@ function renderStaffRankList(myEmail) {
         const isMe = s.email === myEmail;
         const bgClass = isMe ? "bg-indigo-50 border-indigo-200" : "bg-gray-50 border-transparent hover:bg-gray-100";
         const textClass = isMe ? "text-indigo-700 font-bold" : "text-gray-700";
-        const rankBadge = absoluteIndex < 3 ? `text - orange - 500 font - black` : `text - gray - 400 font - medium`;
+        const rankBadge = absoluteIndex < 3 ? `text-orange-500 font-black` : `text-gray-400 font-medium`;
         const displayPending = Math.max(0, s.pending);
 
         let roleBadge = "";
         if (s.roleHistory) {
             const today = new Date();
             const activeRole = s.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
-            if (activeRole) roleBadge = `< span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200" > ${activeRole.role}</span > `;
+            if (activeRole) roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
         }
 
         return `
-            < div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition mb-1" >
+            <div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition mb-1">
                 <div class="flex items-center gap-2 overflow-hidden">
                     <span class="${rankBadge} w-6 text-center shrink-0 text-[10px]">${absoluteIndex + 1}</span>
                     <div class="flex flex-col min-w-0">
@@ -964,7 +970,7 @@ function renderStaffRankList(myEmail) {
                      <span class="text-gray-300 text-[10px]">/</span>
                      <span class="font-mono font-bold ${displayPending > 0 ? 'text-red-600' : 'text-gray-400'}" title="Pending Duties">${displayPending}</span>
                 </div>
-            </div > `;
+            </div>`;
     }).join('');
 
     // 4. Generate Pagination HTML (Updated with extra padding)
@@ -972,7 +978,7 @@ function renderStaffRankList(myEmail) {
     const nextDisabled = (currentRankPage === totalPages) ? "disabled opacity-50 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer";
 
     const paginationHtml = `
-            < div class="flex justify-between items-center w-full bg-white py-2" >
+        <div class="flex justify-between items-center w-full bg-white py-2">
             <button onclick="changeRankPage(-1)" ${prevDisabled} class="px-3 py-1.5 rounded border border-gray-200 text-gray-600 text-[10px] font-bold transition flex items-center gap-1 bg-white shadow-sm">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                 Prev
@@ -986,8 +992,8 @@ function renderStaffRankList(myEmail) {
                 Next
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
             </button>
-        </div >
-            `;
+        </div>
+    `;
 
     // 5. Inject Content into respective containers
 
@@ -1020,7 +1026,7 @@ function renderStaffCalendar(myEmail) {
     const month = currentCalDate.getMonth();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-    if (ui.calTitle) ui.calTitle.textContent = `${monthNames[month]} ${year} `;
+    if (ui.calTitle) ui.calTitle.textContent = `${monthNames[month]} ${year}`;
 
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1042,20 +1048,20 @@ function renderStaffCalendar(myEmail) {
 
     let html = "";
     for (let i = 0; i < firstDayIndex; i++) {
-        html += `< div class="bg-gray-50 border border-gray-100 min-h-[5rem] md:min-h-[7rem]" ></div > `;
+        html += `<div class="bg-gray-50 border border-gray-100 min-h-[5rem] md:min-h-[7rem]"></div>`;
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${String(day).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year} `;
+        const dateStr = `${String(day).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year}`;
         const slots = slotsByDate[day] || [];
 
-        let dayContent = `< div class="text-right font-bold text-xs md:text-sm p-0.5 text-gray-400" > ${day}</div > `;
+        let dayContent = `<div class="text-right font-bold text-xs md:text-sm p-0.5 text-gray-400">${day}</div>`;
         let bgClass = "bg-white";
         let borderClass = "border-gray-200";
 
         // --- RENDER SLOTS ---
         if (slots.length > 0) {
-            dayContent += `< div class="flex flex-col gap-0.5 px-0.5 pb-0.5" > `;
+            dayContent += `<div class="flex flex-col gap-0.5 px-0.5 pb-0.5">`;
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
 
             slots.forEach(slot => {
