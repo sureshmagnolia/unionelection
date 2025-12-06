@@ -746,6 +746,14 @@ function renderStaffTable() {
                 if (!matchName && !matchDept && !matchDesig) return false;
             }
             return true;
+        })
+        // Sort: Dept (A-Z) -> Name (A-Z)
+        .sort((a, b) => {
+            const deptA = (a.dept || "").toLowerCase();
+            const deptB = (b.dept || "").toLowerCase();
+            if (deptA < deptB) return -1;
+            if (deptA > deptB) return 1;
+            return (a.name || "").localeCompare(b.name || "");
         });
 
     // 2. Pagination Logic
