@@ -11628,56 +11628,104 @@ Are you sure?
         }
     }
 
-    // 2. Reschedule Logic
+   // 2. Reschedule Logic (Moves Students + All Associated Data)
     if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
             const rawTime = sessionTimeInput.value;
-            const currentSession = editSessionSelect.value;
+            const currentSession = editSessionSelect.value; // "DD.MM.YYYY | HH:MM AM"
 
             if (!currentSession) return alert("No session selected.");
             if (!rawDate || !rawTime) return alert("Please select both New Date and New Time.");
 
-            // Format New Values
+            // A. Format New Values
             const [y, m, d] = rawDate.split('-');
             const newDate = `${d}.${m}.${y}`;
+            
+            // Normalize Time (Universal)
+            let newTime = "";
+            if (typeof normalizeTime === 'function') {
+                newTime = normalizeTime(rawTime);
+            } else {
+                // Fallback
+                const [h, min] = rawTime.split(':');
+                let hours = parseInt(h);
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12; hours = hours ? hours : 12;
+                newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
+            }
 
-            const [h, min] = rawTime.split(':');
-            let hours = parseInt(h);
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12;
-            hours = hours ? hours : 12;
-            const newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
-
+            const newSessionKey = `${newDate} | ${newTime}`;
             const [oldDate, oldTime] = currentSession.split(' | ');
 
-            // Confirmation
-            const msg = `⚠️ RESCHEDULE CONFIRMATION ⚠️\n\nMove ALL students from:\n${oldDate} (${oldTime})\n\nTo:\n${newDate} (${newTime})?\n\nThis will update student records immediately.`;
+            if (newSessionKey === currentSession) return alert("New date/time is the same as current.");
+
+            // B. Confirmation
+            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nThis will move:\n• Student Records\n• Room Allotments\n• Scribe Assignments\n• Invigilation Duties\n• Absentee Lists\n\nProceed?`;
 
             if (!confirm(msg)) return;
 
             const check = prompt("Type 'CHANGE' to confirm this bulk update:");
             if (check !== 'CHANGE') return alert("Cancelled. Incorrect code.");
 
-            // Execute
-            let count = 0;
-            allStudentData.forEach(s => {
-                if (s.Date === oldDate && s.Time === oldTime) {
-                    s.Date = newDate;
-                    s.Time = newTime;
-                    count++;
-                }
-            });
+            // C. EXECUTE MOVE
+            try {
+                // 1. Update Students (Base Data)
+                let studentCount = 0;
+                allStudentData.forEach(s => {
+                    if (s.Date === oldDate && s.Time === oldTime) {
+                        s.Date = newDate;
+                        s.Time = newTime;
+                        studentCount++;
+                    }
+                });
+                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
-            localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-            alert(`✅ Successfully moved ${count} students to ${newDate} | ${newTime}.`);
+                // 2. Helper to Move Keys in Objects
+                const moveKeyInStorage = (storageKey, type) => {
+                    const raw = localStorage.getItem(storageKey);
+                    if (!raw) return;
+                    const data = JSON.parse(raw);
 
-            if (typeof syncDataToCloud === 'function') await syncDataToCloud();
-            window.location.reload();
+                    if (data[currentSession]) {
+                        // If target exists, MERGE (concat arrays or merge objects)
+                        if (data[newSessionKey]) {
+                            if (Array.isArray(data[currentSession])) {
+                                data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
+                            } else {
+                                data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
+                            }
+                        } else {
+                            // Simple Move
+                            data[newSessionKey] = data[currentSession];
+                        }
+                        // Delete Old
+                        delete data[currentSession];
+                        localStorage.setItem(storageKey, JSON.stringify(data));
+                    }
+                };
+
+                // 3. Move All Associated Data
+                moveKeyInStorage('examRoomAllotment', 'array');      // Room Allotments
+                moveKeyInStorage('examScribeAllotment', 'object');   // Scribe Maps
+                moveKeyInStorage('examAbsenteeList', 'array');       // Absentee List
+                moveKeyInStorage('examInvigilatorMapping', 'object');// Invig Room Assignments
+                moveKeyInStorage('examInvigilationSlots', 'object'); // Admin Duty Slots
+                moveKeyInStorage('examQPCodes', 'object');           // QP Codes (if keyed by session)
+
+                alert(`✅ Successfully moved ${studentCount} students and all related data to ${newSessionKey}.`);
+
+                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                window.location.reload();
+
+            } catch (e) {
+                console.error(e);
+                alert("Error during reschedule: " + e.message);
+            }
         });
     }
 
-    // 3. Delete Logic
+    // 3. Delete Logic (Wipes Students + Associated Data)
     if (btnSessionDelete) {
         btnSessionDelete.addEventListener('click', async () => {
             const currentSession = editSessionSelect.value;
@@ -11688,24 +11736,50 @@ Are you sure?
             // Count targets
             const targets = allStudentData.filter(s => s.Date === oldDate && s.Time === oldTime);
 
-            const msg = `🛑 CRITICAL WARNING: DELETE SESSION 🛑\n\nYou are about to delete the ENTIRE session:\n${currentSession}\n\nThis will remove ${targets.length} student records permanently.\n\nAre you sure?`;
+            const msg = `🛑 CRITICAL WARNING: DELETE SESSION 🛑\n\nYou are about to delete the ENTIRE session:\n${currentSession}\n\nThis will remove:\n• ${targets.length} Student Records\n• All Room Allotments for this session\n• All Duty Assignments for this session\n\nAre you sure?`;
 
             if (!confirm(msg)) return;
 
             const check = prompt("Type 'DELETE' to confirm permanent deletion:");
             if (check !== 'DELETE') return alert("Cancelled. Incorrect code.");
 
-            // Execute
-            allStudentData = allStudentData.filter(s => !(s.Date === oldDate && s.Time === oldTime));
+            try {
+                // 1. Delete Students
+                allStudentData = allStudentData.filter(s => !(s.Date === oldDate && s.Time === oldTime));
+                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
-            localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-            alert(`✅ Deleted ${targets.length} records. The session is removed.`);
+                // 2. Helper to Delete Key
+                const deleteKeyInStorage = (storageKey) => {
+                    const raw = localStorage.getItem(storageKey);
+                    if (!raw) return;
+                    const data = JSON.parse(raw);
+                    if (data[currentSession]) {
+                        delete data[currentSession];
+                        localStorage.setItem(storageKey, JSON.stringify(data));
+                    }
+                };
 
-            if (typeof syncDataToCloud === 'function') await syncDataToCloud();
-            window.location.reload();
+                // 3. Delete Associated Data
+                deleteKeyInStorage('examRoomAllotment');
+                deleteKeyInStorage('examScribeAllotment');
+                deleteKeyInStorage('examAbsenteeList');
+                deleteKeyInStorage('examInvigilatorMapping');
+                deleteKeyInStorage('examInvigilationSlots');
+                deleteKeyInStorage('examQPCodes');
+
+                alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
+
+                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                window.location.reload();
+
+            } catch (e) {
+                console.error(e);
+                alert("Error during deletion: " + e.message);
+            }
         });
     }
-  
+
+     
 
     // ==========================================
     // 📄 GLOBAL PDF PREVIEW (FIXED COLUMNS & PRINTING)
