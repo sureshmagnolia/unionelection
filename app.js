@@ -954,7 +954,36 @@ document.addEventListener('DOMContentLoaded', () => {
             await UiModal.alert("Error", "Failed to remove: " + e.message);
         }
     }
+// --- TIME NORMALIZER (Fixes 2:00 vs 02:00 issue) ---
+    function normalizeTime(timeStr) {
+        if (!timeStr) return "";
+        
+        let h, m, ampm;
+        const t = timeStr.trim().toUpperCase();
 
+        // Check format: "14:30" (24h) OR "2:30 PM" / "02:30 PM" (12h)
+        if (t.includes("AM") || t.includes("PM")) {
+            // 12-Hour Format Parse
+            const match = t.match(/(\d+):(\d+)\s*(AM|PM)/);
+            if (!match) return timeStr; // Return original if parse fails
+            h = parseInt(match[1], 10);
+            m = match[2];
+            ampm = match[3];
+        } else {
+            // 24-Hour Format Parse (from HTML Inputs)
+            const parts = t.split(':');
+            if (parts.length < 2) return timeStr;
+            h = parseInt(parts[0], 10);
+            m = parts[1];
+            ampm = h >= 12 ? "PM" : "AM";
+            h = h % 12;
+            h = h ? h : 12; // 0 becomes 12
+        }
+
+        // FORMAT: HH:MM AM/PM (Always 2 digits for hour)
+        const hh = String(h).padStart(2, '0'); 
+        return `${hh}:${m} ${ampm}`;
+    }
     // Helper for status UI (Updates Desktop & Mobile)
     function updateSyncStatus(status, type) {
         // 1. Desktop Status (Text)
@@ -8428,28 +8457,26 @@ document.addEventListener('DOMContentLoaded', () => {
             return `${d}.${m}.${y}`;
         };
 
+        // Use the global normalizer to ensure "2:00 PM" becomes "02:00 PM"
         const processTime = (tStr) => {
-            if (!tStr) return "";
-            const [h, min] = tStr.split(':');
-            let hours = parseInt(h);
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12;
-            hours = hours ? hours : 12;
-            // FIX: Force 2 digits (09 instead of 9)
-            const paddedHours = String(hours).padStart(2, '0');
-            return `${paddedHours}:${min} ${ampm}`;
+             if (typeof normalizeTime === 'function') return normalizeTime(tStr);
+             return tStr; 
         };
 
-        // 3. MERGE LOGIC (The Fix)
+        // 3. MERGE LOGIC
         let studentObj = {};
 
         if (currentlyEditingIndex !== null) {
-            // --- EDIT MODE: OPTIONAL FIELDS ---
+            // --- EDIT MODE ---
             const original = currentCourseStudents[currentlyEditingIndex];
 
-            // If input is empty, keep original. Else, process new input.
+            // Date: Use new if changed, else keep original
             finalDate = rawDate ? processDate(rawDate) : original.Date;
-            finalTime = rawTime ? processTime(rawTime) : original.Time;
+            
+            // Time: Use new if changed, else use original... BUT NORMALIZE IT!
+            // This fixes the bug where un-edited times stayed as "2:00 PM"
+            const timeToProcess = rawTime ? rawTime : original.Time;
+            finalTime = processTime(timeToProcess);
 
             studentObj = {
                 Date: finalDate,
@@ -8457,18 +8484,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 Course: newCourse || original.Course,
                 'Register Number': newRegNo || original['Register Number'],
                 Name: newName || original.Name,
-                Stream: newStream || original.Stream || "Regular" // Dropdown usually has value, but safe fallback
+                Stream: newStream || original.Stream || "Regular"
             };
 
         } else {
-            // --- ADD MODE: STRICT VALIDATION ---
+            // --- ADD MODE ---
             if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
                 alert('For a new student, all fields are required.');
                 return;
             }
             studentObj = {
                 Date: processDate(rawDate),
-                Time: processTime(rawTime),
+                Time: processTime(rawTime), // Normalize the new input
                 Course: newCourse,
                 'Register Number': newRegNo,
                 Name: newName,
@@ -8729,7 +8756,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. Handle Bulk Apply Click
     // [In app.js]
 
-    if (btnBulkApply) {
+   if (btnBulkApply) {
         btnBulkApply.addEventListener('click', async () => {
             const rawDate = bulkNewDateInput.value; // YYYY-MM-DD
             const rawTime = bulkNewTimeInput.value; // HH:MM
@@ -8755,14 +8782,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (rawTime) {
-                const [h, min] = rawTime.split(':');
-                let hours = parseInt(h);
-                const ampm = hours >= 12 ? 'PM' : 'AM';
-                hours = hours % 12;
-                hours = hours ? hours : 12;
-                // FIX: Force 2 digits
-                const paddedHours = String(hours).padStart(2, '0');
-                newTime = `${paddedHours}:${min} ${ampm}`;
+                // Input is HH:mm (24h) from picker
+                // normalizeTime handles 24h input correctly and ensures 02:00 PM format
+                if (typeof normalizeTime === 'function') {
+                     newTime = normalizeTime(rawTime);
+                } else {
+                     // Fallback if normalizeTime is missing (Safety)
+                    const [h, min] = rawTime.split(':');
+                    let hours = parseInt(h);
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    const paddedHours = String(hours).padStart(2, '0');
+                    newTime = `${paddedHours}:${min} ${ampm}`;
+                }
             }
             // ----------------------------------
 
@@ -10043,7 +10076,7 @@ Are you sure?
 
                 parsedData.push({
                     'Date': values[dateIndex],
-                    'Time': values[timeIndex],
+                    'Time': cleanTime, // <--- USE NORMALIZED TIME
                     'Course': values[courseIndex],
                     'Register Number': values[regNumIndex],
                     'Name': values[nameIndex],
@@ -10161,6 +10194,7 @@ Are you sure?
             // INJECT STREAM TAG INTO PYTHON DATA
             parsedData = parsedData.map(item => ({
                 ...item,
+                Time: normalizeTime(item.Time), // <--- FIX APPLIED HERE
                 Stream: selectedStream
             }));
 
