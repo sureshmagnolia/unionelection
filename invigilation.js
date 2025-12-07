@@ -1086,6 +1086,7 @@ function renderStaffCalendar(myEmail) {
             slots.forEach(slot => {
                 const filled = slot.assigned.length;
                 const needed = slot.required;
+                const available = Math.max(0, needed - filled);
 
                 // Logic
                 const isUnavailable = isUserUnavailable(slot, myEmail, slot.key);
@@ -1097,7 +1098,12 @@ function renderStaffCalendar(myEmail) {
                 // Badge Styles
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
-                let statusText = `${Math.max(0, needed - filled)} Left`;
+                
+                // --- RESPONSIVE STATUS TEXT ---
+                // Mobile: Just the number (e.g. "26")
+                // Desktop: Full text (e.g. "26 Left")
+                let statusText = `<span class="md:hidden font-extrabold text-[10px]">${available}</span><span class="hidden md:inline">${available} Left</span>`;
+                
                 let glowClass = "";
 
                 if (isCompleted) {
@@ -1113,13 +1119,11 @@ function renderStaffCalendar(myEmail) {
                 }
                 else if (isAssigned) {
                     if (slot.isLocked) {
-                        // LOCKED DUTY: Light Blue + Lock Icon
                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold";
                         icon = "🔒";
                         statusText = "Duty";
                         glowClass = "shadow-sm shadow-blue-100";
                     } else {
-                        // UNLOCKED DUTY: Deep Blue + Police Icon
                         badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold";
                         icon = "👮";
                         statusText = "Duty";
@@ -1155,7 +1159,7 @@ function renderStaffCalendar(myEmail) {
                             <span class="text-[8px] md:text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
                         </div>
                         <div class="flex items-center gap-0.5 md:gap-1 z-10">
-                            <span class="hidden md:inline text-[9px] font-bold opacity-90 whitespace-normal break-words leading-tight">${statusText}</span>
+                            <span class="text-[9px] font-bold opacity-90 whitespace-normal break-words leading-tight">${statusText}</span>
                             <span class="text-[8px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
                         </div>
                     </div>`;
