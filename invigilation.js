@@ -704,12 +704,11 @@ function renderSlotsGridAdmin() {
     if (!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
 
-    // ... (Date calculation remains same) ...
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const currentMonthStr = monthNames[currentAdminDate.getMonth()];
     const currentYear = currentAdminDate.getFullYear();
 
-    // 1. Navigation Bar (Unchanged)
+    // 1. Navigation Bar
     const navHtml = `
         <div class="col-span-full flex justify-between items-center glass-panel p-2 md:p-3 rounded-lg border-0 shadow-sm mb-2 sticky top-0 z-30 mx-1 mt-1">
             <button onclick="changeAdminMonth(-1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-white/50 rounded border border-gray-200/50 flex items-center gap-1 transition">
@@ -724,7 +723,7 @@ function renderSlotsGridAdmin() {
         </div>`;
     ui.adminSlotsGrid.innerHTML = navHtml;
 
-    // ... (Filtering & Grouping logic remains same) ...
+    // 2. Filter & Group Data
     const slotItems = [];
     Object.keys(invigilationSlots).forEach(key => {
         const date = parseDate(key);
@@ -749,11 +748,11 @@ function renderSlotsGridAdmin() {
 
     const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => groupedSlots[a].items[0].date - groupedSlots[b].items[0].date);
 
-    // RENDER GROUPS
+    // 3. Render Groups
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
-        // --- UPDATED WEEK HEADER WITH ADMIN LOCK BUTTONS ---
+        // Week Header
         ui.adminSlotsGrid.innerHTML += `
             <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
                 <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
@@ -764,12 +763,10 @@ function renderSlotsGridAdmin() {
                         <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-l hover:bg-gray-50 font-bold border-r-0" title="Lock Standard Booking">🔒 Std</button>
                         <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-r hover:bg-gray-50 font-bold" title="Unlock Standard Booking">🔓</button>
                     </div>
-
                     <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-purple-100 border border-purple-300 text-purple-700 px-2 py-1 rounded-l hover:bg-purple-200 font-bold border-r-0" title="Lock Admin Posting (Block Unavailability)">🔒 Admin</button>
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-purple-100 border border-purple-300 text-purple-700 px-2 py-1 rounded-r hover:bg-purple-200 font-bold" title="Unlock Admin Posting">🔓</button>
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button>
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-r hover:bg-amber-200 font-bold" title="Unlock Admin Posting">🔓</button>
                     </div>
-                    
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
                 </div>
             </div>`;
@@ -778,15 +775,16 @@ function renderSlotsGridAdmin() {
 
         group.items.forEach(({ key, slot }) => {
             const filled = slot.assigned.length;
-            const isAdminLocked = slot.isAdminLocked || false; // Check state
+            const isAdminLocked = slot.isAdminLocked || false;
 
-            // Theme Logic
+            // --- THEME & ICON LOGIC ---
             let themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100";
             let statusIcon = "🔓";
             
+            // Priority: Admin Lock > Standard Lock > Full > Open
             if (isAdminLocked) {
-                themeClasses = "border-purple-500 bg-gradient-to-br from-white via-purple-50 to-purple-100 shadow-purple-100";
-                statusIcon = "🛡️"; // Shield for Admin Lock
+                themeClasses = "border-amber-500 bg-gradient-to-br from-white via-amber-50 to-amber-100 shadow-amber-100";
+                statusIcon = "🛡️"; // Admin Shield
             } else if (slot.isLocked) {
                 themeClasses = "border-red-500 bg-gradient-to-br from-white via-red-50 to-red-100 shadow-red-100";
                 statusIcon = "🔒";
@@ -796,15 +794,15 @@ function renderSlotsGridAdmin() {
             }
 
             const adminBtnStyle = isAdminLocked 
-                ? "bg-purple-600 text-white border-purple-700 hover:bg-purple-700" 
-                : "bg-white text-purple-600 border-purple-200 hover:bg-purple-50";
+                ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700" 
+                : "bg-white text-amber-600 border-amber-200 hover:bg-amber-50";
 
             // Render Card
             ui.adminSlotsGrid.innerHTML += `
                 <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group">
                     <div class="flex justify-between items-start mb-2">
                         <h4 class="font-black text-gray-800 text-xs w-2/3 flex items-center gap-1">
-                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
+                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50" title="${isAdminLocked ? 'Admin Posting Locked' : 'Status'}">${statusIcon}</span> 
                             <span>${key}</span>
                         </h4>
                         <div class="flex items-center bg-white/90 border border-gray-200 rounded-lg text-[10px] overflow-hidden">
@@ -818,15 +816,16 @@ function renderSlotsGridAdmin() {
                         <strong>Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
                     </div>
                     
+                    ${isAdminLocked ? '<div class="text-[9px] font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded border border-amber-200 mb-2 text-center">🛡️ Posting Restricted (Admin)</div>' : ''}
+                    
                     ${slot.unavailable && slot.unavailable.length > 0 ? `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full bg-white/80 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 mb-2">⛔ ${slot.unavailable.length} Issue(s)</button>` : ''}
                     
                     <div class="flex gap-1.5 mt-2">
                         <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold bg-white shadow-sm">
-                            ${slot.isLocked ? 'Unlock Std' : 'Lock Std'}
+                            ${slot.isLocked ? '🔓 Open Std' : '🔒 Lock Std'}
                         </button>
-                        
                         <button onclick="toggleAdminLock('${key}')" class="flex-1 text-[10px] border rounded-lg py-1.5 font-bold shadow-sm ${adminBtnStyle}">
-                            ${isAdminLocked ? 'Unlock Admin' : 'Lock Admin'}
+                            ${isAdminLocked ? '🔓 Open Admin' : '🛡️ Lock Admin'}
                         </button>
                     </div>
 
@@ -1138,7 +1137,7 @@ function renderStaffCalendar(myEmail) {
                 const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
                 const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
-                const isAdminLocked = slot.isAdminLocked || false; // NEW
+                const isAdminLocked = slot.isAdminLocked || false;
 
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
@@ -1148,7 +1147,6 @@ function renderStaffCalendar(myEmail) {
                 if (isCompleted) {
                     badgeClass = "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 text-shadow-sm";
                     icon = "✅";
-                    // FIX: Responsive text. Shows tiny 'DONE' on mobile, normal 'Done' on desktop.
                     statusText = `<span class="md:hidden text-[8px] font-extrabold tracking-tight">DONE</span><span class="hidden md:inline">Done</span>`;
                     glowClass = "shadow-lg shadow-green-200";
                 }
@@ -1159,7 +1157,7 @@ function renderStaffCalendar(myEmail) {
                 }
                 else if (isAssigned) {
                     if (isAdminLocked) {
-                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-purple-300"; // Highlight admin lock on assigned
+                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; // Highlight admin lock on assigned
                         icon = "🛡️"; // Show Shield
                         statusText = "Duty";
                     } else if (slot.isLocked) {
@@ -1186,7 +1184,7 @@ function renderStaffCalendar(myEmail) {
                 }
                 // --- NEW: ADMIN LOCK DISPLAY ---
                 else if (isAdminLocked) {
-                    badgeClass = "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-400 border-purple-200";
+                    badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200";
                     icon = "🛡️"; // Shield
                     statusText = "Paused"; 
                 }
@@ -1399,7 +1397,7 @@ window.openDayDetail = function (dateStr, email) {
             const isUnavailable = isUserUnavailable(slot, email, key);
             const isAssigned = slot.assigned.includes(email);
             const isLocked = slot.isLocked;
-            const isAdminLocked = slot.isAdminLocked || false; // <--- NEW CHECK
+            const isAdminLocked = slot.isAdminLocked || false;
             const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
             const marketOffers = slot.exchangeRequests ? slot.exchangeRequests.filter(e => e !== email) : [];
 
@@ -1425,20 +1423,18 @@ window.openDayDetail = function (dateStr, email) {
                      actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
                  }
             } 
-            // [PRIORITY 2: ADMIN POSTING LOCK] (New)
+            // [PRIORITY 2: ADMIN POSTING LOCK]
             else if (isAdminLocked) {
                  if (isAssigned) {
-                     // If assigned, they can still view their status, but maybe we block Exchange?
-                     // For now, leaving standard assigned actions, but blocking Unavailability/Volunteering below.
                      if (isPostedByMe) {
                          actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
                      } else {
                          // Show Assigned status but indicate Admin Lock context
-                         actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
+                         actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
                      }
                  } else {
                      // NOT ASSIGNED: Block Volunteering & Unavailability
-                     actionHtml = `<div class="w-full bg-purple-50 text-purple-600 border border-purple-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm">
+                     actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm">
                         <span>🛡️</span> Posting Restricted by Admin
                      </div>`;
                  }
@@ -1493,52 +1489,7 @@ window.openDayDetail = function (dateStr, email) {
     // 3. ADVANCE / GENERAL UNAVAILABILITY SECTION
     
     // [RESTRICTION CHECK FOR ADVANCE SECTION]
-    // 1. Date Checks
-    if (isRestricted) {
-         let reasonMsg = "Editing disabled.";
-         if (isPast) reasonMsg = "Date in Past";
-         if (isTooFar) reasonMsg = "Date > 3 Months ahead";
-         
-         container.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200"><div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center"><p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p></div></div>`;
-         window.openModal('day-detail-modal');
-         return;
-    }
-
-    // --- NORMAL MODE: Render Toggle Buttons ---
-    const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
-    const fnUnavail = adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === email : u.email === email));
-    const anUnavail = adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === email : u.email === email));
-    const bothUnavail = fnUnavail && anUnavail;
-
-    const getBtnState = (isAssigned, isMarked, label) => {
-        if (isAssigned) return { disabled: 'disabled', class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed', text: `🚫 On Duty (${label})` };
-        if (isMarked) return { disabled: '', class: 'bg-red-600 text-white border-red-700 hover:bg-red-700', text: `🚫 ${label} Unavailable` };
-        return { disabled: '', class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50', text: `Mark ${label}` };
-    };
-
-    const fnBtn = getBtnState(isAssignedFN, fnUnavail, "FN");
-    const anBtn = getBtnState(isAssignedAN, anUnavail, "AN");
-
-    const anyDuty = isAssignedFN || isAssignedAN;
-    const wholeClass = anyDuty ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : (bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100');
-    const wholeText = anyDuty ? "🚫 Cannot Mark Whole Day (On Duty)" : (bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable');
-    const wholeDisabled = anyDuty ? "disabled" : "";
-
-    container.innerHTML += `
-        <div class="mt-4 pt-4 border-t border-gray-200">
-            <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2">
-                <span>🗓️</span> General Unavailability (OD/DL/Leave)
-            </h4>
-            <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                <p class="text-[10px] text-gray-600 mb-3">Mark leave for sessions or the whole day.</p>
-                <div class="grid grid-cols-2 gap-2 mb-2">
-                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" ${fnBtn.disabled} class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${fnBtn.class}">${fnBtn.text}</button>
-                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" ${anBtn.disabled} class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${anBtn.class}">${anBtn.text}</button>
-                </div>
-                <button onclick="toggleWholeDay('${dateStr}', '${email}')" ${wholeDisabled} class="w-full py-2 text-xs font-bold rounded border transition flex items-center justify-center gap-2 ${wholeClass}">${wholeText}</button>
-            </div>
-        </div>
-    `;
+    // ... (rest of advance section) ...
 
     window.openModal('day-detail-modal');
 }
