@@ -11599,19 +11599,18 @@ Are you sure?
         });
     }
   
-// ==========================================
-    // 📄 GLOBAL PDF PREVIEW (PRINT ONLY VERSION)
+
+    // ==========================================
+    // 📄 GLOBAL PDF PREVIEW (FIXED COLUMNS & PRINTING)
     // ==========================================
     window.openPdfPreview = function (contentHtml, filenamePrefix) {
-        // 1. CLEAN CONTENT (Remove screen-specific and layout-breaking styles)
+        // 1. CLEAN CONTENT
+        // Remove fixed heights to allow printing across multiple pages.
+        // We DO NOT remove flexbox anymore, to preserve multi-column layouts.
         const cleanContent = contentHtml
             .replace(/min-height:\s*297mm/g, 'min-height: auto')
             .replace(/height:\s*297mm/g, 'height: auto')
-            // *** CRITICAL FIXES FOR PRINTING ***
-            .replace(/height:\s*100%/g, 'height: auto')       // Remove fixed height
-            .replace(/display:\s*flex/g, 'display: block')    // Remove flexbox (causes cutoff)
-            .replace(/flex-direction:\s*column/g, '')         // Remove flex direction
-            // **********************************
+            .replace(/height:\s*100%/g, 'height: auto')       // Remove fixed height (Critical for print)
             .replace(/width:\s*210mm/g, 'width: 100%')
             .replace(/padding:\s*2cm/g, 'padding: 15px')
             .replace(/mb-8/g, 'mb-4')
@@ -11663,6 +11662,7 @@ Are you sure?
                 }
 
                 /* REPORT PAGE STYLES */
+                /* Force block display on the PAGE wrapper to prevent print cutoff */
                 .print-page, .print-page-daywise, .print-page-sticker {
                     width: 100% !important;
                     height: auto !important;
@@ -11671,7 +11671,7 @@ Are you sure?
                     padding: 10mm !important;
                     border: none !important;
                     box-shadow: none !important;
-                    display: block !important; /* Force Block for printing */
+                    display: block !important; 
                     box-sizing: border-box;
                     page-break-after: always;
                     position: relative;
@@ -11694,6 +11694,15 @@ Are you sure?
                     word-wrap: break-word !important;
                     overflow-wrap: break-word !important;
                     border: 1px solid #000 !important;
+                }
+
+                /* Ensure Columns (Flex containers) behave nicely */
+                .column-container {
+                    display: flex;
+                    gap: 15px;
+                }
+                .column {
+                    flex: 1;
                 }
 
                 ::-webkit-scrollbar { display: none; }
@@ -11744,6 +11753,8 @@ Are you sure?
         w.document.close();
     }
 
+
+    
     
     // --- NEW: Clear Scribe Room Assignment ---
     window.removeScribeRoom = function (regNo) {
