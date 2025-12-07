@@ -7074,7 +7074,7 @@ function updateLocalSlotsFromStudents() {
     }
 
     // Delete a room from allotment (Updated: Cleans up Invigilator & Scribe mappings)
-    window.deleteRoom = function (index) {
+    window.deleteRoom = async function (index) {
         if (!confirm('Are you sure you want to remove this room allotment?')) return;
 
         const roomData = currentSessionAllotment[index];
@@ -7244,7 +7244,7 @@ function updateLocalSlotsFromStudents() {
     }
 
     // Select a room and allot students (Auto-Save & Sync enabled)
-    function selectRoomForAllotment(roomName, capacity, targetStream) {
+    async function selectRoomForAllotment(roomName, capacity, targetStream) {
         const [date, time] = currentSessionKey.split(' | ');
 
         const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -13096,23 +13096,18 @@ Are you sure?
 
             if (confirm("☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
                 if (typeof syncDataToCloud === 'function') {
-                    // Update UI immediately
-                    updateSyncStatus("Saving...", "neutral");
-                    // Trigger the save
-                    if (typeof syncDataToCloud === 'function') {
-                    // Update UI immediately
-                    updateSyncStatus("Saving...", "neutral");
+                // Update UI immediately
+                updateSyncStatus("Saving...", "neutral");
     
-                    // Trigger a FULL save of all sections
-                    await syncDataToCloud('settings');   // Configs, Streams, Rooms
-                    await syncDataToCloud('ops');        // QP Codes, Absentees
-                    await syncDataToCloud('allocation'); // Scribe Lists & Allotments
-                    await syncDataToCloud('staff');      // Invigilator Assignments
-                    await syncDataToCloud('slots');      // Duty Slots & Unavailability
-                    await syncDataToCloud('heavy');      // Student Data & Room Allotment
-                    }
+                // Trigger a FULL save of all sections
+                await syncDataToCloud('settings');
+                await syncDataToCloud('ops');
+                await syncDataToCloud('allocation');
+                await syncDataToCloud('staff');
+                await syncDataToCloud('slots');
+                await syncDataToCloud('heavy');
                 } else {
-                    alert("Sync function is not ready yet. Please wait.");
+                alert("Sync function is not ready yet. Please wait.");
                 }
             }
         });
