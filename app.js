@@ -11628,12 +11628,12 @@ Are you sure?
         }
     }
 
-   // 2. Reschedule Logic (Moves Students + All Associated Data)
+  // 2. Reschedule Logic (Smart Merge for Invigilators)
     if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
             const rawTime = sessionTimeInput.value;
-            const currentSession = editSessionSelect.value; // "DD.MM.YYYY | HH:MM AM"
+            const currentSession = editSessionSelect.value;
 
             if (!currentSession) return alert("No session selected.");
             if (!rawDate || !rawTime) return alert("Please select both New Date and New Time.");
@@ -11642,12 +11642,10 @@ Are you sure?
             const [y, m, d] = rawDate.split('-');
             const newDate = `${d}.${m}.${y}`;
             
-            // Normalize Time (Universal)
             let newTime = "";
             if (typeof normalizeTime === 'function') {
                 newTime = normalizeTime(rawTime);
             } else {
-                // Fallback
                 const [h, min] = rawTime.split(':');
                 let hours = parseInt(h);
                 const ampm = hours >= 12 ? 'PM' : 'AM';
@@ -11660,17 +11658,15 @@ Are you sure?
 
             if (newSessionKey === currentSession) return alert("New date/time is the same as current.");
 
-            // B. Confirmation
-            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nThis will move:\n• Student Records\n• Room Allotments\n• Scribe Assignments\n• Invigilation Duties\n• Absentee Lists\n\nProceed?`;
+            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nThis will move:\n• Student Records\n• Room Allotments\n• Assigned Invigilators\n\nProceed?`;
 
             if (!confirm(msg)) return;
 
-            const check = prompt("Type 'CHANGE' to confirm this bulk update:");
-            if (check !== 'CHANGE') return alert("Cancelled. Incorrect code.");
+            const check = prompt("Type 'CHANGE' to confirm:");
+            if (check !== 'CHANGE') return alert("Cancelled.");
 
-            // C. EXECUTE MOVE
             try {
-                // 1. Update Students (Base Data)
+                // 1. Update Students
                 let studentCount = 0;
                 allStudentData.forEach(s => {
                     if (s.Date === oldDate && s.Time === oldTime) {
@@ -11681,46 +11677,68 @@ Are you sure?
                 });
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
-                // 2. Helper to Move Keys in Objects
+                // 2. Helper to Move Data Safely
                 const moveKeyInStorage = (storageKey, type) => {
                     const raw = localStorage.getItem(storageKey);
                     if (!raw) return;
                     const data = JSON.parse(raw);
 
                     if (data[currentSession]) {
-                        // If target exists, MERGE (concat arrays or merge objects)
                         if (data[newSessionKey]) {
-                            if (Array.isArray(data[currentSession])) {
+                            // --- COLLISION HANDLING (MERGE) ---
+                            if (type === 'array') {
+                                // Room Allotments / Absentees: Concat Arrays
                                 data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
-                            } else {
+                            } 
+                            else if (storageKey === 'examInvigilationSlots') {
+                                // INVIGILATION SLOTS: Smart Merge Staff
+                                const target = data[newSessionKey];
+                                const source = data[currentSession];
+                                
+                                // Combine Assigned Staff (Unique)
+                                target.assigned = [...new Set([...target.assigned, ...source.assigned])];
+                                
+                                // Combine Unavailable
+                                if(source.unavailable) {
+                                    target.unavailable = [...(target.unavailable||[]), ...source.unavailable];
+                                }
+                                
+                                // Sum Counts
+                                target.studentCount = (target.studentCount || 0) + (source.studentCount || 0);
+                                target.scribeCount = (target.scribeCount || 0) + (source.scribeCount || 0);
+                                target.required = Math.max(target.required, source.required); // Keep highest req or recalculate later
+                            }
+                            else {
+                                // Scribe Map / Others: Object Merge
                                 data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
                             }
                         } else {
-                            // Simple Move
+                            // --- NO COLLISION (SIMPLE MOVE) ---
                             data[newSessionKey] = data[currentSession];
                         }
-                        // Delete Old
+                        
+                        // Delete Old Key
                         delete data[currentSession];
                         localStorage.setItem(storageKey, JSON.stringify(data));
                     }
                 };
 
-                // 3. Move All Associated Data
-                moveKeyInStorage('examRoomAllotment', 'array');      // Room Allotments
-                moveKeyInStorage('examScribeAllotment', 'object');   // Scribe Maps
-                moveKeyInStorage('examAbsenteeList', 'array');       // Absentee List
-                moveKeyInStorage('examInvigilatorMapping', 'object');// Invig Room Assignments
-                moveKeyInStorage('examInvigilationSlots', 'object'); // Admin Duty Slots
-                moveKeyInStorage('examQPCodes', 'object');           // QP Codes (if keyed by session)
+                // 3. Execute Moves
+                moveKeyInStorage('examRoomAllotment', 'array');
+                moveKeyInStorage('examScribeAllotment', 'object');
+                moveKeyInStorage('examAbsenteeList', 'array');
+                moveKeyInStorage('examInvigilatorMapping', 'object');
+                moveKeyInStorage('examInvigilationSlots', 'object'); // <--- NOW HANDLED SAFELY
+                moveKeyInStorage('examQPCodes', 'object');
 
-                alert(`✅ Successfully moved ${studentCount} students and all related data to ${newSessionKey}.`);
+                alert(`✅ Moved ${studentCount} students and assigned staff to ${newSessionKey}.`);
 
                 if (typeof syncDataToCloud === 'function') await syncDataToCloud();
                 window.location.reload();
 
             } catch (e) {
                 console.error(e);
-                alert("Error during reschedule: " + e.message);
+                alert("Error: " + e.message);
             }
         });
     }
