@@ -72,6 +72,9 @@ let tempAttendanceBatch = {}; // Stores parsed CSV data grouped by session key
 let isBulkSendingCancelled = false; // <--- NEW FLAG
 let lastManualRanking = []; // Stores the scoring snapshot for the open modal
 let currentEmailQueue = []; // Stores the list for bulk sending
+let vacationStart = "";
+let vacationEnd = "";
+let vacationExtraHolidays = new Set();
 let currentStaffPage = 1;
 const STAFF_PER_PAGE = 20;
 let currentRankPage = 1;
@@ -186,7 +189,12 @@ function setupLiveSync(collegeId, mode) {
             invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
             localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots)); // Sync for Dashboard
             advanceUnavailability = JSON.parse(collegeData.invigAdvanceUnavailability || '{}');
-
+            // [ADD THIS BLOCK] -------------------
+            const vacConfig = JSON.parse(collegeData.invigVacationConfig || '{}');
+            vacationStart = vacConfig.start || "";
+            vacationEnd = vacConfig.end || "";
+            vacationExtraHolidays = new Set(vacConfig.holidays || []);
+            // ------------------------------------
             // LOAD GLOBAL TARGET
             if (collegeData.invigGlobalTarget !== undefined) {
                 globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
@@ -6941,27 +6949,62 @@ function isActionAllowed(dateInput) {
 }
 
 // ==========================================
-// 🏖️ VACATION DUTY & SURRENDER REPORT LOGIC
+// 🏖️ VACATION DUTY & SURRENDER REPORT LOGIC (Cloud Sync)
 // ==========================================
 
-// State to store unique holiday dates (YYYY-MM-DD)
-let vacationExtraHolidays = new Set();
+// NOTE: 'vacationExtraHolidays', 'vacationStart', 'vacationEnd' are defined in Global State at top.
 
 window.openVacationReportModal = function() {
+    // 1. Set Inputs from Saved State (or defaults)
     const today = new Date();
     const year = today.getFullYear();
-    document.getElementById('vac-start').value = `${year}-04-01`;
-    document.getElementById('vac-end').value = `${year}-05-31`;
     
-    // Reset Holidays
-    vacationExtraHolidays.clear();
+    // Use saved values if they exist, otherwise default to April-May
+    const startVal = vacationStart || `${year}-04-01`;
+    const endVal = vacationEnd || `${year}-05-31`;
+
+    const startInput = document.getElementById('vac-start');
+    const endInput = document.getElementById('vac-end');
+
+    startInput.value = startVal;
+    endInput.value = endVal;
+
+    // 2. Attach Auto-Save Listeners
+    startInput.onchange = saveVacationConfig;
+    endInput.onchange = saveVacationConfig;
+    
+    // 3. Clear Input & Render
     document.getElementById('vac-holiday-input').value = "";
     renderVacationHolidays();
     
     window.openModal('vacation-report-modal');
 }
 
-window.addVacationHoliday = function() {
+// --- CLOUD SAVING FUNCTION ---
+async function saveVacationConfig() {
+    const s = document.getElementById('vac-start').value;
+    const e = document.getElementById('vac-end').value;
+    
+    // Update Global State
+    vacationStart = s;
+    vacationEnd = e;
+
+    const config = {
+        start: s,
+        end: e,
+        holidays: Array.from(vacationExtraHolidays)
+    };
+
+    try {
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { invigVacationConfig: JSON.stringify(config) });
+        // Optional: console.log("Vacation config saved.");
+    } catch(err) {
+        console.error("Failed to save vacation config", err);
+    }
+}
+
+window.addVacationHoliday = async function() {
     const input = document.getElementById('vac-holiday-input');
     const dateVal = input.value; // YYYY-MM-DD
     
@@ -6974,12 +7017,15 @@ window.addVacationHoliday = function() {
 
     vacationExtraHolidays.add(dateVal);
     renderVacationHolidays();
-    input.value = ""; // Clear input for next entry
+    input.value = ""; // Clear input
+    
+    await saveVacationConfig(); // Save to Cloud
 }
 
-window.removeVacationHoliday = function(dateStr) {
+window.removeVacationHoliday = async function(dateStr) {
     vacationExtraHolidays.delete(dateStr);
     renderVacationHolidays();
+    await saveVacationConfig(); // Save to Cloud
 }
 
 function renderVacationHolidays() {
