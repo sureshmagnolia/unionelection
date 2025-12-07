@@ -11584,8 +11584,8 @@ Are you sure?
             window.location.reload();
         });
     }
-   // ==========================================
-    // 📄 GLOBAL PDF PREVIEW (FIXED PRINTING V2)
+  // ==========================================
+    // 📄 GLOBAL PDF PREVIEW (FIXED PRINTING & THEME)
     // ==========================================
     window.openPdfPreview = function (contentHtml, filenamePrefix) {
         // 1. CLEAN CONTENT (Remove screen-specific and layout-breaking styles)
@@ -11621,7 +11621,9 @@ Are you sure?
             <style>
                 /* SCREEN PREVIEW STYLES */
                 body { 
-                    background-color: #525659; 
+                    /* Force Gray Background & Remove App Gradient */
+                    background: #525659 !important; 
+                    background-image: none !important;
                     margin: 0; 
                     padding: 20px; 
                     display: flex; 
@@ -11659,6 +11661,7 @@ Are you sure?
                     box-sizing: border-box;
                     page-break-after: always;
                     position: relative;
+                    background: white !important;
                 }
                 
                 .print-page:last-child { margin-bottom: 0 !important; page-break-after: auto; }
@@ -11689,7 +11692,8 @@ Are you sure?
                     body { 
                         display: block !important; 
                         padding: 0; margin: 0; 
-                        background: white; 
+                        background: white !important; 
+                        background-image: none !important; /* Ensure no pink gradient prints */
                         width: 100%; height: auto; 
                         overflow: visible; 
                     }
@@ -11697,6 +11701,7 @@ Are you sure?
                     #pdf-wrapper { 
                         width: 100%; box-shadow: none; margin: 0; 
                         overflow: visible; height: auto; 
+                        background: white !important;
                     }
 
                     .print-page {
@@ -11704,6 +11709,8 @@ Are you sure?
                         display: block !important; 
                         height: auto !important;
                         overflow: visible !important;
+                        margin: 0 !important;
+                        box-shadow: none !important;
                     }
 
                     @page { margin: 10mm; size: A4; } 
