@@ -4259,7 +4259,7 @@ window.openSlotReminderModal = function (key) {
         if (phone.length === 10) phone = "91" + phone;
 
         const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
-        const emailBody = generateProfessionalEmail(fullName, duties, "Duty Reminder");
+        const emailBody = generateProfessionalEmail(fullName, duties, "Invigilation Duty");
         const btnId = `email-btn-${index}`;
 
         if (staffEmail) {
