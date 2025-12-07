@@ -483,7 +483,94 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+// --- HELPER: Calculate Slot Requirements from Student Data ---
+function updateLocalSlotsFromStudents() {
+    const localBaseData = localStorage.getItem('examBaseData');
+    if (!localBaseData) return false; // No data to process
 
+    try {
+        const students = JSON.parse(localBaseData);
+        const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+        const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
+        const sessionStats = {};
+
+        // 1. Count Candidates
+        students.forEach(s => {
+            const d = s.Date ? s.Date.trim() : "";
+            const t = s.Time ? s.Time.trim() : "";
+            if (!d || !t) return;
+
+            const key = `${d} | ${t}`;
+            if (!sessionStats[key]) {
+                sessionStats[key] = {
+                    normalStreams: {},
+                    scribeStreams: {},
+                    totalScribes: 0,
+                    totalStudents: 0
+                };
+            }
+
+            sessionStats[key].totalStudents++;
+            const strm = s.Stream || "Regular";
+
+            if (scribeRegNos.has(s['Register Number'])) {
+                if (!sessionStats[key].scribeStreams[strm]) sessionStats[key].scribeStreams[strm] = 0;
+                sessionStats[key].scribeStreams[strm]++;
+                sessionStats[key].totalScribes++;
+            } else {
+                if (!sessionStats[key].normalStreams[strm]) sessionStats[key].normalStreams[strm] = 0;
+                sessionStats[key].normalStreams[strm]++;
+            }
+        });
+
+        // 2. Merge with Existing Slots
+        let existingSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        let hasChanges = false;
+
+        Object.keys(sessionStats).forEach(key => {
+            const stats = sessionStats[key];
+            let baseRequirement = 0;
+
+            // Calculate Norms
+            Object.values(stats.normalStreams).forEach(count => baseRequirement += Math.ceil(count / 30));
+            Object.values(stats.scribeStreams).forEach(count => baseRequirement += Math.ceil(count / 5));
+            const reserve = Math.ceil(baseRequirement * 0.10);
+            const totalRequired = baseRequirement + reserve;
+
+            if (!existingSlots[key]) {
+                // Create New Slot
+                existingSlots[key] = {
+                    required: totalRequired,
+                    reserveCount: reserve,
+                    assigned: [],
+                    unavailable: [],
+                    isLocked: false,
+                    scribeCount: stats.totalScribes,
+                    studentCount: stats.totalStudents
+                };
+                hasChanges = true;
+            } else {
+                // Update Existing (Only if counts changed)
+                const slot = existingSlots[key];
+                if (slot.required !== totalRequired || slot.studentCount !== stats.totalStudents) {
+                    slot.required = totalRequired;
+                    slot.reserveCount = reserve;
+                    slot.scribeCount = stats.totalScribes;
+                    slot.studentCount = stats.totalStudents;
+                    hasChanges = true;
+                }
+            }
+        });
+
+        if (hasChanges) {
+            localStorage.setItem('examInvigilationSlots', JSON.stringify(existingSlots));
+            return true; // Indicates slots were updated
+        }
+    } catch (e) {
+        console.error("Slot Calc Error:", e);
+    }
+    return false;
+}
     // ==========================================
     // ☁️ CLOUD SYNC FUNCTIONS (Fixed & Updated)
     // ==========================================
@@ -683,6 +770,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 6. HEAVY DATA (Students & Room Allotment) - ONLY on specific actions
             else if (targetSection === 'heavy') {
+        
+            // --- ADD THIS BLOCK ---
+            // 1. Auto-Calculate Slots based on new Student Data
+            const slotsUpdated = updateLocalSlotsFromStudents();
+        
+            // 2. If slots changed, trigger a slot sync immediately
+            if (slotsUpdated) {
+            // We await this to ensure slots are consistent in cloud
+            await syncDataToCloud('slots'); 
+            }
+                
+                
+                
                 const batch = writeBatch(db);
                 const bulkData = {
                     examBaseData: get('examBaseData'),
