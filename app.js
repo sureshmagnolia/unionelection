@@ -10698,37 +10698,24 @@ Are you sure?
     const restoreSettingsBtn = document.getElementById('restore-settings-btn');
     const restoreSettingsInput = document.getElementById('restore-settings-input');
 
-    // 2. NUKE IT ALL (Master Reset with Safety)
+    // B. NUKE IT ALL (Master Reset)
     if (nukeBtn) {
         nukeBtn.addEventListener('click', async () => {
-            // --- SAFETY PROMPT ---
-            if (confirm("🛡️ CRITICAL SAFETY CHECK 🛡️\n\nBefore you destroy everything...\nWould you like to download a FINAL BACKUP (CSV + JSON)?\n\nClick OK to Backup & Continue.\nClick Cancel to Continue without Backup.")) {
-                // Trigger Downloads
-                const csvBtn = document.getElementById('master-download-csv-btn');
-                const jsonBtn = document.getElementById('backup-data-button');
-                
-                if (csvBtn) {
-                     csvBtn.click();
-                }
-                await new Promise(r => setTimeout(r, 1500));
-                
-                if (jsonBtn) {
-                     jsonBtn.click();
-                }
-                await new Promise(r => setTimeout(r, 1000));
+            // 1. Safety Backup Prompt
+            if (confirm("🛡️ CRITICAL SAFETY CHECK 🛡️\n\nBefore you destroy everything...\nWould you like to download a FINAL BACKUP (CSV + JSON)?\n\n• Click OK to Backup first.\n• Click Cancel to proceed without backup.")) {
+                await triggerSafetyBackup();
             }
-            // ---------------------
 
-            // Level 1: Initial Warning
-            if (!confirm("⚠ NUCLEAR LAUNCH DETECTED ⚠\n\nYou are initiating a DESTRUCTIVE sequence that affects both Local and Cloud storage.\n\nAre you sure you want to proceed?")) {
+            // 2. Level 1 Warning
+            if (!confirm("⚠ NUCLEAR LAUNCH DETECTED ⚠\n\nYou are initiating a DESTRUCTIVE sequence for this College Database.\n\nAre you sure you want to proceed?")) {
                 return;
             }
 
-            // Level 2: Choice Selection
+            // 3. Payload Selection
             const choice = prompt(
                 "☢️ SELECT PAYLOAD YIELD ☢️\n\n" +
-                "Type 'DATA' for Tactical Strike (Wipes Students, Keeps Settings)\n" +
-                "Type 'FULL' for Total Annihilation (Factory Reset)\n\n" +
+                "Type 'DATA' to wipe Students & Allotments (Keeps Settings & Invigilators)\n" +
+                "Type 'FULL' to wipe All Exam Data & Settings (Keeps Invigilators)\n\n" +
                 "Enter payload type below:"
             );
 
@@ -10736,27 +10723,30 @@ Are you sure?
             const mode = choice.trim().toUpperCase();
 
             if (mode !== 'DATA' && mode !== 'FULL') {
-                alert("🚫 LAUNCH ABORTED 🚫\n\nInvalid payload type selected.\nSystem returning to safe mode.");
+                alert("🚫 LAUNCH ABORTED 🚫\n\nInvalid payload type.\nSystem returning to safe mode.");
                 return;
             }
 
-            // Level 3: Final Confirmation Code
+            // 4. Final Security Check
             const confirmCode = prompt(`⚠ FINAL SECURITY CHECK ⚠\n\nTo authorize this ${mode} reset, type 'DELETE' in the box below:`);
 
             if (confirmCode !== 'DELETE') {
-                alert("🚫 ACCESS DENIED 🚫\n\nIncorrect launch code entered.\nThe nuclear payload has been disarmed.\n\n(Phew, that was close!)");
+                alert("🚫 ACCESS DENIED 🚫\n\nIncorrect launch code.\nThe nuclear payload has been disarmed.");
                 return;
             }
 
-            // --- EXECUTION ---
+            // 5. EXECUTION
             nukeBtn.textContent = "🚀 MISSILES FIRED...";
             nukeBtn.disabled = true;
 
             try {
-                const { db, doc, writeBatch, setDoc, collection, getDocs } = window.firebase;
+                const { db, doc, writeBatch, setDoc, getDoc, collection, getDocs } = window.firebase;
 
                 if (mode === 'DATA') {
-                    // OPTION A: TACTICAL STRIKE (Data Only)
+                    // --- OPTION A: TACTICAL STRIKE (Data Only) ---
+                    // Wipes: Students, Allotments, QP Codes, Absentees.
+                    // Keeps: Settings (Rooms/Streams), College Name, Invigilators.
+                    
                     const keysToRemove = [
                         BASE_DATA_KEY, ROOM_ALLOTMENT_KEY, SCRIBE_ALLOTMENT_KEY,
                         ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY, 'examBaseData'
@@ -10774,45 +10764,80 @@ Are you sure?
                             lastUpdated: new Date().toISOString()
                         });
 
+                        // Delete Data Chunks
                         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
                         const chunkSnaps = await getDocs(dataColRef);
                         chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
 
                         await batch.commit();
                     }
-
-                    alert("💥 TACTICAL STRIKE SUCCESSFUL 💥\n\nStudent data has been vaporized.\nInfrastructure (Settings) remains intact.");
+                    alert("💥 TACTICAL STRIKE SUCCESSFUL 💥\n\nStudent data vaporized.\nSettings & Invigilators remain intact.");
 
                 } else if (mode === 'FULL') {
-                    // OPTION B: TOTAL ANNIHILATION (Full Reset)
-                    localStorage.clear();
+                    // --- OPTION B: TOTAL ANNIHILATION (Exam Reset) ---
+                    // Wipes: Students, Allotments, Settings (Rooms/Streams/Name).
+                    // Keeps: Invigilators, Invigilation Slots, Admin Access.
+
+                    localStorage.clear(); // Clear Browser
 
                     if (currentCollegeId) {
                         const mainRef = doc(db, "colleges", currentCollegeId);
                         
-                        // Wipe & Reset Cloud
-                        await setDoc(mainRef, {
-                            admins: [currentUser.email],
-                            allowedUsers: [currentUser.email],
-                            lastUpdated: new Date().toISOString(),
-                            examCollegeName: "University of Calicut"
-                        });
+                        // 1. Fetch Current Data to SAVE Invigilators
+                        const snap = await getDoc(mainRef);
+                        let preservedData = {};
+                        
+                        if (snap.exists()) {
+                            const d = snap.data();
+                            // Fields to PROTECT from the nuke
+                            preservedData = {
+                                admins: d.admins || [currentUser.email],
+                                allowedUsers: d.allowedUsers || [currentUser.email],
+                                staffAccessList: d.staffAccessList || [],
+                                
+                                // Invigilation Module Data
+                                examStaffData: d.examStaffData || "[]",
+                                examInvigilationSlots: d.examInvigilationSlots || "{}",
+                                invigAdvanceUnavailability: d.invigAdvanceUnavailability || "{}",
+                                invigRoles: d.invigRoles || "{}",
+                                invigDesignations: d.invigDesignations || "{}",
+                                invigDepartments: d.invigDepartments || "[]",
+                                invigGlobalTarget: d.invigGlobalTarget || 2,
+                                invigGoogleScriptUrl: d.invigGoogleScriptUrl || ""
+                            };
+                        }
 
+                        // 2. Overwrite with Fresh State + Preserved Data
+                        const freshState = {
+                            ...preservedData, // Put saved data back
+                            lastUpdated: new Date().toISOString(),
+                            examCollegeName: "University of Calicut", // Reset Name
+                            examRoomConfig: "{}", // Reset Rooms
+                            examStreamsConfig: '["Regular"]', // Reset Streams
+                            examSessionNames: "{}",
+                            examRulesConfig: "[]",
+                            examQPCodes: "{}",
+                            examScribeAllotment: "{}",
+                            examAbsenteeList: "{}"
+                        };
+
+                        await setDoc(mainRef, freshState);
+
+                        // 3. Delete Data Chunks
                         const batch = writeBatch(db);
                         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
                         const chunkSnaps = await getDocs(dataColRef);
                         chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
                         await batch.commit();
                     }
-
-                    alert("💥 KABOOM! 💥\n\nTotal annihilation complete.\nThe system is now a blank slate.");
+                    alert("💥 KABOOM! 💥\n\nExam System has been factory reset.\nInvigilation Module & Staff data are SAFE.");
                 }
 
                 window.location.reload();
 
             } catch (e) {
                 console.error("Nuke failed:", e);
-                alert("⚠️ LAUNCH FAILURE ⚠️\n\nAn error occurred during the sequence: " + e.message);
+                alert("⚠️ LAUNCH FAILURE ⚠️\n\nAn error occurred: " + e.message);
                 nukeBtn.textContent = "☢️ NUKE IT ALL";
                 nukeBtn.disabled = false;
             }
