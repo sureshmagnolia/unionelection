@@ -3729,7 +3729,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
     const logEntries = [];
     let assignedCount = 0;
-    const timestamp = new Date().toLocaleString();
+    const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
 
     // 5. Process Each Slot
     for (const target of targetSlots) {
@@ -4008,8 +4008,8 @@ function renderLiveLogs(query = "") {
 
     list.innerHTML = filtered.map(e => {
         const dateObj = new Date(e.t);
-        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const dateStr = dateObj.toLocaleDateString();
+        const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
+        const dateStr = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
         let borderClass = "border-l-4 border-gray-300";
         let bgClass = "bg-white";
@@ -5716,7 +5716,7 @@ window.saveManualAllocation = async function () {
 
     if (invigilationSlots[key]) {
         // --- 1. GENERATE LOGIC REPORT ---
-        const timestamp = new Date().toLocaleString();
+        const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
         const adminName = currentUser ? currentUser.email : "Admin";
 
         // We use the 'lastManualRanking' global variable we captured when opening the modal
