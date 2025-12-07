@@ -1028,7 +1028,6 @@ window.changeRankPage = function (delta) {
     renderStaffRankList(myEmail);
 }
 
-
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
@@ -1099,10 +1098,10 @@ function renderStaffCalendar(myEmail) {
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
                 
-                // --- RESPONSIVE STATUS TEXT ---
-                // Mobile: Just the number (e.g. "26")
-                // Desktop: Full text (e.g. "26 Left")
-                let statusText = `<span class="md:hidden font-extrabold text-[10px]">${available}</span><span class="hidden md:inline">${available} Left</span>`;
+                // --- RESPONSIVE STATUS TEXT (FIXED SIZE) ---
+                // Mobile: text-[8px] font-bold (Matches 'AN'/'FN' size)
+                // Desktop: Full text
+                let statusText = `<span class="md:hidden text-[8px] font-bold">${available}</span><span class="hidden md:inline">${available} Left</span>`;
                 
                 let glowClass = "";
 
@@ -1198,6 +1197,7 @@ function renderStaffCalendar(myEmail) {
     }
     if (ui.calGrid) ui.calGrid.innerHTML = html;
 }
+
 
 
 function renderExchangeMarket(myEmail) {
