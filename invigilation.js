@@ -1358,6 +1358,7 @@ function renderExchangeMarket(myEmail) {
     });
 }
 
+
 window.openDayDetail = function (dateStr, email) {
     document.getElementById('modal-day-title').textContent = dateStr;
     const container = document.getElementById('modal-sessions-container');
@@ -1380,9 +1381,11 @@ window.openDayDetail = function (dateStr, email) {
     if (isPast) restrictLabel = "(Past Date - Locked)";
     if (isTooFar) restrictLabel = "(>3 Months - Locked)";
 
-    // TRACK ASSIGNMENTS
+    // TRACK ASSIGNMENTS & ADMIN LOCKS
     let isAssignedFN = false;
     let isAssignedAN = false;
+    let adminLockFN = false;
+    let adminLockAN = false;
 
     // 2. RENDER EXAM SESSIONS
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
@@ -1409,6 +1412,12 @@ window.openDayDetail = function (dateStr, email) {
                 if (isAN) isAssignedAN = true;
                 else isAssignedFN = true;
             }
+            
+            // Track Admin Locks for Bottom Section
+            if (isAdminLocked) {
+                if (isAN) adminLockAN = true;
+                else adminLockFN = true;
+            }
 
             // --- Action Buttons ---
             let actionHtml = "";
@@ -1429,11 +1438,10 @@ window.openDayDetail = function (dateStr, email) {
                      if (isPostedByMe) {
                          actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
                      } else {
-                         // Show Assigned status but indicate Admin Lock context
                          actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
                      }
                  } else {
-                     // NOT ASSIGNED: Block Volunteering & Unavailability
+                     // BLOCK Volunteering & Unavailability
                      actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm">
                         <span>🛡️</span> Posting Restricted by Admin
                      </div>`;
@@ -1462,7 +1470,7 @@ window.openDayDetail = function (dateStr, email) {
                 }
             }
 
-            // Reserve & Staff List (Unchanged)
+            // Reserve & Staff List
             const reserves = getSlotReserves(key);
             const reserveEmails = reserves.map(r => r.email);
             let staffListHtml = '';
@@ -1489,11 +1497,75 @@ window.openDayDetail = function (dateStr, email) {
     // 3. ADVANCE / GENERAL UNAVAILABILITY SECTION
     
     // [RESTRICTION CHECK FOR ADVANCE SECTION]
-    // ... (rest of advance section) ...
+    if (isRestricted) {
+         let reasonMsg = "Editing disabled.";
+         if (isPast) reasonMsg = "Date in Past";
+         if (isTooFar) reasonMsg = "Date > 3 Months ahead";
+         
+         container.innerHTML += `
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center">
+                    <p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p>
+                </div>
+            </div>`;
+         
+         window.openModal('day-detail-modal');
+         return;
+    }
+
+    // --- NORMAL MODE: Render Toggle Buttons ---
+    const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
+    const fnUnavail = adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === email : u.email === email));
+    const anUnavail = adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === email : u.email === email));
+    const bothUnavail = fnUnavail && anUnavail;
+
+    const getBtnState = (isAssigned, isMarked, label, isAdminLocked) => {
+        if (isAdminLocked && !isMarked) return { disabled: 'disabled', class: 'bg-amber-50 text-amber-500 border-amber-100 cursor-not-allowed', text: `🛡️ ${label} Admin Locked` };
+        if (isAssigned) return { disabled: 'disabled', class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed', text: `🚫 On Duty (${label})` };
+        if (isMarked) return { disabled: '', class: 'bg-red-600 text-white border-red-700 hover:bg-red-700', text: `🚫 ${label} Unavailable` };
+        return { disabled: '', class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50', text: `Mark ${label}` };
+    };
+
+    const fnBtn = getBtnState(isAssignedFN, fnUnavail, "FN", adminLockFN);
+    const anBtn = getBtnState(isAssignedAN, anUnavail, "AN", adminLockAN);
+
+    const anyDuty = isAssignedFN || isAssignedAN;
+    const anyAdminLock = adminLockFN || adminLockAN;
+
+    let wholeClass, wholeText, wholeDisabled;
+
+    if (anyAdminLock) {
+        wholeClass = "bg-amber-50 text-amber-500 border-amber-100 cursor-not-allowed";
+        wholeText = "🛡️ Whole Day Locked by Admin";
+        wholeDisabled = "disabled";
+    } else if (anyDuty) {
+        wholeClass = "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed";
+        wholeText = "🚫 Cannot Mark Whole Day (On Duty)";
+        wholeDisabled = "disabled";
+    } else {
+        wholeClass = bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100';
+        wholeText = bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable';
+        wholeDisabled = "";
+    }
+
+    container.innerHTML += `
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2">
+                <span>🗓️</span> General Unavailability (OD/DL/Leave)
+            </h4>
+            <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                <p class="text-[10px] text-gray-600 mb-3">Mark leave for sessions or the whole day.</p>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" ${fnBtn.disabled} class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${fnBtn.class}">${fnBtn.text}</button>
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" ${anBtn.disabled} class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${anBtn.class}">${anBtn.text}</button>
+                </div>
+                <button onclick="toggleWholeDay('${dateStr}', '${email}')" ${wholeDisabled} class="w-full py-2 text-xs font-bold rounded border transition flex items-center justify-center gap-2 ${wholeClass}">${wholeText}</button>
+            </div>
+        </div>
+    `;
 
     window.openModal('day-detail-modal');
 }
-
 
 // --- HELPERS & ACTIONS ---
 function updateHeaderButtons(currentView) {
