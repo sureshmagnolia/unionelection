@@ -1584,7 +1584,7 @@ async function saveManualSlot() {
         unavailable: existing.unavailable || [],
         isLocked: existing.isLocked !== undefined ? existing.isLocked : true
     };
-
+    logActivity("Session Created", `Admin created/updated session: ${key} (Req: ${reqInput}).`);
     await syncSlotsToCloud();
     window.closeModal('add-slot-modal');
     renderSlotsGridAdmin();
@@ -1760,6 +1760,8 @@ window.toggleWholeDay = async function(dateStr, email) {
 // --- STANDARD EXPORTS ---
 window.toggleLock = async function (key) {
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
+    const status = invigilationSlots[key].isLocked ? "LOCKED" : "UNLOCKED";
+    logActivity("Session Lock Toggle", `Admin ${status} session ${key}.`);
     await syncSlotsToCloud();
 }
 
@@ -2444,7 +2446,7 @@ window.saveNewStaff = async function () {
             });
             if (advanceChanged) await saveAdvanceUnavailability();
         }
-
+        logActivity("Staff Profile Updated", `Admin updated profile for ${name} (${email}).`);
         // 2. Update Local Array
         staffData[index] = {
             ...oldData,
@@ -2462,6 +2464,7 @@ window.saveNewStaff = async function () {
             dutiesDone: 0, roleHistory: [],
             preferredDays: availableDays
         };
+        logActivity("New Staff Added", `Admin added new staff: ${name} (${email}).`);
         staffData.push(newObj);
         await addStaffAccess(email);
         alert("New staff added successfully.");
@@ -2488,6 +2491,7 @@ window.deleteStaff = async function (index) {
     if (confirm(`Archive ${staff.name}?\n\nThey will be hidden from new duty assignments, but their past attendance records will remain for reports.`)) {
         // Soft Delete
         staffData[index].status = 'archived';
+        logActivity("Staff Archived", `Admin archived staff member: ${staff.name} (${staff.email}).`);
         await syncStaffToCloud();
         await removeStaffAccess(staff.email); // Optional: Block login
         renderStaffTable();
@@ -2514,13 +2518,22 @@ window.saveRoleAssignment = async function () {
     if (!start) return alert("Dates required");
     if (!staffData[idx].roleHistory) staffData[idx].roleHistory = [];
     staffData[idx].roleHistory.push({ role, start, end });
+    logActivity("Role Assigned", `Assigned role '${role}' to ${staffData[idx].name}.`);
     await syncStaffToCloud();
     window.closeModal('role-assignment-modal');
     renderStaffTable();
 }
 
 window.removeRoleFromStaff = async function (sIdx, rIdx) {
+    // 1. Capture the role name BEFORE deleting it
+    const roleName = staffData[sIdx].roleHistory[rIdx].role; 
+    
+    // 2. Delete the role
     staffData[sIdx].roleHistory.splice(rIdx, 1);
+    
+    // 3. Log it (Now roleName is defined)
+    logActivity("Role Removed", `Removed role '${roleName}' from ${staffData[sIdx].name}.`);
+    
     await syncStaffToCloud();
     window.closeModal('role-assignment-modal');
     renderStaffTable();
@@ -2727,7 +2740,7 @@ window.saveRoleConfig = async function () {
     // CAPTURE URL
     const newUrl = document.getElementById('google-script-url').value.trim();
     googleScriptUrl = newUrl;
-
+    logActivity("Settings Updated", `Admin updated Global Target to ${globalDutyTarget} and Guest Target to ${guestGlobalTarget}.`);
     // Save to Cloud
     const ref = doc(db, "colleges", currentCollegeId);
     await updateDoc(ref, {
@@ -3037,7 +3050,7 @@ window.toggleAttendanceLock = async function (key, lockState) {
 
     // Save state
     invigilationSlots[key].attendanceLocked = lockState;
-
+    logActivity("Attendance Register Lock", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} attendance for ${key}.`);
     // If locking, ensure we save the current list too, just in case
     if (lockState) {
         const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
@@ -3276,6 +3289,7 @@ window.addNewDepartment = function () {
     }
 
     departmentsConfig.push({ name: name, email: email });
+    logActivity("Department Added", `Admin added new department: ${name}.`);
     renderDepartmentsList();
 
     nameInput.value = '';
@@ -3286,6 +3300,7 @@ window.deleteDepartment = function (name) {
     if (confirm(`Delete department "${name}"?`)) {
         departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
         departmentsConfig = departmentsConfig.filter(d => d.name !== name);
+        logActivity("Department Deleted", `Admin deleted department: ${name}.`);
         renderDepartmentsList();
     }
 }
@@ -3335,6 +3350,7 @@ window.toggleWeekLock = async function (monthStr, weekNum, lockState) {
     });
 
     if (changed) {
+        logActivity("Weekly Lock Toggle", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} all slots for ${monthStr} Week ${weekNum}.`);
         await syncSlotsToCloud();
         renderSlotsGridAdmin();
         alert(`Week ${weekNum} has been ${lockState ? 'LOCKED' : 'UNLOCKED'}.`);
@@ -4714,6 +4730,7 @@ window.clearOldData = async function () {
     });
 
     if (removedCount > 0) {
+        logActivity("Data Cleanup", `Admin cleared ${removedCount} old session records from previous AY.`);
         invigilationSlots = newSlots;
         await syncSlotsToCloud();
         renderSlotsGridAdmin();
@@ -6021,7 +6038,7 @@ window.executeReschedule = async function () {
 
     // 3. Delete Old
     delete invigilationSlots[oldKey];
-
+    logActivity("Session Rescheduled", `Admin moved session from ${oldKey} to ${newKey}. Staff moved: ${affectedStaff.length}.`);
     // 4. Save & Close
     await syncSlotsToCloud();
     window.closeModal('reschedule-modal');
