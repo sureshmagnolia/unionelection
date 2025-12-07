@@ -776,6 +776,7 @@ function renderSlotsGridAdmin() {
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
 // Updated: Render Staff List with Clickable Done Count
+// Updated: Render Staff List with Live Status Icon
 function renderStaffTable() {
     if (!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
@@ -783,24 +784,31 @@ function renderStaffTable() {
     const filter = document.getElementById('staff-search').value.toLowerCase();
     const today = new Date();
 
-    // 1. Filter & Map Data (Updated to include Designation search)
+    // 1. Filter & Map Data
     const filteredItems = staffData
         .map((staff, i) => ({ ...staff, originalIndex: i }))
         .filter(item => {
             if (item.status === 'archived') return false;
 
-            // Search Logic: Name OR Dept OR Designation
+            // Search Logic
             if (filter) {
                 const matchName = item.name.toLowerCase().includes(filter);
                 const matchDept = item.dept.toLowerCase().includes(filter);
-                const matchDesig = (item.designation || "").toLowerCase().includes(filter); // <--- NEW CHECK
-
+                const matchDesig = (item.designation || "").toLowerCase().includes(filter);
                 if (!matchName && !matchDept && !matchDesig) return false;
             }
             return true;
         })
-        // Sort: Dept (A-Z) -> Name (A-Z)
+        // Sort: Online Status First -> Dept -> Name
         .sort((a, b) => {
+            // Live Status Sort (Online users go to top)
+            if (window.globalLiveUsers) {
+                const statusA = window.globalLiveUsers[a.email]?.status || 'offline';
+                const statusB = window.globalLiveUsers[b.email]?.status || 'offline';
+                if (statusA === 'online' && statusB !== 'online') return -1;
+                if (statusA !== 'online' && statusB === 'online') return 1;
+            }
+
             const deptA = (a.dept || "").toLowerCase();
             const deptB = (b.dept || "").toLowerCase();
             if (deptA < deptB) return -1;
@@ -816,8 +824,6 @@ function renderStaffTable() {
     const start = (currentStaffPage - 1) * STAFF_PER_PAGE;
     const end = start + STAFF_PER_PAGE;
     const pageItems = filteredItems.slice(start, end);
-
-    // ... rest of the function remains the same ...
 
     // Update Controls
     const pageInfo = document.getElementById('staff-page-info');
@@ -835,6 +841,9 @@ function renderStaffTable() {
         const done = getDutiesDoneCount(staff.email);
         const pending = Math.max(0, target - done);
 
+        // --- NEW: LIVE STATUS ICON ---
+        const liveIcon = window.getLiveStatusIcon ? window.getLiveStatusIcon(staff.email) : '';
+
         // Role Label
         let activeRoleLabel = "";
         if (staff.roleHistory && staff.roleHistory.length > 0) {
@@ -850,7 +859,7 @@ function renderStaffTable() {
 
         const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
 
-        // Lock Logic
+        // Lock Logic for Buttons
         let actionButtons = "";
         if (isStaffListLocked) {
             actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
@@ -871,7 +880,7 @@ function renderStaffTable() {
             <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto">
                 
                 <div class="hidden md:flex items-center">
-                    <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
+                    <div class="mr-2">${liveIcon}</div> <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
                         ${staff.name.charAt(0)}
                     </div>
                     <div>
@@ -885,7 +894,7 @@ function renderStaffTable() {
                 <div class="md:hidden">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
-                             <div class="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm">
+                             <div class="mr-1">${liveIcon}</div> <div class="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm">
                                 ${staff.name.charAt(0)}
                             </div>
                             <div>
