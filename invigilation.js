@@ -6844,10 +6844,6 @@ window.openDashboardInvigModal = function (sessionKey) {
 }
 
 
-
-
-
-
 // Initialize Listeners
 setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
 setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
@@ -6892,7 +6888,38 @@ function showView(viewName) {
     views[viewName].classList.remove('hidden');
 }
 
+// --- VALIDATION HELPER ---
+function isActionAllowed(dateInput) {
+    let d;
+    // Parse DD.MM.YYYY string
+    if (typeof dateInput === 'string') {
+        const [dd, mm, yyyy] = dateInput.split('.');
+        d = new Date(yyyy, mm - 1, dd);
+    } else {
+        d = dateInput;
+    }
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const checkDate = new Date(d);
+    checkDate.setHours(0, 0, 0, 0);
+
+    const maxDate = new Date(today);
+    maxDate.setMonth(today.getMonth() + 3);
+
+    // 1. Block Past Dates
+    if (checkDate < today) {
+        alert("🚫 Action Denied: Cannot modify records for past dates.");
+        return false;
+    }
+    // 2. Block Dates > 3 Months in Future
+    if (checkDate > maxDate) {
+        alert("🚫 Action Denied: You can only manage availability up to 3 months in advance.");
+        return false;
+    }
+    return true;
+}
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
