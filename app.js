@@ -11628,7 +11628,7 @@ Are you sure?
         }
     }
 
- // 2. Reschedule Logic (Smart Merge for Invigilators - FIXED UNAVAILABILITY)
+ // 2. Reschedule Logic (Smart Merge + Unavailability Check)
     if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
@@ -11658,7 +11658,7 @@ Are you sure?
 
             if (newSessionKey === currentSession) return alert("New date/time is the same as current.");
 
-            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nThis will move:\n• Student Records\n• Room Allotments\n• Assigned Invigilators\n\n(Note: Unavailability records will be reset for this session as the date is changing.)\n\nProceed?`;
+            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nProceed?`;
 
             if (!confirm(msg)) return;
 
@@ -11677,6 +11677,23 @@ Are you sure?
                 });
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
+                // --- PREPARE CONFLICT CHECKER ---
+                // Load Advance Unavailability (Leaves)
+                const unavJson = localStorage.getItem('invigAdvanceUnavailability');
+                const advanceUnav = unavJson ? JSON.parse(unavJson) : {};
+                
+                // Determine New Session Type (FN/AN)
+                const tStr = newTime.toUpperCase();
+                const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
+                const newSessCode = isAN ? "AN" : "FN";
+                
+                // Get list of people unavailable on the NEW DATE & SESSION
+                const dateEntry = advanceUnav[newDate] || {};
+                const sessionUnav = dateEntry[newSessCode] || []; // Array of {email: "..."} objects
+                const blockedEmails = new Set(sessionUnav.map(u => (typeof u === 'string' ? u : u.email)));
+                
+                let removedStaffLog = [];
+
                 // 2. Helper to Move Data Safely
                 const moveKeyInStorage = (storageKey, type) => {
                     const raw = localStorage.getItem(storageKey);
@@ -11687,39 +11704,55 @@ Are you sure?
                         if (data[newSessionKey]) {
                             // --- COLLISION (MERGE) ---
                             if (type === 'array') {
-                                // Room Allotments / Absentees: Concat Arrays
                                 data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
                             } 
                             else if (storageKey === 'examInvigilationSlots') {
-                                // INVIGILATION SLOTS: Smart Merge
                                 const target = data[newSessionKey];
                                 const source = data[currentSession];
                                 
-                                // Combine Assigned Staff (Unique)
-                                target.assigned = [...new Set([...target.assigned, ...source.assigned])];
+                                // Merge Assigned Staff
+                                let combined = [...target.assigned, ...source.assigned];
                                 
-                                // *** CRITICAL FIX: DO NOT MERGE UNAVAILABILITY ***
-                                // Old unavailability reasons (e.g. "Dentist on Monday") don't apply to the new date (Tuesday)
-                                // So we leave target.unavailable as is, ignoring source.unavailable
+                                // *** FILTER CONFLICTS ***
+                                const safeList = [];
+                                combined.forEach(email => {
+                                    if (blockedEmails.has(email)) {
+                                        if (!removedStaffLog.includes(email)) removedStaffLog.push(email);
+                                    } else {
+                                        safeList.push(email);
+                                    }
+                                });
+                                target.assigned = [...new Set(safeList)]; // Unique only
                                 
-                                // Sum Counts
+                                // Reset Unavailability (Old reasons don't apply)
+                                // We do NOT merge source.unavailable
+                                
                                 target.studentCount = (target.studentCount || 0) + (source.studentCount || 0);
                                 target.scribeCount = (target.scribeCount || 0) + (source.scribeCount || 0);
                                 target.required = Math.max(target.required, source.required);
                             }
                             else {
-                                // Scribe Map / Others: Object Merge
                                 data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
                             }
                         } else {
                             // --- NO COLLISION (SIMPLE MOVE) ---
-                            data[newSessionKey] = data[currentSession];
+                            let payload = data[currentSession];
 
-                            // *** CRITICAL FIX: RESET UNAVAILABILITY ***
-                            // If moving an Invigilation Slot to a fresh date, clear the old unavailability list
+                            // *** FILTER CONFLICTS ***
                             if (storageKey === 'examInvigilationSlots') {
-                                data[newSessionKey].unavailable = [];
+                                payload.unavailable = []; // Reset old reasons
+                                
+                                const originalCount = payload.assigned.length;
+                                payload.assigned = payload.assigned.filter(email => {
+                                    if (blockedEmails.has(email)) {
+                                        removedStaffLog.push(email);
+                                        return false;
+                                    }
+                                    return true;
+                                });
                             }
+                            
+                            data[newSessionKey] = payload;
                         }
                         
                         // Delete Old Key
@@ -11733,10 +11766,16 @@ Are you sure?
                 moveKeyInStorage('examScribeAllotment', 'object');
                 moveKeyInStorage('examAbsenteeList', 'array');
                 moveKeyInStorage('examInvigilatorMapping', 'object');
-                moveKeyInStorage('examInvigilationSlots', 'object'); // Handled with fix
+                moveKeyInStorage('examInvigilationSlots', 'object'); 
                 moveKeyInStorage('examQPCodes', 'object');
 
-                alert(`✅ Moved ${studentCount} students and assigned staff to ${newSessionKey}.\n(Unavailability flags have been reset for the new date).`);
+                let alertMsg = `✅ Moved ${studentCount} students to ${newSessionKey}.`;
+                
+                if (removedStaffLog.length > 0) {
+                    alertMsg += `\n\n⚠️ ${removedStaffLog.length} invigilators were UNASSIGNED because they are marked unavailable (Leave/OD) on the new date:\n${removedStaffLog.join(', ')}`;
+                }
+
+                alert(alertMsg);
 
                 if (typeof syncDataToCloud === 'function') await syncDataToCloud();
                 window.location.reload();
