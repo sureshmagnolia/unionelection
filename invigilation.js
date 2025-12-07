@@ -121,74 +121,102 @@ document.getElementById('logout-btn').addEventListener('click', () => signOut(au
 
 async function handleLogin(user) {
     document.getElementById('login-btn').innerText = "Verifying...";
+    console.log("👤 Handling login for:", user.email);
 
-    // 1. Check Admin Access (allowedUsers)
-    const collegesRef = collection(db, "colleges");
-    const qAdmin = query(collegesRef, where("allowedUsers", "array-contains", user.email));
-    const adminSnap = await getDocs(qAdmin);
-
-    if (!adminSnap.empty) {
-        // ADMIN LOGIN
-        const docSnap = adminSnap.docs[0];
-        currentCollegeId = docSnap.id;
-        isAdmin = true;
-        
-        // --- NEW: Init Live Presence (Admin Mode = True) ---
-        if (typeof window.initLivePresence === 'function') {
-            window.initLivePresence(user.email, user.displayName || "Admin", true);
-        }
-        // --------------------------------------------------
-
-        setupLiveSync(currentCollegeId, 'admin');
-        return;
-    }
-
-    // 2. Check Staff Access (staffAccessList)
-    const qStaff = query(collegesRef, where("staffAccessList", "array-contains", user.email));
-    const staffSnap = await getDocs(qStaff);
-
-    if (!staffSnap.empty) {
-        // STAFF LOGIN
-        const docSnap = staffSnap.docs[0];
-        currentCollegeId = docSnap.id;
-        isAdmin = false;
-
-        // --- NEW: Init Live Presence (Staff Mode = False) ---
-        if (typeof window.initLivePresence === 'function') {
-            window.initLivePresence(user.email, user.displayName || "Staff", false);
-        }
-        // ---------------------------------------------------
-
-        setupLiveSync(currentCollegeId, 'staff');
-        return;
-    }
-
-    // 3. Fallback: Check Link ID
+    // --- 1. PRIORITY: Check Link ID (Direct URL Access) ---
+    // We do this FIRST because it's the most reliable method and avoids broad permission errors.
     const urlParams = new URLSearchParams(window.location.search);
     const urlId = urlParams.get('id');
-    if (urlId) {
-        const docRef = doc(db, "colleges", urlId);
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-            const sList = JSON.parse(snap.data().examStaffData || '[]');
-            const me = sList.find(s => s.email.toLowerCase() === user.email.toLowerCase());
-            if (me) {
-                currentCollegeId = urlId;
-                isAdmin = false;
-                
-                // --- NEW: Init Live Presence (Staff Mode = False) ---
-                if (typeof window.initLivePresence === 'function') {
-                    window.initLivePresence(user.email, user.displayName || "Staff", false);
-                }
-                // ---------------------------------------------------
 
-                setupLiveSync(currentCollegeId, 'staff');
-            } else { alert("Access Denied: Email not in staff list."); signOut(auth); }
-        } else { alert("Invalid Link."); signOut(auth); }
-    } else {
-        alert("Access Denied. You are not listed as Admin or Staff.");
-        signOut(auth);
+    if (urlId) {
+        console.log("🔗 URL ID found:", urlId);
+        try {
+            const docRef = doc(db, "colleges", urlId);
+            const snap = await getDoc(docRef);
+
+            if (snap.exists()) {
+                const data = snap.data();
+                
+                // A. Check if Admin
+                if (data.allowedUsers && data.allowedUsers.includes(user.email)) {
+                    initializeSession(urlId, true, "Admin");
+                    return;
+                }
+
+                // B. Check if Staff
+                // Parse staff data safely (handle string or object)
+                const sList = JSON.parse(data.examStaffData || '[]');
+                const me = sList.find(s => s.email.toLowerCase() === user.email.toLowerCase());
+
+                // Also check the explicit access list if present
+                const hasAccess = (data.staffAccessList && data.staffAccessList.includes(user.email));
+
+                if (me || hasAccess) {
+                    initializeSession(urlId, false, "Staff");
+                    return;
+                }
+                
+                alert("⛔ Access Denied: Your email is not listed in this college's staff list.");
+                signOut(auth);
+                return;
+            } else {
+                alert("❌ Invalid Link: College not found.");
+            }
+        } catch (e) {
+            console.error("Link Login Error:", e);
+        }
     }
+
+    // --- 2. FALLBACK: Search for Admin Access ---
+    try {
+        const collegesRef = collection(db, "colleges");
+        const qAdmin = query(collegesRef, where("allowedUsers", "array-contains", user.email));
+        const adminSnap = await getDocs(qAdmin);
+
+        if (!adminSnap.empty) {
+            const docSnap = adminSnap.docs[0];
+            initializeSession(docSnap.id, true, "Admin");
+            return;
+        }
+    } catch (e) {
+        console.warn("Admin search skipped/failed (likely permissions):", e.message);
+        // Continue to staff check...
+    }
+
+    // --- 3. FALLBACK: Search for Staff Access ---
+    try {
+        const collegesRef = collection(db, "colleges");
+        const qStaff = query(collegesRef, where("staffAccessList", "array-contains", user.email));
+        const staffSnap = await getDocs(qStaff);
+
+        if (!staffSnap.empty) {
+            const docSnap = staffSnap.docs[0];
+            initializeSession(docSnap.id, false, "Staff");
+            return;
+        }
+    } catch (e) {
+        console.warn("Staff search failed:", e.message);
+    }
+
+    // --- 4. NO ACCESS FOUND ---
+    alert("⛔ Access Denied.\n\nYou are not listed as an Admin or Staff member.\nIf you are staff, please use the direct link provided by your admin.");
+    signOut(auth);
+    document.getElementById('login-btn').innerText = "Login with Google";
+}
+
+// --- Helper to start the session ---
+function initializeSession(id, adminStatus, roleName) {
+    console.log(`✅ Initializing Session: ${id} as ${roleName}`);
+    currentCollegeId = id;
+    isAdmin = adminStatus;
+
+    // Start Live Presence
+    if (typeof window.initLivePresence === 'function') {
+        window.initLivePresence(currentUser.email, currentUser.displayName || roleName, isAdmin);
+    }
+
+    // Start Data Sync
+    setupLiveSync(currentCollegeId, isAdmin ? 'admin' : 'staff');
 }
 
 function setupLiveSync(collegeId, mode) {
