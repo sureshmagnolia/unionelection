@@ -1305,11 +1305,28 @@ window.openDayDetail = function (dateStr, email) {
     const container = document.getElementById('modal-sessions-container');
     container.innerHTML = '';
 
+    // --- 1. DATE VALIDATION CHECK ---
+    const [dd, mm, yyyy] = dateStr.split('.');
+    const currentD = new Date(yyyy, mm - 1, dd);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Midnight today
+    
+    const maxDate = new Date(today);
+    maxDate.setMonth(today.getMonth() + 3); // 3 Months limit
+
+    const isPast = currentD < today;
+    const isTooFar = currentD > maxDate;
+    const isRestricted = isPast || isTooFar;
+    
+    let restrictLabel = "";
+    if (isPast) restrictLabel = "(Past Date - Locked)";
+    if (isTooFar) restrictLabel = "(>3 Months - Locked)";
+
     // TRACK ASSIGNMENTS FOR THIS DAY
     let isAssignedFN = false;
     let isAssignedAN = false;
 
-    // 1. RENDER EXISTING EXAM SESSIONS
+    // 2. RENDER EXAM SESSIONS (Slots)
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
 
     if (sessions.length > 0) {
@@ -1325,44 +1342,53 @@ window.openDayDetail = function (dateStr, email) {
             const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
             const marketOffers = slot.exchangeRequests ? slot.exchangeRequests.filter(e => e !== email) : [];
 
-            // Determine Session Time for Button Logic
             const t = key.split(' | ')[1].toUpperCase();
             const isAN = (t.includes("PM") || t.startsWith("12:") || t.startsWith("12."));
             const sessLabel = isAN ? "AFTERNOON (AN)" : "FORENOON (FN)";
 
-            // Update Daily Flags
             if (isAssigned) {
                 if (isAN) isAssignedAN = true;
                 else isAssignedFN = true;
             }
 
-            // --- Action Buttons (Existing Logic) ---
+            // --- Action Buttons ---
             let actionHtml = "";
-            if (isAssigned) {
-                if (isPostedByMe) {
-                    actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
-                } else if (isLocked) {
-                    actionHtml = `<button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm">♻️ Post for Exchange</button>`;
-                } else {
-                    actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold">✅ Assigned (Click to Cancel)</button>`;
-                }
-            } else if (marketOffers.length > 0) {
-                let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
-                actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
-            } else if (isUnavailable) {
-                actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition">Undo "Unavailable"</button>`;
+            
+            // [RESTRICTION CHECK FOR SLOTS]
+            if (isRestricted) {
+                 if (isAssigned) {
+                     actionHtml = `<div class="w-full bg-gray-100 text-gray-500 border border-gray-200 text-xs py-2 rounded font-bold text-center">✅ Duty Assigned ${restrictLabel}</div>`;
+                 } else if (isUnavailable) {
+                     actionHtml = `<div class="w-full bg-red-50 text-red-500 border border-red-100 text-xs py-2 rounded font-bold text-center">⛔ Marked Unavailable ${restrictLabel}</div>`;
+                 } else {
+                     actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
+                 }
             } else {
-                const unavBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-4 rounded font-bold">Unavailable</button>`;
-                if (isLocked) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
-                else if (needed <= 0) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200">Full</div>${unavBtn}</div>`;
-                else actionHtml = `<div class="flex gap-2 w-full"><button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold">Volunteer</button>${unavBtn}</div>`;
+                // NORMAL MODE (Buttons Active)
+                if (isAssigned) {
+                    if (isPostedByMe) {
+                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
+                    } else if (isLocked) {
+                        actionHtml = `<button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm">♻️ Post for Exchange</button>`;
+                    } else {
+                        actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold">✅ Assigned (Click to Cancel)</button>`;
+                    }
+                } else if (marketOffers.length > 0) {
+                     let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
+                     actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
+                } else if (isUnavailable) {
+                    actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition">Undo "Unavailable"</button>`;
+                } else {
+                    const unavBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-4 rounded font-bold">Unavailable</button>`;
+                    if (isLocked) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
+                    else if (needed <= 0) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200">Full</div>${unavBtn}</div>`;
+                    else actionHtml = `<div class="flex gap-2 w-full"><button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold">Volunteer</button>${unavBtn}</div>`;
+                }
             }
 
-            // Reserve Logic
+            // Reserve & Staff List
             const reserves = getSlotReserves(key);
             const reserveEmails = reserves.map(r => r.email);
-
-            // Staff List
             let staffListHtml = '';
             if (slot.assigned.length > 0) {
                 const listItems = slot.assigned.map(st => {
@@ -1370,14 +1396,11 @@ window.openDayDetail = function (dateStr, email) {
                     if (!s) return '';
                     const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
                     const statusIcon = isExchanging ? "⏳" : "✅";
-
                     const isReserve = reserveEmails.includes(st);
                     const reserveBadge = isReserve ? `<span class="bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded ml-1 border border-yellow-200">Reserve</span>` : "";
                     const rowClass = isReserve ? "bg-yellow-50/50" : "bg-white";
-
                     return `<div class="flex justify-between items-center text-xs ${rowClass} p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span>${reserveBadge}</span></div>`;
                 }).join('');
-
                 staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
             }
 
@@ -1387,46 +1410,43 @@ window.openDayDetail = function (dateStr, email) {
         container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
     }
 
-    // 2. ADVANCE / SESSION UNAVAILABILITY SECTION (With Logic to Disable if Assigned)
-    const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
+    // 3. ADVANCE / GENERAL UNAVAILABILITY SECTION
+    
+    // [RESTRICTION CHECK FOR ADVANCE SECTION]
+    if (isRestricted) {
+         let reasonMsg = "Editing disabled.";
+         if (isPast) reasonMsg = "Date in Past";
+         if (isTooFar) reasonMsg = "Date > 3 Months ahead";
+         
+         container.innerHTML += `
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center">
+                    <p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p>
+                </div>
+            </div>`;
+         
+         // STOP HERE: Do not render the toggle buttons below
+         window.openModal('day-detail-modal');
+         return;
+    }
 
-    // Current Status
-    const fnUnavail = adv.FN && adv.FN.some(u => u.email === email);
-    const anUnavail = adv.AN && adv.AN.some(u => u.email === email);
+    // --- NORMAL MODE: Render Toggle Buttons ---
+    const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
+    const fnUnavail = adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === email : u.email === email));
+    const anUnavail = adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === email : u.email === email));
     const bothUnavail = fnUnavail && anUnavail;
 
-    // Helper to generate button styles/states
     const getBtnState = (isAssigned, isMarked, label) => {
-        if (isAssigned) {
-            return {
-                disabled: 'disabled',
-                class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed',
-                text: `🚫 On Duty (${label})`
-            };
-        }
-        if (isMarked) {
-            return {
-                disabled: '',
-                class: 'bg-red-600 text-white border-red-700 hover:bg-red-700',
-                text: `🚫 ${label} Unavailable`
-            };
-        }
-        return {
-            disabled: '',
-            class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50',
-            text: `Mark ${label}`
-        };
+        if (isAssigned) return { disabled: 'disabled', class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed', text: `🚫 On Duty (${label})` };
+        if (isMarked) return { disabled: '', class: 'bg-red-600 text-white border-red-700 hover:bg-red-700', text: `🚫 ${label} Unavailable` };
+        return { disabled: '', class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50', text: `Mark ${label}` };
     };
 
     const fnBtn = getBtnState(isAssignedFN, fnUnavail, "FN");
     const anBtn = getBtnState(isAssignedAN, anUnavail, "AN");
 
-    // Disable Whole Day if Assigned to ANY part of the day
     const anyDuty = isAssignedFN || isAssignedAN;
-    const wholeClass = anyDuty
-        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-        : (bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100');
-
+    const wholeClass = anyDuty ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : (bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100');
     const wholeText = anyDuty ? "🚫 Cannot Mark Whole Day (On Duty)" : (bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable');
     const wholeDisabled = anyDuty ? "disabled" : "";
 
@@ -1436,31 +1456,19 @@ window.openDayDetail = function (dateStr, email) {
                 <span>🗓️</span> General Unavailability (OD/DL/Leave)
             </h4>
             <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                <p class="text-[10px] text-gray-600 mb-3">
-                    Mark leave for sessions or the whole day.
-                </p>
+                <p class="text-[10px] text-gray-600 mb-3">Mark leave for sessions or the whole day.</p>
                 <div class="grid grid-cols-2 gap-2 mb-2">
-                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" ${fnBtn.disabled}
-                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${fnBtn.class}">
-                        ${fnBtn.text}
-                    </button>
-                    
-                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" ${anBtn.disabled}
-                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${anBtn.class}">
-                        ${anBtn.text}
-                    </button>
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" ${fnBtn.disabled} class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${fnBtn.class}">${fnBtn.text}</button>
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" ${anBtn.disabled} class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1 ${anBtn.class}">${anBtn.text}</button>
                 </div>
-                
-                <button onclick="toggleWholeDay('${dateStr}', '${email}')" ${wholeDisabled}
-                    class="w-full py-2 text-xs font-bold rounded border transition flex items-center justify-center gap-2 ${wholeClass}">
-                    ${wholeText}
-                </button>
+                <button onclick="toggleWholeDay('${dateStr}', '${email}')" ${wholeDisabled} class="w-full py-2 text-xs font-bold rounded border transition flex items-center justify-center gap-2 ${wholeClass}">${wholeText}</button>
             </div>
         </div>
     `;
 
     window.openModal('day-detail-modal');
 }
+
 
 // --- HELPERS & ACTIONS ---
 function updateHeaderButtons(currentView) {
