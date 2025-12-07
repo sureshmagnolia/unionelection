@@ -1558,7 +1558,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isAddingExamSchedule = false;
                 renderExamRulesInModal();
                 renderExamNameSettings();
-                if (typeof syncDataToCloud === 'function') syncDataToCloud();
+                if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
             });
         }
     }
@@ -1597,7 +1597,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderExamRulesInModal();
             renderExamNameSettings();
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+            if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
         }
     };
 
@@ -6090,7 +6090,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- NEW/MODIFIED RESET LOGIC (in Settings) ---
 
-    // 1. Reset Student Data Only (Safe Wrapper + Cloud Wipe)
+   // 1. Reset Student Data Only (Safe Wrapper + Cloud Wipe)
     if (resetStudentDataButton) {
         resetStudentDataButton.addEventListener('click', async () => {
             // --- SAFETY PROMPT ---
@@ -6099,14 +6099,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const csvBtn = document.getElementById('master-download-csv-btn');
                 const jsonBtn = document.getElementById('backup-data-button');
                 
-                if (csvBtn) {
-                    csvBtn.click();
-                }
+                if (csvBtn) csvBtn.click();
                 await new Promise(r => setTimeout(r, 1500));
                 
-                if (jsonBtn) {
-                     jsonBtn.click();
-                }
+                if (jsonBtn) jsonBtn.click();
                 await new Promise(r => setTimeout(r, 1000));
             }
             // ---------------------
@@ -6125,7 +6121,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentCollegeId) {
                     try {
                         // Change button text to show activity
-                        const originalText = resetStudentDataButton.innerHTML;
                         resetStudentDataButton.innerHTML = "☁️ Wiping Cloud...";
                         resetStudentDataButton.disabled = true;
 
@@ -6142,7 +6137,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             lastUpdated: new Date().toISOString()
                         });
 
-                        // B. Delete all data chunks (Where Student Data & Allotment live)
+                        // B. DELETE SUB-COLLECTIONS (The Fix)
+                        // We wipe Operations (QP/Absentees), Allocation (Scribes), and Slots
+                        batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "operations"));
+                        batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "allocation"));
+                        batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "slots"));
+
+                        // C. Delete all data chunks (Where Student Data & Allotment live)
                         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
                         const chunkSnaps = await getDocs(dataColRef);
                         chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
@@ -7845,7 +7846,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scribeRoomModal.classList.add('hidden');
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
-        syncDataToCloud(); // <--- ADD THIS
+        syncDataToCloud('allocation'); // <--- ADD THIS
     }
 
     scribeCloseRoomModal.addEventListener('click', () => {
@@ -10274,7 +10275,7 @@ Are you sure?
                 localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
                 newStreamInput.value = '';
                 loadStreamConfig();
-                syncDataToCloud(); // Sync setting change
+                syncDataToCloud('settings'); // Sync setting change
             } else if (currentStreamConfig.includes(name)) {
                 alert("Stream already exists.");
             }
@@ -10292,7 +10293,7 @@ Are you sure?
             currentStreamConfig = currentStreamConfig.filter(s => s !== name);
             localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
             loadStreamConfig();
-            syncDataToCloud();
+            syncDataToCloud('settings');
         }
     };
     // --- Event listener for "Generate Room Allotment Summary" ---
@@ -10595,9 +10596,21 @@ Are you sure?
                 // --- B. CLOUD WIPE (Firebase) ---
                 if (currentCollegeId) {
                     const batch = writeBatch(db);
-                    const mainRef = doc(db, "colleges", currentCollegeId);
+                    const cid = currentCollegeId;
+                    const mainRef = doc(db, "colleges", cid);
 
-                    // 1. Prepare Update Object (Reset fields to empty/default)
+                    // 1. Delete Sub-Collections (The Fix)
+                    const targets = ['operations', 'allocation', 'slots'];
+                    if (mode === 'FULL') {
+                        targets.push('settings'); // Wipe settings too
+                        targets.push('staff');    // Wipe staff too
+                    }
+
+                    targets.forEach(type => {
+                        batch.delete(doc(db, "colleges", cid, "system_data", type));
+                    });
+
+                    // 2. Prepare Update Object for Main Doc
                     const updatePayload = {
                         lastUpdated: new Date().toISOString()
                     };
@@ -10613,8 +10626,8 @@ Are you sure?
                     // Update Main Document (Selective Erase)
                     batch.update(mainRef, updatePayload);
 
-                    // 2. Delete Data Chunks (Always wipe chunks in both modes)
-                    const dataColRef = collection(db, "colleges", currentCollegeId, "data");
+                    // 3. Delete Data Chunks (Always wipe chunks in both modes)
+                    const dataColRef = collection(db, "colleges", cid, "data");
                     const chunkSnaps = await getDocs(dataColRef);
                     chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
 
@@ -10708,8 +10721,11 @@ Are you sure?
                         if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
                         if (typeof renderExamNameSettings === 'function') renderExamNameSettings(); // Refresh UI
 
-                        // Sync
-                        if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                        // Sync (THE FIX: Force sync settings & allocation)
+                        if (typeof syncDataToCloud === 'function') {
+                            await syncDataToCloud('settings');
+                            await syncDataToCloud('allocation'); // In case scribes were in the backup
+                        }
 
                         alert("Settings updated and synced!");
                     } else {
