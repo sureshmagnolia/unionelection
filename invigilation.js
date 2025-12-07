@@ -1145,18 +1145,16 @@ function renderStaffCalendar(myEmail) {
                 const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
                 const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
+                const isAdminLocked = slot.isAdminLocked || false; // NEW
 
-                // Badge Styles
+                // Badge Styles (Default)
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
-                
-                // --- RESPONSIVE STATUS TEXT (FIXED SIZE) ---
-                // Mobile: text-[8px] font-bold (Matches 'AN'/'FN' size)
-                // Desktop: Full text
                 let statusText = `<span class="md:hidden text-[8px] font-bold">${available}</span><span class="hidden md:inline">${available} Left</span>`;
-                
                 let glowClass = "";
 
+                // --- PRIORITY LOGIC FOR DISPLAY ---
+                
                 if (isCompleted) {
                     badgeClass = "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 text-shadow-sm";
                     icon = "✅";
@@ -1169,7 +1167,7 @@ function renderStaffCalendar(myEmail) {
                     statusText = "Posted";
                 }
                 else if (isAssigned) {
-                    if (slot.isLocked) {
+                    if (slot.isLocked || isAdminLocked) {
                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold";
                         icon = "🔒";
                         statusText = "Duty";
@@ -1191,6 +1189,13 @@ function renderStaffCalendar(myEmail) {
                     icon = "⛔";
                     statusText = "Unavail";
                 }
+                // --- NEW: ADMIN LOCK DISPLAY ---
+                else if (isAdminLocked) {
+                    badgeClass = "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-400 border-purple-200";
+                    icon = "🛡️";
+                    statusText = "Paused"; // 'Paused' or 'Admin' implies temporary restriction
+                }
+                // -------------------------------
                 else if (slot.isLocked) {
                     badgeClass = "bg-gray-100 text-gray-400 border-gray-200";
                     icon = "🔒";
