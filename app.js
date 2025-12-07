@@ -5145,7 +5145,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentRoomConfig[roomName]) {
                     delete currentRoomConfig[roomName];
                     localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(currentRoomConfig));
-                    if (typeof syncDataToCloud === 'function') syncDataToCloud();
+                    if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
 
                     // Update Count
                     const countDisplay = document.getElementById('room-count-display');
@@ -8730,9 +8730,18 @@ Are you sure you want to update these records?
                 });
 
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-                alert(`Successfully updated ${updateCount} records.\nThe page will now reload.`);
+                // REPLACE "window.location.reload()" at line 7596 with:
+                alert('Restore successful! Syncing to Cloud...');
 
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud('settings');
+                    await syncDataToCloud('ops');
+                    await syncDataToCloud('allocation');
+                    await syncDataToCloud('staff');
+                    await syncDataToCloud('slots');
+                    await syncDataToCloud('heavy');
+                }
+
                 window.location.reload();
             }
         });
@@ -10722,9 +10731,11 @@ Are you sure?
                         if (typeof renderExamNameSettings === 'function') renderExamNameSettings(); // Refresh UI
 
                         // Sync (THE FIX: Force sync settings & allocation)
+                        // REPLACE line 8591 with:
                         if (typeof syncDataToCloud === 'function') {
-                            await syncDataToCloud('settings');
-                            await syncDataToCloud('allocation'); // In case scribes were in the backup
+                        await syncDataToCloud('settings');
+                        await syncDataToCloud('allocation'); // In case scribe list is in backup
+                        await syncDataToCloud('ops');        // In case QP codes are in backup
                         }
 
                         alert("Settings updated and synced!");
@@ -11686,7 +11697,14 @@ Are you sure?
 
                 alert(alertMsg);
 
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                // REPLACE line 8831:
+                if (typeof syncDataToCloud === 'function') {
+                await syncDataToCloud('heavy');      // Students & Rooms
+                await syncDataToCloud('ops');        // Absentees
+                await syncDataToCloud('allocation'); // Scribes
+                await syncDataToCloud('staff');      // Invigilators
+                await syncDataToCloud('slots');      // Duty Slots
+                }
                 window.location.reload();
 
             } catch (e) {
@@ -11740,7 +11758,14 @@ Are you sure?
 
                 alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
 
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                // REPLACE line 8831:
+                if (typeof syncDataToCloud === 'function') {
+                await syncDataToCloud('heavy');      // Students & Rooms
+                await syncDataToCloud('ops');        // Absentees
+                await syncDataToCloud('allocation'); // Scribes
+                await syncDataToCloud('staff');      // Invigilators
+                await syncDataToCloud('slots');      // Duty Slots
+                }
                 window.location.reload();
 
             } catch (e) {
@@ -11922,7 +11947,7 @@ Are you sure?
         localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 
         // 3. Sync & Refresh
-        if (typeof syncDataToCloud === 'function') syncDataToCloud();
+        if (typeof syncDataToCloud === 'function') syncDataToCloud('allocation');
         renderScribeAllotmentList(currentSessionKey);
     };
 
