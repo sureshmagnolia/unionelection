@@ -1127,7 +1127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnDownloadReport = document.createElement('button');
     btnDownloadReport.id = 'download-report-pdf-btn';
     btnDownloadReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700";
-    btnDownloadReport.innerHTML = `⬇️ Download PDF`;
+    btnDownloadReport.innerHTML = `⬇️ PRINT`;
 
     if (finalPrintButton && finalPrintButton.parentNode) {
         // Insert only if not already there
