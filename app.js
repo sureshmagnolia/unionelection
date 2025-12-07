@@ -273,7 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
         ROOM_ALLOTMENT_KEY,
         SCRIBE_LIST_KEY,
         SCRIBE_ALLOTMENT_KEY,
-        EXAM_RULES_KEY // <--- ADD THIS LINE (To include in Backup/Restore)
+        EXAM_RULES_KEY,
+        // --- NEW KEYS FOR MODULAR ARCHITECTURE ---
+        'examInvigilationSlots',
+        'examStaffData',
+        'examInvigilatorMapping'// <--- ADD THIS LINE (To include in Backup/Restore)
     ];
     // **********************************
 
