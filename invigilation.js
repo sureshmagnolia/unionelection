@@ -5583,9 +5583,12 @@ window.filterManualStaff = function () {
 // --- MANUAL ALLOCATION (Auto-Select Top N Candidates) ---
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
+    const requiredCount = parseInt(slot.required) || 0; // Capture required count early
 
+    // 1. Admin Lock Check
+    // Manual allocation requires the ADMIN POSTING LOCK.
     if (!slot.isAdminLocked) {
-        alert("⚠️ Action Denied.\n\nManual allocation requires the ADMIN POSTING LOCK.\n\nPlease enable the '🛡️ Admin' lock for this slot first to prevent staff interference.");
+        alert("⚠️ Action Denied.\n\nManual allocation requires the ADMIN POSTING LOCK.\nPlease click the '🛡️ Admin' lock button for this slot first.");
         return;
     }
 
@@ -5598,9 +5601,6 @@ window.openManualAllocationModal = function (key) {
     // 3. Setup Modal Header
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
-
-    // Force Integer for Requirement
-    const requiredCount = parseInt(slot.required) || 0;
     document.getElementById('manual-modal-req').textContent = requiredCount;
 
     // --- 4. SMART SORTING ---
@@ -5657,7 +5657,6 @@ window.openManualAllocationModal = function (key) {
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
 
             // --- DEPT SATURATION CHECK ---
-            // Calculate hypothetical saturation if we add this person
             const assignedList = slot.assigned || [];
             const totalAssigned = assignedList.length;
             const myDeptCount = assignedList.filter(email => {
@@ -5665,18 +5664,13 @@ window.openManualAllocationModal = function (key) {
                 return member && member.dept === s.dept;
             }).length;
 
-            // Exemption: Depts with only 1 person total
             const totalInDept = staffData.filter(st => st.dept === s.dept).length;
             const isExempt = (totalInDept === 1);
 
             if (!isExempt) {
-                // If I am added, count becomes myDeptCount + 1
-                // Total becomes totalAssigned + 1
                 const potentialRatio = (myDeptCount + 1) / (totalAssigned + 1);
-
-                // Warn if saturation > 50%
                 if (potentialRatio > 0.5) {
-                    score -= 500; // soft penalty
+                    score -= 500;
                     badges.push("Dept Saturation");
                 }
             }
@@ -5686,17 +5680,15 @@ window.openManualAllocationModal = function (key) {
         })
         .sort((a, b) => b.score - a.score); // Highest Score First
 
-    // Capture Snapshot
     if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
 
     // --- 5. RENDER & AUTO-SELECT ---
     const availList = document.getElementById('manual-available-list');
     availList.innerHTML = '';
 
-    // AUTO-SELECT LOGIC
-    const assignedList = slot.assigned || [];
-    const isFreshAllocation = (assignedList.length === 0);
-    let slotsToFill = isFreshAllocation ? requiredCount : 0;
+    // AUTO-SELECTION LOGIC: Always tick the top 'requiredCount' available staff,
+    // following the rank order (top to bottom).
+    let slotsToTick = requiredCount; 
     let currentSelectionCount = 0;
 
     rankedStaff.forEach(s => {
@@ -5705,17 +5697,10 @@ window.openManualAllocationModal = function (key) {
 
         let isChecked = false;
 
-        if (isFreshAllocation) {
-            // Auto-select if we still need people
-            if (slotsToFill > 0) {
-                isChecked = true;
-                slotsToFill--;
-            }
-        } else {
-            // Keep existing assignments
-            if (assignedList.includes(s.email)) {
-                isChecked = true;
-            }
+        // Tick the top available staff until requiredCount is met.
+        if (slotsToTick > 0) {
+            isChecked = true;
+            slotsToTick--;
         }
 
         if (isChecked) currentSelectionCount++;
@@ -5755,7 +5740,7 @@ window.openManualAllocationModal = function (key) {
         availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
     }
 
-    // 6. Render Unavailable List
+    // 6. Render Unavailable List (No change)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
 
@@ -5793,10 +5778,8 @@ window.openManualAllocationModal = function (key) {
 
     // 7. Update Counters & Open
     document.getElementById('manual-sel-count').textContent = currentSelectionCount;
-    // *** FIX: Update the Required count in the footer as well ***
     const reqCountEl = document.getElementById('manual-req-count');
     if (reqCountEl) reqCountEl.textContent = requiredCount;
-    // ************************************************************
     window.openModal('manual-allocation-modal');
 }
 
