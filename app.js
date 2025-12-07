@@ -11584,14 +11584,19 @@ Are you sure?
             window.location.reload();
         });
     }
-    // ==========================================
-    // 📄 GLOBAL PDF PREVIEW (85% Zoom / Smart Fit Strategy)
+   // ==========================================
+    // 📄 GLOBAL PDF PREVIEW (FIXED PRINTING V2)
     // ==========================================
     window.openPdfPreview = function (contentHtml, filenamePrefix) {
-        // 1. CLEAN CONTENT
+        // 1. CLEAN CONTENT (Remove screen-specific and layout-breaking styles)
         const cleanContent = contentHtml
             .replace(/min-height:\s*297mm/g, 'min-height: auto')
             .replace(/height:\s*297mm/g, 'height: auto')
+            // *** CRITICAL FIXES FOR PRINTING ***
+            .replace(/height:\s*100%/g, 'height: auto')       // Remove fixed height
+            .replace(/display:\s*flex/g, 'display: block')    // Remove flexbox (causes cutoff)
+            .replace(/flex-direction:\s*column/g, '')         // Remove flex direction
+            // **********************************
             .replace(/width:\s*210mm/g, 'width: 100%')
             .replace(/padding:\s*2cm/g, 'padding: 15px')
             .replace(/mb-8/g, 'mb-4')
@@ -11601,15 +11606,29 @@ Are you sure?
         const dateStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
         const filename = `${filenamePrefix}_${dateStr}.pdf`;
 
+        // 2. FILTER HEAD CONTENT (Remove app scripts to prevent re-init)
+        let headContent = document.head.innerHTML;
+        headContent = headContent.replace(/<script[^>]*src="[^"]*app\.js"[^>]*>[\s\S]*?<\/script>/gi, "");
+        headContent = headContent.replace(/<script[^>]*src="[^"]*invigilation\.js"[^>]*>[\s\S]*?<\/script>/gi, "");
+
         const w = window.open('', '_blank');
         w.document.write(`
         <!DOCTYPE html>
         <html lang="en">
         <head>
-            ${document.head.innerHTML} 
+            ${headContent}
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
             <style>
-                body { background-color: #525659; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+                /* SCREEN PREVIEW STYLES */
+                body { 
+                    background-color: #525659; 
+                    margin: 0; 
+                    padding: 20px; 
+                    display: flex; 
+                    flex-direction: column; 
+                    align-items: center; 
+                    font-family: sans-serif; 
+                }
                 
                 #pdf-controls {
                     margin-bottom: 20px; background: white; padding: 10px 20px; 
@@ -11617,45 +11636,39 @@ Are you sure?
                     position: sticky; top: 10px; z-index: 9999;
                 }
 
-                /* PDF Wrapper - Exact A4 Width */
                 #pdf-wrapper {
                     width: 210mm; 
                     background: white;
                     padding: 0; 
                     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
                     box-sizing: border-box;
+                    height: auto;
+                    min-height: 297mm;
                 }
 
-                /* PAGE BLOCKS - Allow natural breaks */
+                /* REPORT PAGE STYLES */
                 .print-page, .print-page-daywise, .print-page-sticker {
                     width: 100% !important;
                     height: auto !important;
                     min-height: 0 !important;
                     margin: 0 !important;
-                    padding: 10mm !important; /* Balanced padding for A4 */
+                    padding: 10mm !important;
                     border: none !important;
                     box-shadow: none !important;
-                    /* Removed page-break-inside: avoid to allow natural flow */
-                    display: block;
+                    display: block !important; /* Force Block for printing */
                     box-sizing: border-box;
+                    page-break-after: always;
+                    position: relative;
                 }
                 
-                .print-page:last-child { margin-bottom: 0 !important; }
+                .print-page:last-child { margin-bottom: 0 !important; page-break-after: auto; }
 
-                /* Protect summary sections and table rows from breaking */
-                .summary-box > div,
-                .summary-box > p {
+                /* Prevent breaking inside critical elements */
+                .summary-box > div, .summary-box > p, tr, .room-row {
                     page-break-inside: avoid;
                     break-inside: avoid;
                 }
 
-                /* Protect table rows */
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-
-                /* TABLE STABILITY */
                 table { 
                     width: 100% !important; 
                     table-layout: fixed !important;
@@ -11669,18 +11682,41 @@ Are you sure?
 
                 ::-webkit-scrollbar { display: none; }
 
+                /* PRINT MEDIA QUERY (THE FIX) */
                 @media print {
                     #pdf-controls { display: none !important; }
-                    #pdf-wrapper { width: 100%; box-shadow: none; margin: 0; }
-                    body { padding: 0; background: white; }
-                    @page { margin: 10mm; } 
+                    
+                    body { 
+                        display: block !important; 
+                        padding: 0; margin: 0; 
+                        background: white; 
+                        width: 100%; height: auto; 
+                        overflow: visible; 
+                    }
+
+                    #pdf-wrapper { 
+                        width: 100%; box-shadow: none; margin: 0; 
+                        overflow: visible; height: auto; 
+                    }
+
+                    .print-page {
+                        /* Ensure no flexbox remnants cause cutoff */
+                        display: block !important; 
+                        height: auto !important;
+                        overflow: visible !important;
+                    }
+
+                    @page { margin: 10mm; size: A4; } 
                 }
             </style>
         </head>
         <body>
             <div id="pdf-controls">
                 <button onclick="window.print()" class="bg-gray-700 text-white px-4 py-2 rounded font-bold shadow hover:bg-gray-800">
-                    🖨️ Print
+                    🖨️ Print Report (Browser)
+                </button>
+                <button onclick="downloadDoc()" class="bg-blue-600 text-white px-4 py-2 rounded font-bold shadow hover:bg-blue-700 ml-4">
+                    ⬇️ Save as PDF
                 </button>
             </div>
 
@@ -11701,18 +11737,18 @@ Are you sure?
                         image: { type: 'jpeg', quality: 0.98 },
                         html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 850 }, 
                         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                        pagebreak: { mode: 'css', before: '.summary-box', avoid: ['tr', '.summary-box > div'] }
+                        pagebreak: { mode: 'css', before: '.print-page' }
                     };
 
                     html2pdf().set(opt).from(element).save().then(() => {
                         btn.textContent = "✅ Downloaded";
-                        setTimeout(() => { btn.textContent = "⬇️ Download PDF"; btn.disabled = false; }, 3000);
+                        setTimeout(() => { btn.textContent = "⬇️ Save as PDF"; btn.disabled = false; }, 3000);
                     });
                 }
             <\/script>
         </body>
         </html>
-    `);
+        `);
         w.document.close();
     }
 
