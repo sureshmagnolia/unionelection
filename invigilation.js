@@ -1369,10 +1369,10 @@ window.openDayDetail = function (dateStr, email) {
     const [dd, mm, yyyy] = dateStr.split('.');
     const currentD = new Date(yyyy, mm - 1, dd);
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Midnight today
+    today.setHours(0, 0, 0, 0); 
     
     const maxDate = new Date(today);
-    maxDate.setMonth(today.getMonth() + 3); // 3 Months limit
+    maxDate.setMonth(today.getMonth() + 3); 
 
     const isPast = currentD < today;
     const isTooFar = currentD > maxDate;
@@ -1382,11 +1382,11 @@ window.openDayDetail = function (dateStr, email) {
     if (isPast) restrictLabel = "(Past Date - Locked)";
     if (isTooFar) restrictLabel = "(>3 Months - Locked)";
 
-    // TRACK ASSIGNMENTS FOR THIS DAY
+    // TRACK ASSIGNMENTS
     let isAssignedFN = false;
     let isAssignedAN = false;
 
-    // 2. RENDER EXAM SESSIONS (Slots)
+    // 2. RENDER EXAM SESSIONS
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
 
     if (sessions.length > 0) {
@@ -1399,6 +1399,7 @@ window.openDayDetail = function (dateStr, email) {
             const isUnavailable = isUserUnavailable(slot, email, key);
             const isAssigned = slot.assigned.includes(email);
             const isLocked = slot.isLocked;
+            const isAdminLocked = slot.isAdminLocked || false; // <--- NEW CHECK
             const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
             const marketOffers = slot.exchangeRequests ? slot.exchangeRequests.filter(e => e !== email) : [];
 
@@ -1414,7 +1415,7 @@ window.openDayDetail = function (dateStr, email) {
             // --- Action Buttons ---
             let actionHtml = "";
             
-            // [RESTRICTION CHECK FOR SLOTS]
+            // [PRIORITY 1: DATE RESTRICTION]
             if (isRestricted) {
                  if (isAssigned) {
                      actionHtml = `<div class="w-full bg-gray-100 text-gray-500 border border-gray-200 text-xs py-2 rounded font-bold text-center">✅ Duty Assigned ${restrictLabel}</div>`;
@@ -1423,8 +1424,27 @@ window.openDayDetail = function (dateStr, email) {
                  } else {
                      actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
                  }
-            } else {
-                // NORMAL MODE (Buttons Active)
+            } 
+            // [PRIORITY 2: ADMIN POSTING LOCK] (New)
+            else if (isAdminLocked) {
+                 if (isAssigned) {
+                     // If assigned, they can still view their status, but maybe we block Exchange?
+                     // For now, leaving standard assigned actions, but blocking Unavailability/Volunteering below.
+                     if (isPostedByMe) {
+                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
+                     } else {
+                         // Show Assigned status but indicate Admin Lock context
+                         actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
+                     }
+                 } else {
+                     // NOT ASSIGNED: Block Volunteering & Unavailability
+                     actionHtml = `<div class="w-full bg-purple-50 text-purple-600 border border-purple-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm">
+                        <span>🛡️</span> Posting Restricted by Admin
+                     </div>`;
+                 }
+            }
+            // [PRIORITY 3: STANDARD LOGIC]
+            else {
                 if (isAssigned) {
                     if (isPostedByMe) {
                          actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
@@ -1446,7 +1466,7 @@ window.openDayDetail = function (dateStr, email) {
                 }
             }
 
-            // Reserve & Staff List
+            // Reserve & Staff List (Unchanged)
             const reserves = getSlotReserves(key);
             const reserveEmails = reserves.map(r => r.email);
             let staffListHtml = '';
@@ -1473,19 +1493,13 @@ window.openDayDetail = function (dateStr, email) {
     // 3. ADVANCE / GENERAL UNAVAILABILITY SECTION
     
     // [RESTRICTION CHECK FOR ADVANCE SECTION]
+    // 1. Date Checks
     if (isRestricted) {
          let reasonMsg = "Editing disabled.";
          if (isPast) reasonMsg = "Date in Past";
          if (isTooFar) reasonMsg = "Date > 3 Months ahead";
          
-         container.innerHTML += `
-            <div class="mt-4 pt-4 border-t border-gray-200">
-                <div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center">
-                    <p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p>
-                </div>
-            </div>`;
-         
-         // STOP HERE: Do not render the toggle buttons below
+         container.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200"><div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center"><p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p></div></div>`;
          window.openModal('day-detail-modal');
          return;
     }
