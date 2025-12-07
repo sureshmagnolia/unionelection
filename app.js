@@ -632,7 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 4. CLOUD UPLOAD FUNCTION (Optimized with Invigilation Slot Sync)
+   // 4. CLOUD UPLOAD FUNCTION (Optimized with Invigilation Slot Sync)
     async function syncDataToCloud() {
         if (!currentUser || !currentCollegeId) return;
         if (isSyncing) return;
@@ -691,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 'examQPCodes', 'examScribeList', 'examScribeAllotment',
                 'examAbsenteeList', 'examSessionNames', 'examRulesConfig',
                 'examRemunerationConfig', 'examStaffData', 'invigDesignations', 'invigRoles',
-                'examInvigilatorMapping' // Persist Staff/Roles
+                'examInvigilatorMapping' 
             ];
 
             const finalMainData = { lastUpdated: timestamp };
@@ -703,20 +703,90 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE) ---
             // Calculates requirements locally but preserves cloud assignments
+            let localBaseData = localStorage.getItem('examBaseData'); // <--- DEFINED HERE
+            if (localBaseData) {
+                const students = JSON.parse(localBaseData);
 
-            // --- LEGACY SMART MERGE REMOVED ---
-            // Invigilation Slots are now managed exclusively by the Invigilation Portal.
-            // Dashboard should not recalculate them from student data to prevent "Ghost Slots".
-            // -------------------------------------------------------
-            // -------------------------------------------------------
+                // 1. Load Scribe Data
+                const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+                const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
 
+                const sessionStats = {};
 
+                // 2. Count Candidates (By Stream) vs Scribes per Session
+                students.forEach(s => {
+                    // Trim spaces for safety
+                    const d = s.Date ? s.Date.trim() : "";
+                    const t = s.Time ? s.Time.trim() : "";
+                    if(!d || !t) return;
 
-            // -------------------------------------------------------
+                    const key = `${d} | ${t}`;
+                    if (!sessionStats[key]) {
+                        sessionStats[key] = { streams: {}, scribes: 0 };
+                    }
+
+                    if (scribeRegNos.has(s['Register Number'])) {
+                        sessionStats[key].scribes++;
+                    } else {
+                        const strm = s.Stream || "Regular";
+                        if (!sessionStats[key].streams[strm]) sessionStats[key].streams[strm] = 0;
+                        sessionStats[key].streams[strm]++;
+                    }
+                });
+
+                // 3. Get Existing Cloud Slots
+                const cloudSlots = JSON.parse(cloudData.examInvigilationSlots || '{}');
+                const mergedSlots = { ...cloudSlots };
+
+                // 4. Update Requirements (Exact Match to Invigilation.js)
+                Object.keys(sessionStats).forEach(key => {
+                    const stats = sessionStats[key];
+
+                    // A. Candidates
+                    let candidateReq = 0;
+                    Object.values(stats.streams).forEach(count => {
+                        candidateReq += Math.ceil(count / 30);
+                    });
+
+                    // B. Scribes
+                    const scribeReq = Math.ceil(stats.scribes / 5);
+
+                    // C. Base
+                    const baseReq = candidateReq + scribeReq;
+
+                    // D. Reserve: 10% of Base (Rounded Up)
+                    const reserve = Math.ceil(baseReq * 0.10);
+                    const totalRequired = baseReq + reserve;
+
+                    const studentCount = Object.values(stats.streams).reduce((a, b) => a + b, 0) + stats.scribes;
+
+                    if (!mergedSlots[key]) {
+                        // New Session
+                        mergedSlots[key] = {
+                            required: totalRequired,
+                            reserveCount: reserve, // <--- SAVED HERE
+                            assigned: [],
+                            unavailable: [],
+                            isLocked: false,
+                            scribeCount: stats.scribes,
+                            studentCount: studentCount
+                        };
+                    } else {
+                        // Existing: Update Requirement & Metadata
+                        mergedSlots[key].required = totalRequired;
+                        mergedSlots[key].reserveCount = reserve; 
+                        mergedSlots[key].scribeCount = stats.scribes;
+                        mergedSlots[key].studentCount = studentCount;
+                    }
+                });
+
+                // 5. Add to Update Payload
+                finalMainData['examInvigilationSlots'] = JSON.stringify(mergedSlots);
+            }
 
             // --- STEP 3: Bulk Data Handling ---
             let localAllotment = localStorage.getItem('examRoomAllotment');
-            let localBaseData = localStorage.getItem('examBaseData'); // <--- DEFINITION ADDED HERE
+            // 'localBaseData' is now safely available here too
             const bulkDataObj = {};
             if (localBaseData) bulkDataObj['examBaseData'] = localBaseData;
             if (localAllotment && localAllotment !== '{}') bulkDataObj['examRoomAllotment'] = localAllotment;
