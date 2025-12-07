@@ -1,6 +1,6 @@
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, orderBy, onSnapshot }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const auth = window.firebase.auth;
@@ -7358,8 +7358,9 @@ let presenceUnsubscribe = null;
 window.initLivePresence = function(myEmail, myName, isAdmin) {
     if (!currentCollegeId || !myEmail) return;
 
-    const { doc, setDoc, serverTimestamp, onSnapshot, collection } = window.firebase;
-    
+    // REMOVED: const { ... } = window.firebase;  <-- This was causing the error
+    // We now use the 'serverTimestamp', 'doc', 'setDoc' imported at the top of the file.
+
     // Sanitize Email for Doc ID
     const myRef = doc(db, "colleges", currentCollegeId, "live_presence", myEmail);
 
@@ -7371,7 +7372,7 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
             setDoc(myRef, {
                 name: myName,
                 email: myEmail,
-                lastSeen: serverTimestamp(),
+                lastSeen: serverTimestamp(), // Now uses the imported function
                 device: platform,
                 status: 'online'
             }, { merge: true });
@@ -7415,10 +7416,8 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
 
             updateLiveStaffWidget(onlineCount);
             
-            // Update Grids
+            // Refresh Grids
             if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
-            
-            // CORRECT FUNCTION NAME
             if (typeof renderStaffTable === 'function') renderStaffTable(); 
         });
 
