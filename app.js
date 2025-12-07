@@ -5205,7 +5205,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     editBtn.className = "edit-room-btn p-1.5 md:p-1 transition rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50";
 
                     // Sync
-                    if (typeof syncDataToCloud === 'function') syncDataToCloud();
+                    if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
 
                     // Feedback
                     const status = document.getElementById('room-config-status');
@@ -6121,6 +6121,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentCollegeId) {
                     try {
                         // Change button text to show activity
+                        const originalText = resetStudentDataButton.innerHTML;
                         resetStudentDataButton.innerHTML = "☁️ Wiping Cloud...";
                         resetStudentDataButton.disabled = true;
 
@@ -6128,7 +6129,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const batch = writeBatch(db);
                         const mainRef = doc(db, "colleges", currentCollegeId);
 
-                        // A. Reset fields in the main document
+                        // A. Reset fields in the main document (Metadata)
                         batch.update(mainRef, {
                             examQPCodes: "{}",
                             examScribeAllotment: "{}",
@@ -6137,7 +6138,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             lastUpdated: new Date().toISOString()
                         });
 
-                        // B. DELETE SUB-COLLECTIONS (The Fix)
+                        // B. DELETE SUB-COLLECTIONS (Targeted Wipe)
                         // We wipe Operations (QP/Absentees), Allocation (Scribes), and Slots
                         batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "operations"));
                         batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "allocation"));
@@ -6237,7 +6238,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
-                    alert('Restore successful! The application will now reload to apply the new data.');
+                    alert('Restore successful! Syncing to Cloud...');
+                    if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud('settings');
+                    await syncDataToCloud('ops');
+                    await syncDataToCloud('allocation');
+                    await syncDataToCloud('staff');
+                    await syncDataToCloud('slots');
+                    await syncDataToCloud('heavy');
+                    }
                     window.location.reload();
 
                 } catch (e) {
@@ -10572,8 +10581,7 @@ Are you sure?
             try {
                 const { db, doc, writeBatch, updateDoc, collection, getDocs } = window.firebase;
                 
-                // --- DEFINE TARGET LISTS ---
-                
+                // --- DEFINE TARGET LISTS FOR LOCAL STORAGE ---
                 // List 1: Student Data & Operations (Target of DATA mode)
                 const dataKeys = [
                     'examBaseData',        // Students
@@ -10593,7 +10601,7 @@ Are you sure?
                     'examCollegeName'      // College Name
                 ];
 
-                // Determine what to wipe based on mode
+                // Determine what to wipe locally
                 let keysToWipe = [...dataKeys]; // DATA mode always wipes data
                 if (mode === 'FULL') {
                     keysToWipe = [...dataKeys, ...settingsKeys]; // FULL adds settings
@@ -10605,21 +10613,22 @@ Are you sure?
                 // --- B. CLOUD WIPE (Firebase) ---
                 if (currentCollegeId) {
                     const batch = writeBatch(db);
+                    const mainRef = doc(db, "colleges", currentCollegeId);
                     const cid = currentCollegeId;
-                    const mainRef = doc(db, "colleges", cid);
 
-                    // 1. Delete Sub-Collections (The Fix)
-                    const targets = ['operations', 'allocation', 'slots'];
+                    // 1. Delete Sub-Collections based on Mode
+                    const collectionsToDelete = ['operations', 'allocation', 'slots']; // Always wipe these
+                    
                     if (mode === 'FULL') {
-                        targets.push('settings'); // Wipe settings too
-                        targets.push('staff');    // Wipe staff too
+                        collectionsToDelete.push('settings'); // Wipe settings too
+                        collectionsToDelete.push('staff');    // Wipe staff too (optional, usually kept safe, but FULL implies deep clean)
                     }
 
-                    targets.forEach(type => {
+                    collectionsToDelete.forEach(type => {
                         batch.delete(doc(db, "colleges", cid, "system_data", type));
                     });
 
-                    // 2. Prepare Update Object for Main Doc
+                    // 2. Prepare Update Object (Reset fields in main doc)
                     const updatePayload = {
                         lastUpdated: new Date().toISOString()
                     };
@@ -10636,7 +10645,7 @@ Are you sure?
                     batch.update(mainRef, updatePayload);
 
                     // 3. Delete Data Chunks (Always wipe chunks in both modes)
-                    const dataColRef = collection(db, "colleges", cid, "data");
+                    const dataColRef = collection(db, "colleges", currentCollegeId, "data");
                     const chunkSnaps = await getDocs(dataColRef);
                     chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
 
