@@ -5619,9 +5619,8 @@ window.filterManualStaff = function () {
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
 
-    // 1. Lock Check
-    if (!slot.isLocked) {
-        alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts.");
+    if (!slot.isAdminLocked) {
+        alert("⚠️ Action Denied.\n\nManual allocation requires the ADMIN POSTING LOCK.\n\nPlease enable the '🛡️ Admin' lock for this slot first to prevent staff interference.");
         return;
     }
 
