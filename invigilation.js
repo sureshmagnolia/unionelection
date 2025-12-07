@@ -657,37 +657,74 @@ window.sendSingleEmail = function (btn, email, name, subject, message) {
             btn.classList.add('bg-red-600');
         });
 }
-// --- RENDER ADMIN SLOTS (Responsive Header + Scroll Fix) ---
+
+// --- NEW: ADMIN POSTING LOCK FUNCTIONS ---
+
+window.toggleAdminLock = async function (key) {
+    if (!invigilationSlots[key]) return;
+    
+    // Toggle state
+    invigilationSlots[key].isAdminLocked = !invigilationSlots[key].isAdminLocked;
+    
+    const status = invigilationSlots[key].isAdminLocked ? "LOCKED" : "UNLOCKED";
+    logActivity("Admin Posting Lock", `Admin ${status} slot ${key} for posting.`);
+    
+    await syncSlotsToCloud();
+    renderSlotsGridAdmin();
+}
+
+window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
+    if (!confirm(`${lockState ? '🔒 LOCK' : '🔓 UNLOCK'} Admin Posting for ${monthStr} Week ${weekNum}?\n\nThis will prevent staff from adding unavailability.`)) return;
+
+    let changed = false;
+    Object.keys(invigilationSlots).forEach(key => {
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+
+        if (mStr === monthStr && wNum === weekNum) {
+            if (!!invigilationSlots[key].isAdminLocked !== lockState) {
+                invigilationSlots[key].isAdminLocked = lockState;
+                changed = true;
+            }
+        }
+    });
+
+    if (changed) {
+        logActivity("Weekly Admin Lock", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} posting for ${monthStr} Week ${weekNum}.`);
+        await syncSlotsToCloud();
+        renderSlotsGridAdmin();
+    } else {
+        alert("No changes needed.");
+    }
+}
+
+
 function renderSlotsGridAdmin() {
     if (!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
 
-    // 1. Date Headers
+    // ... (Date calculation remains same) ...
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const currentMonthStr = monthNames[currentAdminDate.getMonth()];
     const currentYear = currentAdminDate.getFullYear();
 
-    // --- NAVIGATION BAR (Compact for Mobile) ---
+    // 1. Navigation Bar (Unchanged)
     const navHtml = `
         <div class="col-span-full flex justify-between items-center glass-panel p-2 md:p-3 rounded-lg border-0 shadow-sm mb-2 sticky top-0 z-30 mx-1 mt-1">
             <button onclick="changeAdminMonth(-1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-white/50 rounded border border-gray-200/50 flex items-center gap-1 transition">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-                <span class="hidden md:inline">Prev</span>
+                <span class="hidden md:inline">Prev</span> ⬅️
             </button>
-            
             <h3 class="text-sm md:text-lg font-black text-indigo-800 uppercase tracking-wide flex items-center gap-1 md:gap-2 whitespace-nowrap">
                 <span>📅</span> ${currentMonthStr} <span class="text-gray-500 text-xs md:text-lg">'${String(currentYear).slice(-2)}</span>
             </h3>
-            
             <button onclick="changeAdminMonth(1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-white/50 rounded border border-gray-200/50 flex items-center gap-1 transition">
-                <span class="hidden md:inline">Next</span>
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                ➡️ <span class="hidden md:inline">Next</span>
             </button>
-        </div>
-    `;
+        </div>`;
     ui.adminSlotsGrid.innerHTML = navHtml;
 
-    // 2. Filter Data for Current Month
+    // ... (Filtering & Grouping logic remains same) ...
     const slotItems = [];
     Object.keys(invigilationSlots).forEach(key => {
         const date = parseDate(key);
@@ -696,135 +733,116 @@ function renderSlotsGridAdmin() {
         }
     });
 
-    // 3. Empty State
     if (slotItems.length === 0) {
-        ui.adminSlotsGrid.innerHTML += `
-            <div class="col-span-full text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 m-2">
-                <p class="text-gray-400 font-medium mb-2">No exam sessions scheduled for ${currentMonthStr}.</p>
-                <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline text-sm flex items-center justify-center gap-1 mx-auto">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-                    Add Slot
-                </button>
-            </div>`;
+        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
         return;
     }
 
-    // 4. Group by Week
     const groupedSlots = {};
     slotItems.forEach(item => {
         const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const weekNum = getWeekOfMonth(item.date);
         const groupKey = `${mStr}-W${weekNum}`;
-        if (!groupedSlots[groupKey]) {
-            groupedSlots[groupKey] = { month: mStr, week: weekNum, items: [] };
-        }
+        if (!groupedSlots[groupKey]) groupedSlots[groupKey] = { month: mStr, week: weekNum, items: [] };
         groupedSlots[groupKey].items.push(item);
     });
 
-    // 5. Sort Groups
-    const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => {
-        const dateA = groupedSlots[a].items[0].date;
-        const dateB = groupedSlots[b].items[0].date;
-        return dateA - dateB;
-    });
+    const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => groupedSlots[a].items[0].date - groupedSlots[b].items[0].date);
 
-    // 6. Render Groups
+    // RENDER GROUPS
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
-        // Week Header (Compact)
+        // --- UPDATED WEEK HEADER WITH ADMIN LOCK BUTTONS ---
         ui.adminSlotsGrid.innerHTML += `
             <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
                 <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
                     Week ${group.week}
                 </span>
-                <div class="flex gap-1">
-                    <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" 
-                        class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
-                        ⚡ Auto
-                    </button>
-                    
+                <div class="flex gap-2">
                     <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-red-600 px-2 py-1 rounded-l hover:bg-red-50 font-bold border-r-0">🔒</button>
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-green-600 px-2 py-1 rounded-r hover:bg-green-50 font-bold">🔓</button>
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-l hover:bg-gray-50 font-bold border-r-0" title="Lock Standard Booking">🔒 Std</button>
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-r hover:bg-gray-50 font-bold" title="Unlock Standard Booking">🔓</button>
                     </div>
+
+                    <div class="flex rounded shadow-sm">
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-purple-100 border border-purple-300 text-purple-700 px-2 py-1 rounded-l hover:bg-purple-200 font-bold border-r-0" title="Lock Admin Posting (Block Unavailability)">🔒 Admin</button>
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-purple-100 border border-purple-300 text-purple-700 px-2 py-1 rounded-r hover:bg-purple-200 font-bold" title="Unlock Admin Posting">🔓</button>
+                    </div>
+                    
+                    <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
                 </div>
             </div>`;
 
-        // Render Slots
         group.items.sort((a, b) => a.date - b.date);
 
         group.items.forEach(({ key, slot }) => {
             const filled = slot.assigned.length;
+            const isAdminLocked = slot.isAdminLocked || false; // Check state
 
-            // 3D PLASTICKY THEME LOGIC
-            // We use gradients and stronger borders to create depth
-            let themeClasses = "";
-            let statusIcon = "";
-
-            if (slot.isLocked) {
+            // Theme Logic
+            let themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100";
+            let statusIcon = "🔓";
+            
+            if (isAdminLocked) {
+                themeClasses = "border-purple-500 bg-gradient-to-br from-white via-purple-50 to-purple-100 shadow-purple-100";
+                statusIcon = "🛡️"; // Shield for Admin Lock
+            } else if (slot.isLocked) {
                 themeClasses = "border-red-500 bg-gradient-to-br from-white via-red-50 to-red-100 shadow-red-100";
                 statusIcon = "🔒";
             } else if (filled >= slot.required) {
                 themeClasses = "border-green-500 bg-gradient-to-br from-white via-green-50 to-green-100 shadow-green-100";
                 statusIcon = "✅";
-            } else {
-                themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100 shadow-orange-100";
-                statusIcon = "🔓";
             }
 
-            // Unavailability Button
-            let unavButton = "";
-            if (slot.unavailable && slot.unavailable.length > 0) {
-                unavButton = `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-1 bg-white/80 backdrop-blur text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 transition shadow-sm hover:shadow active:scale-95"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> ${slot.unavailable.length} Issue(s)</button>`;
-            }
+            const adminBtnStyle = isAdminLocked 
+                ? "bg-purple-600 text-white border-purple-700 hover:bg-purple-700" 
+                : "bg-white text-purple-600 border-purple-200 hover:bg-purple-50";
 
-            const hasLog = slot.allocationLog ? "" : "opacity-50 cursor-not-allowed";
-
+            // Render Card
             ui.adminSlotsGrid.innerHTML += `
-                <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group slot-card">
-                    <!-- Glossy Highlight Effect -->
-                    <div class="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/60 to-transparent opacity-50 rounded-t-xl pointer-events-none"></div>
-
-                    <div class="relative z-10">
-                        <div class="flex justify-between items-start mb-2">
-                            <h4 class="font-black text-gray-800 text-xs w-2/3 break-words leading-tight flex items-center gap-1">
-                                <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
-                                <span class="drop-shadow-sm">${key}</span>
-                            </h4>
-                            <div class="flex items-center bg-white/90 backdrop-blur border border-gray-200 rounded-lg text-[10px] shadow-sm shrink-0 overflow-hidden">
-                                <button onclick="changeSlotReq('${key}', -1)" class="px-2 py-1 hover:bg-gray-100 border-r border-gray-200 text-gray-600 font-bold active:bg-gray-200 transition">-</button>
-                                <span class="px-2 font-bold text-gray-800" title="Filled / Required">${filled}/${slot.required}</span>
-                                <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l border-gray-200 text-gray-600 font-bold active:bg-gray-200 transition">+</button>
-                            </div>
+                <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-black text-gray-800 text-xs w-2/3 flex items-center gap-1">
+                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
+                            <span>${key}</span>
+                        </h4>
+                        <div class="flex items-center bg-white/90 border border-gray-200 rounded-lg text-[10px] overflow-hidden">
+                            <button onclick="changeSlotReq('${key}', -1)" class="px-2 py-1 hover:bg-gray-100 border-r border-gray-200 font-bold">-</button>
+                            <span class="px-2 font-bold text-gray-800">${filled}/${slot.required}</span>
+                            <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l border-gray-200 font-bold">+</button>
                         </div>
-                        
-                        <div class="text-[10px] text-gray-600 mb-2 leading-tight bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm">
-                            <strong class="text-gray-800">Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "<span class='text-gray-400 italic'>None Assigned</span>"}
-                        </div>
-                        
-                        ${unavButton}
                     </div>
                     
-                    <div class="grid grid-cols-4 gap-1.5 mt-3 relative z-10">
-                         <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-[10px] bg-white text-green-700 border border-green-200 rounded-lg py-1.5 hover:bg-green-50 font-bold transition shadow-sm hover:shadow" title="Reminder">🔔</button>
-                         <button onclick="printSessionReport('${key}')" class="col-span-1 text-[10px] bg-white text-gray-700 border border-gray-300 rounded-lg py-1.5 hover:bg-gray-50 font-bold transition shadow-sm hover:shadow" title="Print">🖨️</button>
-                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-white text-indigo-700 border border-indigo-200 rounded-lg py-1.5 hover:bg-indigo-50 font-bold transition shadow-sm hover:shadow" title="Edit">Edit</button>
-                         <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-white text-orange-700 border border-orange-200 rounded-lg py-1.5 hover:bg-orange-50 font-bold transition shadow-sm hover:shadow ${hasLog}" title="Log">📜</button>
+                    <div class="text-[10px] text-gray-600 mb-2 bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm">
+                        <strong>Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
                     </div>
-                    <div class="flex gap-1.5 mt-2 relative z-10">
-                        <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold transition shadow-sm bg-white hover:shadow active:scale-95">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
-                        <button onclick="openRescheduleModal('${key}')" class="px-2.5 text-[10px] border border-orange-200 rounded-lg py-1.5 hover:bg-orange-50 text-orange-600 font-bold transition shadow-sm bg-white hover:shadow active:scale-95" title="Reschedule">📅</button>
-                        <button onclick="deleteSlot('${key}')" class="px-2.5 text-[10px] border border-red-200 rounded-lg py-1.5 hover:bg-red-50 text-red-600 font-bold transition shadow-sm bg-white hover:shadow active:scale-95" title="Delete">🗑️</button>
-                    </div>                
+                    
+                    ${slot.unavailable && slot.unavailable.length > 0 ? `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full bg-white/80 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 mb-2">⛔ ${slot.unavailable.length} Issue(s)</button>` : ''}
+                    
+                    <div class="flex gap-1.5 mt-2">
+                        <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold bg-white shadow-sm">
+                            ${slot.isLocked ? 'Unlock Std' : 'Lock Std'}
+                        </button>
+                        
+                        <button onclick="toggleAdminLock('${key}')" class="flex-1 text-[10px] border rounded-lg py-1.5 font-bold shadow-sm ${adminBtnStyle}">
+                            ${isAdminLocked ? 'Unlock Admin' : 'Lock Admin'}
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-1.5 mt-2">
+                         <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
+                         <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
+                         <button onclick="openManualAllocationModal('${key}')" class="bg-white text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-50 text-[10px]">Edit</button>
+                         <button onclick="deleteSlot('${key}')" class="bg-white text-red-600 border border-red-200 rounded py-1 hover:bg-red-50 text-[10px]">🗑️</button>
+                    </div>
                 </div>`;
         });
     });
 
-    // 7. BOTTOM SPACER (The Fix)
-    // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
+
 // REPLACE your existing renderStaffTable function with this SAFE version
 function renderStaffTable() {
     if (!ui.staffTableBody) return;
@@ -1720,6 +1738,26 @@ window.toggleAdvance = async function(dateStr, email, session) {
     // [VALIDATION CHECK]
     if (!isActionAllowed(dateStr)) return;
 
+    // --- NEW: ADMIN POSTING LOCK CHECK ---
+    // Look for ANY slot on this specific Date and Session that is Admin Locked
+    const hasAdminLock = Object.keys(invigilationSlots).some(k => {
+        // 1. Check Date Match
+        if (!k.startsWith(dateStr)) return false;
+
+        // 2. Check Session Match (FN/AN)
+        const tPart = k.split(' | ')[1] || "";
+        const t = tPart.toUpperCase();
+        const slotSession = (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) ? "AN" : "FN";
+
+        // 3. Return true if session matches AND it is locked by Admin
+        return slotSession === session && invigilationSlots[k].isAdminLocked;
+    });
+
+    if (hasAdminLock) {
+        return alert(`🚫 Posting Locked! The Admin has locked the ${session} session on ${dateStr} for manual assignment. You cannot change unavailability now.`);
+    }
+    // -------------------------------------
+
     // 1. Safety check for data structure
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
     if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
@@ -1773,9 +1811,26 @@ window.toggleAdvance = async function(dateStr, email, session) {
 }
 
 window.toggleWholeDay = async function(dateStr, email) {
-    // [VALIDATION CHECK]
+    // [VALIDATION CHECK 1: Date Restrictions]
     if (!isActionAllowed(dateStr)) return;
 
+    // --- NEW: ADMIN POSTING LOCK CHECK ---
+    // Check if ANY slot on this date is locked by the Admin.
+    // If even one session (FN or AN) is locked, we block "Whole Day" changes.
+    const hasAdminLock = Object.keys(invigilationSlots).some(k => {
+        // 1. Check if key starts with the date (e.g. "01.12.2025")
+        if (!k.startsWith(dateStr)) return false;
+
+        // 2. Check if this specific slot is Admin Locked
+        return invigilationSlots[k].isAdminLocked;
+    });
+
+    if (hasAdminLock) {
+        return alert(`🚫 Posting Locked! The Admin has locked sessions on ${dateStr} for manual assignment. You cannot change 'Whole Day' unavailability right now.`);
+    }
+    // -------------------------------------
+
+    // 1. Safety check for data structure
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
     
     const fnList = advanceUnavailability[dateStr].FN || [];
@@ -1903,9 +1958,17 @@ function toggleUnavDetails() {
 }
 
 window.setAvailability = async function (key, email, isAvailable) {
-    // [VALIDATION CHECK]
+    // [VALIDATION CHECK 1: Date Restrictions]
     const [dateStr] = key.split(' | ');
     if (!isActionAllowed(dateStr)) return;
+
+    // [VALIDATION CHECK 2: Admin Posting Lock]
+    // If trying to mark UNAVAILABLE and Admin Lock is ON -> BLOCK IT
+    const slot = invigilationSlots[key];
+    if (!isAvailable && slot && slot.isAdminLocked) {
+        alert("🚫 Posting Locked! You cannot mark unavailability for this slot as the Admin is finalizing assignments.");
+        return;
+    }
 
     if (isAvailable) {
         if (confirm("Mark available?")) {
@@ -1932,6 +1995,10 @@ window.setAvailability = async function (key, email, isAvailable) {
 
 window.confirmUnavailable = async function () {
     const key = document.getElementById('unav-key').value;
+    // NEW CHECK FOR SLOT KEY
+    if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked) {
+        return alert("🚫 Posting Locked! Admin has locked this slot.");
+    }
     const email = document.getElementById('unav-email').value;
     const reason = document.getElementById('unav-reason').value;
     const details = document.getElementById('unav-details').value.trim();
@@ -3171,6 +3238,16 @@ window.toggleAttendanceLock = async function (key, lockState) {
 // 3. Updated Volunteer (Handles Picking Up Exchange)
 async function volunteer(key, email) {
     const slot = invigilationSlots[key];
+    // 1. NEW CHECK: Admin Lock
+    if (slot.isAdminLocked) {
+        return alert("🚫 Posting Locked! This slot is reserved for manual assignment by the Admin.");
+    }
+    
+    // 2. Standard Lock
+    if (slot.isLocked) {
+        return alert("🚫 Slot Locked! Contact Admin.");
+    }
+    
     const [datePart] = key.split(' | ');
 
     // Check conflicts
