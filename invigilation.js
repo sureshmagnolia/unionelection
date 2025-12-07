@@ -815,11 +815,13 @@ function renderSlotsGridAdmin() {
 }
 // Updated: Render Staff List with Clickable Done Count
 // Updated: Render Staff List with Live Status Icon
+// Updated: Render Staff List with Safety Checks
 function renderStaffTable() {
     if (!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
 
-    const filter = document.getElementById('staff-search').value.toLowerCase();
+    const filterInput = document.getElementById('staff-search');
+    const filter = filterInput ? filterInput.value.toLowerCase() : "";
     const today = new Date();
 
     // 1. Filter & Map Data
@@ -828,11 +830,17 @@ function renderStaffTable() {
         .filter(item => {
             if (item.status === 'archived') return false;
 
-            // Search Logic
+            // Search Logic (SAFE VERSION)
             if (filter) {
-                const matchName = item.name.toLowerCase().includes(filter);
-                const matchDept = item.dept.toLowerCase().includes(filter);
-                const matchDesig = (item.designation || "").toLowerCase().includes(filter);
+                // Fix: Add || "" to ensure we never call toLowerCase() on null/undefined
+                const safeName = (item.name || "").toLowerCase();
+                const safeDept = (item.dept || "").toLowerCase();
+                const safeDesig = (item.designation || "").toLowerCase();
+                
+                const matchName = safeName.includes(filter);
+                const matchDept = safeDept.includes(filter);
+                const matchDesig = safeDesig.includes(filter);
+                
                 if (!matchName && !matchDept && !matchDesig) return false;
             }
             return true;
@@ -874,6 +882,10 @@ function renderStaffTable() {
     // 3. Render Rows
     pageItems.forEach((staff) => {
         const index = staff.originalIndex;
+
+        // Ensure name is safe for display
+        const displayName = staff.name || "Unknown Name";
+        const displayDept = staff.dept || "No Dept";
 
         const target = calculateStaffTarget(staff);
         const done = getDutiesDoneCount(staff.email);
@@ -919,12 +931,12 @@ function renderStaffTable() {
                 
                 <div class="hidden md:flex items-center">
                     <div class="mr-2">${liveIcon}</div> <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
-                        ${staff.name.charAt(0)}
+                        ${displayName.charAt(0)}
                     </div>
                     <div>
-                        <div class="text-sm font-bold text-gray-800">${staff.name}</div>
+                        <div class="text-sm font-bold text-gray-800">${displayName}</div>
                         <div class="text-xs text-gray-500 mt-0.5">
-                            <span class="font-semibold text-gray-600">${staff.dept}</span> | ${staff.designation} ${activeRoleLabel}
+                            <span class="font-semibold text-gray-600">${displayDept}</span> | ${staff.designation || ""} ${activeRoleLabel}
                         </div>
                     </div>
                 </div>
@@ -933,12 +945,12 @@ function renderStaffTable() {
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
                              <div class="mr-1">${liveIcon}</div> <div class="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm">
-                                ${staff.name.charAt(0)}
+                                ${displayName.charAt(0)}
                             </div>
                             <div>
-                                <div class="text-sm font-bold text-gray-900">${staff.name}</div>
-                                <div class="text-xs text-gray-500 font-medium">${staff.dept} ${activeRoleLabel}</div>
-                                <div class="text-[10px] text-gray-400">${staff.designation}</div>
+                                <div class="text-sm font-bold text-gray-900">${displayName}</div>
+                                <div class="text-xs text-gray-500 font-medium">${displayDept} ${activeRoleLabel}</div>
+                                <div class="text-[10px] text-gray-400">${staff.designation || ""}</div>
                             </div>
                         </div>
                     </div>
