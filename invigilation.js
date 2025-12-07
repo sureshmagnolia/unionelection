@@ -1,6 +1,6 @@
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const auth = window.firebase.auth;
