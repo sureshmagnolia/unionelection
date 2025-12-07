@@ -5646,19 +5646,24 @@ window.openManualAllocationModal = function (key) {
             `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
         ).join('');
 
+        // COMPACT ROW DESIGN
         availList.innerHTML += `
-            <tr class="${rowClass} border-b last:border-0 transition">
-                <td class="px-3 py-2 text-center w-10">
-                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
+            <tr class="${rowClass} border-b last:border-0 transition text-xs">
+                <td class="px-1 py-2 md:px-3 text-center w-8 md:w-10">
+                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600 rounded" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
                 </td>
-                <td class="px-3 py-2">
-                    <div class="flex items-center flex-wrap">
-                        <span class="font-bold text-gray-800 mr-2">${s.name}</span>
-                        ${warningHtml}
+                <td class="px-2 py-2 md:px-3">
+                    <div class="flex flex-col md:flex-row md:items-center">
+                        <div class="flex items-center">
+                            <span class="font-bold text-gray-800 mr-1.5 truncate text-xs md:text-sm">${s.name}</span>
+                            <div class="flex flex-wrap gap-0.5">${warningHtml}</div>
+                        </div>
+                        <div class="text-[10px] text-gray-500 leading-tight mt-0.5 md:mt-0 md:ml-1">
+                            <span class="md:hidden">• </span>${s.dept} <span class="hidden md:inline">| ${s.designation}</span>
+                        </div>
                     </div>
-                    <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
                 </td>
-                <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
+                <td class="px-2 py-2 md:px-3 text-center font-mono font-bold ${pendingColor} w-10 md:w-16 text-xs md:text-sm">
                     ${s.pending}
                 </td>
             </tr>`;
@@ -5695,9 +5700,9 @@ window.openManualAllocationModal = function (key) {
             const s = staffData.find(st => st.email === email) || { name: email };
 
             unavList.innerHTML += `
-                <div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm mb-1">
-                    <div class="font-bold text-red-700">${s.name}</div>
-                    <div class="text-gray-600 font-medium mt-0.5">${reason}</div>
+                <div class="bg-white p-2 rounded border border-red-100 text-[10px] md:text-xs shadow-sm mb-1 flex justify-between items-center">
+                    <div class="font-bold text-red-700 truncate mr-2">${s.name}</div>
+                    <div class="text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded whitespace-nowrap">${reason}</div>
                 </div>`;
         });
     } else {
