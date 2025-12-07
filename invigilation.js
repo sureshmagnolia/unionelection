@@ -7270,9 +7270,9 @@ function printVacationReport(data, start, end) {
                     <tr>
                         <th width="3%">#</th>
                         <th width="20%">Staff Details</th>
-                        <th width="20%">Sessions Attended</th>
-                        <th width="15%">Duty Dates (Unique)</th>
-                        <th width="25%">Intervening Holidays (Claimable)</th>
+                        <th width="35%">Sessions Attended</th>
+                        <th width="20%">Duty Dates (Unique)</th>
+                        <th width="20%">Intervening Holidays (Claimable)</th>
                         <th width="7%">Hol. Count</th>
                         <th width="10%">Total Eligible</th>
                     </tr>
