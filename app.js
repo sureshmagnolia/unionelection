@@ -10698,11 +10698,11 @@ Are you sure?
     const restoreSettingsBtn = document.getElementById('restore-settings-btn');
     const restoreSettingsInput = document.getElementById('restore-settings-input');
 
-    // B. NUKE IT ALL (Master Reset)
+    // B. NUKE IT ALL (Master Reset - Selective Wipe)
     if (nukeBtn) {
         nukeBtn.addEventListener('click', async () => {
             // 1. Safety Backup Prompt
-            if (confirm("🛡️ CRITICAL SAFETY CHECK 🛡️\n\nBefore you destroy everything...\nWould you like to download a FINAL BACKUP (CSV + JSON)?\n\n• Click OK to Backup first.\n• Click Cancel to proceed without backup.")) {
+            if (confirm("🛡️ CRITICAL SAFETY CHECK 🛡️\n\nBefore you destroy data...\nWould you like to download a FINAL BACKUP (CSV + JSON)?\n\n• Click OK to Backup first.\n• Click Cancel to proceed without backup.")) {
                 await triggerSafetyBackup();
             }
 
@@ -10714,8 +10714,8 @@ Are you sure?
             // 3. Payload Selection
             const choice = prompt(
                 "☢️ SELECT PAYLOAD YIELD ☢️\n\n" +
-                "Type 'DATA' to wipe Students & Allotments (Keeps Settings & Invigilators)\n" +
-                "Type 'FULL' to wipe All Exam Data & Settings (Keeps Invigilators)\n\n" +
+                "Type 'DATA' to wipe Students & Allotments (Keeps Rooms/Settings)\n" +
+                "Type 'FULL' to wipe All Exam Data, Rooms & College Name (Keeps Invigilators)\n\n" +
                 "Enter payload type below:"
             );
 
@@ -10740,97 +10740,71 @@ Are you sure?
             nukeBtn.disabled = true;
 
             try {
-                const { db, doc, writeBatch, setDoc, getDoc, collection, getDocs } = window.firebase;
+                const { db, doc, writeBatch, updateDoc, collection, getDocs } = window.firebase;
+                
+                // --- DEFINE TARGET LISTS ---
+                
+                // List 1: Student Data & Operations (Target of DATA mode)
+                const dataKeys = [
+                    'examBaseData',        // Students
+                    'examRoomAllotment',   // Seating
+                    'examScribeAllotment', // Scribe Mapping
+                    'examAbsenteeList',    // Absentees
+                    'examQPCodes',         // QP Codes
+                    'examScribeList'       // Scribe List
+                ];
 
-                if (mode === 'DATA') {
-                    // --- OPTION A: TACTICAL STRIKE (Data Only) ---
-                    // Wipes: Students, Allotments, QP Codes, Absentees.
-                    // Keeps: Settings (Rooms/Streams), College Name, Invigilators.
-                    
-                    const keysToRemove = [
-                        BASE_DATA_KEY, ROOM_ALLOTMENT_KEY, SCRIBE_ALLOTMENT_KEY,
-                        ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY, 'examBaseData'
-                    ];
-                    keysToRemove.forEach(key => localStorage.removeItem(key));
+                // List 2: Infrastructure & Settings (Target of FULL mode)
+                const settingsKeys = [
+                    'examRoomConfig',      // Rooms
+                    'examStreamsConfig',   // Streams
+                    'examSessionNames',    // Exam Names
+                    'examRulesConfig',     // Exam Schedule
+                    'examCollegeName'      // College Name
+                ];
 
-                    if (currentCollegeId) {
-                        const batch = writeBatch(db);
-                        const mainRef = doc(db, "colleges", currentCollegeId);
+                // Determine what to wipe based on mode
+                let keysToWipe = [...dataKeys]; // DATA mode always wipes data
+                if (mode === 'FULL') {
+                    keysToWipe = [...dataKeys, ...settingsKeys]; // FULL adds settings
+                }
 
-                        batch.update(mainRef, {
-                            examQPCodes: "{}",
-                            examScribeAllotment: "{}",
-                            examAbsenteeList: "{}",
-                            lastUpdated: new Date().toISOString()
-                        });
+                // --- A. LOCAL WIPE (Browser) ---
+                keysToWipe.forEach(key => localStorage.removeItem(key));
 
-                        // Delete Data Chunks
-                        const dataColRef = collection(db, "colleges", currentCollegeId, "data");
-                        const chunkSnaps = await getDocs(dataColRef);
-                        chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
+                // --- B. CLOUD WIPE (Firebase) ---
+                if (currentCollegeId) {
+                    const batch = writeBatch(db);
+                    const mainRef = doc(db, "colleges", currentCollegeId);
 
-                        await batch.commit();
-                    }
-                    alert("💥 TACTICAL STRIKE SUCCESSFUL 💥\n\nStudent data vaporized.\nSettings & Invigilators remain intact.");
+                    // 1. Prepare Update Object (Reset fields to empty/default)
+                    const updatePayload = {
+                        lastUpdated: new Date().toISOString()
+                    };
 
-                } else if (mode === 'FULL') {
-                    // --- OPTION B: TOTAL ANNIHILATION (Exam Reset) ---
-                    // Wipes: Students, Allotments, Settings (Rooms/Streams/Name).
-                    // Keeps: Invigilators, Invigilation Slots, Admin Access.
+                    keysToWipe.forEach(key => {
+                        // Reset to sensible defaults based on key type
+                        if (key === 'examCollegeName') updatePayload[key] = "University of Calicut";
+                        else if (key === 'examStreamsConfig') updatePayload[key] = '["Regular"]';
+                        else if (key.includes('List') || key.includes('Config')) updatePayload[key] = "[]"; // Arrays
+                        else updatePayload[key] = "{}"; // Objects/Maps
+                    });
 
-                    localStorage.clear(); // Clear Browser
+                    // Update Main Document (Selective Erase)
+                    batch.update(mainRef, updatePayload);
 
-                    if (currentCollegeId) {
-                        const mainRef = doc(db, "colleges", currentCollegeId);
-                        
-                        // 1. Fetch Current Data to SAVE Invigilators
-                        const snap = await getDoc(mainRef);
-                        let preservedData = {};
-                        
-                        if (snap.exists()) {
-                            const d = snap.data();
-                            // Fields to PROTECT from the nuke
-                            preservedData = {
-                                admins: d.admins || [currentUser.email],
-                                allowedUsers: d.allowedUsers || [currentUser.email],
-                                staffAccessList: d.staffAccessList || [],
-                                
-                                // Invigilation Module Data
-                                examStaffData: d.examStaffData || "[]",
-                                examInvigilationSlots: d.examInvigilationSlots || "{}",
-                                invigAdvanceUnavailability: d.invigAdvanceUnavailability || "{}",
-                                invigRoles: d.invigRoles || "{}",
-                                invigDesignations: d.invigDesignations || "{}",
-                                invigDepartments: d.invigDepartments || "[]",
-                                invigGlobalTarget: d.invigGlobalTarget || 2,
-                                invigGoogleScriptUrl: d.invigGoogleScriptUrl || ""
-                            };
-                        }
+                    // 2. Delete Data Chunks (Always wipe chunks in both modes)
+                    const dataColRef = collection(db, "colleges", currentCollegeId, "data");
+                    const chunkSnaps = await getDocs(dataColRef);
+                    chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
 
-                        // 2. Overwrite with Fresh State + Preserved Data
-                        const freshState = {
-                            ...preservedData, // Put saved data back
-                            lastUpdated: new Date().toISOString(),
-                            examCollegeName: "University of Calicut", // Reset Name
-                            examRoomConfig: "{}", // Reset Rooms
-                            examStreamsConfig: '["Regular"]', // Reset Streams
-                            examSessionNames: "{}",
-                            examRulesConfig: "[]",
-                            examQPCodes: "{}",
-                            examScribeAllotment: "{}",
-                            examAbsenteeList: "{}"
-                        };
+                    await batch.commit();
+                }
 
-                        await setDoc(mainRef, freshState);
-
-                        // 3. Delete Data Chunks
-                        const batch = writeBatch(db);
-                        const dataColRef = collection(db, "colleges", currentCollegeId, "data");
-                        const chunkSnaps = await getDocs(dataColRef);
-                        chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
-                        await batch.commit();
-                    }
-                    alert("💥 KABOOM! 💥\n\nExam System has been factory reset.\nInvigilation Module & Staff data are SAFE.");
+                if (mode === 'FULL') {
+                    alert("💥 KABOOM! 💥\n\nExam Configuration & Student Data wiped.\nInvigilation Module & Staff data are SAFE.");
+                } else {
+                    alert("💥 TACTICAL STRIKE SUCCESSFUL 💥\n\nStudent Data wiped.\nSettings & Invigilators remain intact.");
                 }
 
                 window.location.reload();
