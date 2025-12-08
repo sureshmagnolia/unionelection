@@ -708,20 +708,22 @@ window.sendSingleEmail = function (btn, email, name, subject, message) {
 window.toggleAdminLock = async function (key) {
     if (!invigilationSlots[key]) return;
     
-    // Toggle Admin Lock state
+    // Toggle state
     invigilationSlots[key].isAdminLocked = !invigilationSlots[key].isAdminLocked;
     
-    // LOGIC CHANGE: If Admin Lock is ENABLED, enforce Standard Lock (isLocked) too.
-    // When Admin Lock is removed later, Standard Lock remains (enabling Exchange Market).
+    // Force Standard Lock on if Admin Locked
     if (invigilationSlots[key].isAdminLocked) {
         invigilationSlots[key].isLocked = true;
     }
     
+    // 1. Render immediately (Optimistic UI update)
+    renderSlotsGridAdmin();
+    
     const status = invigilationSlots[key].isAdminLocked ? "LOCKED" : "UNLOCKED";
     logActivity("Admin Posting Lock", `Admin ${status} slot ${key} for posting.`);
     
+    // 2. Sync to Cloud
     await syncSlotsToCloud();
-    renderSlotsGridAdmin();
 }
 
 window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
@@ -1450,7 +1452,6 @@ function renderExchangeMarket(myEmail) {
     });
 }
 
-
 window.openDayDetail = function (dateStr, email) {
     document.getElementById('modal-day-title').textContent = dateStr;
     const container = document.getElementById('modal-sessions-container');
@@ -1505,7 +1506,7 @@ window.openDayDetail = function (dateStr, email) {
                 else isAssignedFN = true;
             }
             
-            // Track Admin Locks for Bottom Section
+            // Track Admin Locks
             if (isAdminLocked) {
                 if (isAN) adminLockAN = true;
                 else adminLockFN = true;
@@ -1514,7 +1515,6 @@ window.openDayDetail = function (dateStr, email) {
             // --- Action Buttons ---
             let actionHtml = "";
             
-            // [PRIORITY 1: DATE RESTRICTION]
             if (isRestricted) {
                  if (isAssigned) {
                      actionHtml = `<div class="w-full bg-gray-100 text-gray-500 border border-gray-200 text-xs py-2 rounded font-bold text-center">✅ Duty Assigned ${restrictLabel}</div>`;
@@ -1524,7 +1524,6 @@ window.openDayDetail = function (dateStr, email) {
                      actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
                  }
             } 
-            // [PRIORITY 2: ADMIN POSTING LOCK]
             else if (isAdminLocked) {
                  if (isAssigned) {
                      if (isPostedByMe) {
@@ -1533,13 +1532,9 @@ window.openDayDetail = function (dateStr, email) {
                          actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
                      }
                  } else {
-                     // BLOCK Volunteering & Unavailability
-                     actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm">
-                        <span>🛡️</span> Posting Restricted by Admin
-                     </div>`;
+                     actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm"><span>🛡️</span> Posting Restricted by Admin</div>`;
                  }
             }
-            // [PRIORITY 3: STANDARD LOGIC]
             else {
                 if (isAssigned) {
                     if (isPostedByMe) {
@@ -1562,9 +1557,7 @@ window.openDayDetail = function (dateStr, email) {
                 }
             }
 
-            // Reserve & Staff List
-            const reserves = getSlotReserves(key);
-            const reserveEmails = reserves.map(r => r.email);
+            // --- STAFF LIST RENDER (FIXED) ---
             let staffListHtml = '';
             if (slot.assigned.length > 0) {
                 const listItems = slot.assigned.map(st => {
@@ -1572,9 +1565,11 @@ window.openDayDetail = function (dateStr, email) {
                     if (!s) return '';
                     const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
                     const statusIcon = isExchanging ? "⏳" : "✅";
-                    const rowClass = "bg-white";
-                    return `<div class="flex justify-between items-center text-xs ${rowClass} p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span>${reserveBadge}</span></div>`;
+                    
+                    // Fixed: Removed Reference to reserveBadge
+                    return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span></div>`;
                 }).join('');
+                
                 staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
             }
 
@@ -1585,25 +1580,13 @@ window.openDayDetail = function (dateStr, email) {
     }
 
     // 3. ADVANCE / GENERAL UNAVAILABILITY SECTION
-    
-    // [RESTRICTION CHECK FOR ADVANCE SECTION]
     if (isRestricted) {
-         let reasonMsg = "Editing disabled.";
-         if (isPast) reasonMsg = "Date in Past";
-         if (isTooFar) reasonMsg = "Date > 3 Months ahead";
-         
-         container.innerHTML += `
-            <div class="mt-4 pt-4 border-t border-gray-200">
-                <div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center">
-                    <p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p>
-                </div>
-            </div>`;
-         
+         let reasonMsg = isPast ? "Date in Past" : "Date > 3 Months ahead";
+         container.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200"><div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center"><p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p></div></div>`;
          window.openModal('day-detail-modal');
          return;
     }
 
-    // --- NORMAL MODE: Render Toggle Buttons ---
     const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
     const fnUnavail = adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === email : u.email === email));
     const anUnavail = adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === email : u.email === email));
@@ -1623,7 +1606,6 @@ window.openDayDetail = function (dateStr, email) {
     const anyAdminLock = adminLockFN || adminLockAN;
 
     let wholeClass, wholeText, wholeDisabled;
-
     if (anyAdminLock) {
         wholeClass = "bg-amber-50 text-amber-500 border-amber-100 cursor-not-allowed";
         wholeText = "🛡️ Whole Day Locked by Admin";
@@ -1640,9 +1622,7 @@ window.openDayDetail = function (dateStr, email) {
 
     container.innerHTML += `
         <div class="mt-4 pt-4 border-t border-gray-200">
-            <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2">
-                <span>🗓️</span> General Unavailability (OD/DL/Leave)
-            </h4>
+            <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2"><span>🗓️</span> General Unavailability (OD/DL/Leave)</h4>
             <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
                 <p class="text-[10px] text-gray-600 mb-3">Mark leave for sessions or the whole day.</p>
                 <div class="grid grid-cols-2 gap-2 mb-2">
@@ -1656,6 +1636,7 @@ window.openDayDetail = function (dateStr, email) {
 
     window.openModal('day-detail-modal');
 }
+
 
 // --- HELPERS & ACTIONS ---
 function updateHeaderButtons(currentView) {
@@ -2012,9 +1993,16 @@ window.toggleWholeDay = async function(dateStr, email) {
 
 // --- STANDARD EXPORTS ---
 window.toggleLock = async function (key) {
+    if (!invigilationSlots[key]) return;
+
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
+    
+    // 1. Render immediately
+    renderSlotsGridAdmin();
+
     const status = invigilationSlots[key].isLocked ? "LOCKED" : "UNLOCKED";
     logActivity("Session Lock Toggle", `Admin ${status} session ${key}.`);
+    
     await syncSlotsToCloud();
 }
 
