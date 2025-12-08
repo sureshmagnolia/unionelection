@@ -12,12 +12,17 @@ import { getApp }
 // This grabs the Firebase App instance that you initialized in your other file/HTML
 const app = getApp(); 
 
-// Enable Localhost Debugging (Prevents being blocked while testing on your computer)
-// Remove this line when you go fully public if you want strict enforcement
-self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; 
+// 1. CONDITIONAL DEBUG MODE
+// Only enable the debug token if the URL is localhost or 127.0.0.1.
+// Real users on the live site will skip this and use standard reCAPTCHA.
+if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    console.log("🛡️ App Check: Debug Mode Enabled (Localhost)");
+}
 
+// 2. START APP CHECK
 const appCheck = initializeAppCheck(app, {
-    // Paste your SITE KEY here:
+    // Your public Site Key
     provider: new ReCaptchaV3Provider('6LcMiSQsAAAAABfK5nXqVJ_vo6GwU4DFfBN7-u5K'),
 
     // Automatically refresh the token in the background
