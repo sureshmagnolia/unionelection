@@ -934,9 +934,17 @@ function renderStaffTable() {
         .sort((a, b) => {
             // 1. Live Status Priority (Online > Idle > Offline)
             const getStatusRank = (email) => {
-                // Check global live users object
-                if (!window.globalLiveUsers || !window.globalLiveUsers[email]) return 0; // Offline
-                const s = window.globalLiveUsers[email].status;
+                // FIX: Access the local 'globalLiveUsers' variable directly (removed 'window.')
+                // Also handle case-insensitivity to be safe
+                if (!globalLiveUsers) return 0;
+                
+                const key = email; 
+                // Try exact match, then lowercase match if needed
+                const user = globalLiveUsers[key] || globalLiveUsers[key.toLowerCase()];
+                
+                if (!user) return 0; // Offline (Gray)
+
+                const s = user.status;
                 if (s === 'online') return 2; // Highest Priority (Green)
                 if (s === 'idle') return 1;   // Medium Priority (Yellow)
                 return 0;                     // Lowest Priority (Gray)
@@ -948,11 +956,13 @@ function renderStaffTable() {
             // If ranks are different, put higher rank first
             if (rankA !== rankB) return rankB - rankA;
 
-            // 2. Existing Secondary Sort (Dept > Name)
+            // 2. Secondary Sort: Department (A-Z)
             const deptA = (a.dept || "").toLowerCase();
             const deptB = (b.dept || "").toLowerCase();
             if (deptA < deptB) return -1;
             if (deptA > deptB) return 1;
+
+            // 3. Tertiary Sort: Name (A-Z)
             return (a.name || "").localeCompare(b.name || "");
         });
 
