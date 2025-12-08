@@ -1165,9 +1165,15 @@ function renderStaffCalendar(myEmail) {
                     glowClass = "shadow-lg shadow-green-200";
                 }
                 else if (isPostedByMe) {
-                    badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300";
-                    icon = "⏳";
-                    statusText = "Posted";
+                    if (isAdminLocked) {
+                        badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300";
+                        icon = "🛡️";
+                        statusText = "Frozen"; // Indicates market is paused
+                    } else {
+                        badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300";
+                        icon = "⏳";
+                        statusText = "Posted";
+                    }
                 }
                 else if (isAssigned) {
                     if (isAdminLocked) {
@@ -1275,6 +1281,7 @@ function renderExchangeMarket(myEmail) {
     let marketSlots = [];
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
+        if (slot.isAdminLocked) return;
         if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
             // *** CHANGE: Show ALL requests, including my own ***
             slot.exchangeRequests.forEach(sellerEmail => {
@@ -3349,6 +3356,12 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     const slot = invigilationSlots[key];
     const sellerName = getNameFromEmail(sellerEmail);
 
+    // --- NEW: ADMIN LOCK CHECK ---
+    if (slot.isAdminLocked) {
+        return alert("🛡️ Market Suspended.\n\nThe Admin has locked this slot for manual assignment. Exchanges cannot be processed right now.");
+    }
+    // -----------------------------
+
     if (!confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
 
     // 1. Validation
@@ -3373,7 +3386,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     // 4. LOGGING
     logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
 
-    // --- NEW: SEND NOTIFICATION EMAIL TO SELLER ---
+    // --- NOTIFICATION EMAIL TO SELLER ---
     if (seller && seller.email && googleScriptUrl) {
         const subject = `Duty Exchange Accepted: ${key}`;
         const body = `
@@ -3384,66 +3397,58 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
             <p style="font-size:12px; color:#666;">Exam Cell Notification</p>
         `;
 
-        // Non-blocking fetch (Fire and Forget)
         fetch(googleScriptUrl, {
             method: "POST",
             mode: "no-cors",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                to: seller.email,
-                subject: subject,
-                body: body
-            })
-        }).then(() => console.log("Notification email triggered."))
-            .catch(e => console.error("Email failed", e));
+            body: JSON.stringify({ to: seller.email, subject: subject, body: body })
+        }).catch(e => console.error("Email failed", e));
     }
-    // ----------------------------------------------
 
     // 5. Sync
     await syncSlotsToCloud();
     await syncStaffToCloud();
 
-    alert(`Success! You have accepted the duty from ${sellerName}. A notification has been sent to them.`);
-
+    alert(`Success! You have accepted the duty from ${sellerName}.`);
+    
     window.closeModal('day-detail-modal');
     renderStaffCalendar(buyerEmail);
     renderExchangeMarket(buyerEmail);
     initStaffDashboard(buyer);
 }
+
 window.postForExchange = async function (key, email) {
     const slot = invigilationSlots[key];
     
-    // 1. SECURITY CHECK: Lock Status
+    // 1. ADMIN LOCK CHECK
+    if (slot.isAdminLocked) {
+        return alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. New exchange requests are disabled.");
+    }
+
+    // 2. STANDARD LOCK CHECK (Must be locked to exchange)
     if (!slot.isLocked) {
-        alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked).\n\nIf you cannot do this duty, please use the 'Cancel Duty' button in the calendar detail view instead of posting it for exchange.");
+        alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
         return;
     }
 
-    // 2. Confirm Action
-    if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
+    if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible until someone else accepts it.")) return;
 
     if (!slot.exchangeRequests) slot.exchangeRequests = [];
 
     if (!slot.exchangeRequests.includes(email)) {
-        // 3. Update Local Data
         slot.exchangeRequests.push(email);
-
-        // 4. LOGGING
         logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
-
-        // 5. IMMEDIATE UI UPDATES
+        
         try {
             renderStaffCalendar(email);
             if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
             if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(email);
             window.closeModal('day-detail-modal');
-        } catch (e) { console.error("UI Update Error:", e); }
+        } catch (e) { }
 
-        // 6. Save to Cloud
         await syncSlotsToCloud();
     }
 }
-
 window.withdrawExchange = async function (key, email) {
     // 1. ADDED CONFIRMATION CHECK
     if (!confirm("Are you sure you want to withdraw this request and keep the duty?")) return;
