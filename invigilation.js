@@ -148,37 +148,40 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
-// --- CORE FUNCTIONS ---
-
+/**
+ * Establishes real-time synchronization listeners for the current college.
+ * NOTE: Staff data is fetched once (getDoc) for staff users to save reads.
+ * @param {string} collegeId The ID of the current college.
+ * @param {string} mode The current role ('admin' or 'staff').
+ */
 function setupLiveSync(collegeId, mode) {
-    // 1. Clear Old Listeners
+    console.log(`📡 Setting up Live Sync in ${mode} mode for ${collegeId}`);
+    
+    // Clear any existing listeners to prevent leaks
     if (cloudUnsubscribe) cloudUnsubscribe();
     if (slotsUnsubscribe) slotsUnsubscribe();
-    if (staffUnsubscribe) staffUnsubscribe();
-    if (allocUnsubscribe) allocUnsubscribe();
+    if (staffUnsubscribe) staffUnsubscribe(); 
 
+    // --- 1. LISTEN TO COLLEGE CONFIG (Always Live) ---
     const docRef = doc(db, "colleges", collegeId);
-
-    // --- A. CONFIG SYNC (Lightweight) ---
+    
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             updateSyncStatus("Synced", "success");
             const data = docSnap.data();
             
-            // Update Global Variables
+            // 1. Update Global Variables
             collegeName = data.examCollegeName || "College";
-            collegeSettings = data; // Store full object for reference
+            // Store settings safely
+            if (data.invigSettings) collegeSettings = JSON.parse(data.invigSettings || '{}');
 
-            const currentCache = localStorage.getItem(`config_${collegeId}`);
-            if (currentCache !== JSON.stringify(data)) {
-                localStorage.setItem(`config_${collegeId}`, JSON.stringify(data));
-                applyCollegeConfig(data, mode, true);
-            }
+            // 2. TRIGGER DASHBOARD (This was missing!)
+            // We call applyCollegeConfig which handles opening the correct view (Admin vs Staff)
+            applyCollegeConfig(data, mode, true);
         }
     });
 
-    // --- B. SLOTS SYNC (Always Live - Critical) ---
-    // Both Admin and Staff need to see live slot changes (bookings/exchanges)
+    // --- 2. LISTEN TO SLOTS (Always Live, High Priority) ---
     const slotsRef = doc(db, "colleges", collegeId, "system_data", "slots");
     slotsUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -187,7 +190,7 @@ function setupLiveSync(collegeId, mode) {
             advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
             localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
 
-            // Dynamic UI Refresh
+            // Dynamic UI Refresh based on what is visible
             const adminView = document.getElementById('view-admin');
             const staffView = document.getElementById('view-staff');
 
@@ -195,51 +198,51 @@ function setupLiveSync(collegeId, mode) {
                 renderSlotsGridAdmin();
                 renderAdminTodayStats();
             } else if (staffView && !staffView.classList.contains('hidden')) {
-                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                if (me) {
-                    renderStaffCalendar(me.email);
-                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
-                    if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
+                // If staff view is open, refresh calendar
+                let emailToRender = currentUser ? currentUser.email : null;
+                if (staffData.length > 0 && currentUser) {
+                     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                     if (me) emailToRender = me.email;
+                }
+                if (emailToRender) {
+                    renderStaffCalendar(emailToRender);
+                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
                 }
             }
         }
     });
 
-    // --- C. STAFF DATA (Conditional Strategy) ---
+    // --- 3. STAFF DATA (Optimized: Live for Admin, Once for Staff) ---
     const staffRef = doc(db, "colleges", collegeId, "system_data", "staff");
 
     if (mode === 'admin') {
-        // ADMIN: Live Listener (Needs to see new staff immediately)
+        // ADMIN: Needs live updates for adding/removing staff
+        console.log("👥 Staff List: Using Live Listener (Admin Mode)");
         staffUnsubscribe = onSnapshot(staffRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 staffData = JSON.parse(data.examStaffData || '[]');
+                localStorage.setItem('examStaffData', data.examStaffData || '[]');
                 
+                // Update Admin UI immediately
                 renderStaffTable();
                 updateAdminUI();
             }
         });
     } else {
-        // STAFF: Fetch ONCE (Saves Reads)
-        // Staff don't need to see realtime updates of other staff profiles
+        // STAFF: Fetch ONCE to save reads
+        console.log("👥 Staff List: Using Fetch Once (Staff Mode)");
         getDoc(staffRef).then((docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 staffData = JSON.parse(data.examStaffData || '[]');
-                
-                // Initialize Dashboard
-                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                if (me) {
-                    if (document.getElementById('view-staff').classList.contains('hidden')) {
-                        initStaffDashboard(me);
-                    } else {
-                        // Just update stats if already open
-                        const done = getDutiesDoneCount(me.email);
-                        const pending = Math.max(0, calculateStaffTarget(me) - done);
-                        document.getElementById('staff-view-pending').textContent = pending;
-                        const completedEl = document.getElementById('staff-view-completed');
-                        if (completedEl) completedEl.textContent = done;
-                        renderStaffRankList(me.email);
+                localStorage.setItem('examStaffData', data.examStaffData || '[]');
+
+                // If user is just logging in, initialize their dashboard now
+                if (currentUser) {
+                    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                    if (me && document.getElementById('view-staff').classList.contains('hidden')) {
+                         initStaffDashboard(me);
                     }
                 }
             }
