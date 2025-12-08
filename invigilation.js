@@ -135,11 +135,21 @@ const ui = {
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        await handleLogin(user);
+        // Fix: Verify function exists before calling
+        if (typeof handleLogin === 'function') {
+            await handleLogin(user);
+        } else {
+            console.error("Critical Error: handleLogin function is missing!");
+            alert("System Error: Login function not found. Please refresh.");
+        }
     } else {
+        // Logout Cleanup
         currentUser = null;
         isAdmin = false;
         if (cloudUnsubscribe) cloudUnsubscribe();
+        if (slotsUnsubscribe) slotsUnsubscribe();
+        if (staffUnsubscribe) staffUnsubscribe();
+        
         showView('login');
         document.getElementById('auth-section').classList.add('hidden');
     }
@@ -148,12 +158,103 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
-/**
- * Establishes real-time synchronization listeners for the current college.
- * NOTE: Staff data is fetched once (getDoc) for staff users to save reads.
- * @param {string} collegeId The ID of the current college.
- * @param {string} mode The current role ('admin' or 'staff').
- */
+// --- CORE FUNCTIONS ---
+
+async function handleLogin(user) {
+    document.getElementById('login-btn').innerText = "Verifying...";
+    console.log("👤 Handling login for:", user.email);
+
+    // 1. URL ID Check (Highest Priority)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlId = urlParams.get('id');
+    if (urlId) {
+        await verifyAndLaunch(urlId, user);
+        return;
+    }
+
+    // 2. Cache Check (Optimization - Zero Reads)
+    const cachedId = localStorage.getItem('my_college_id');
+    if (cachedId) {
+        console.log("⚡ Fast Login via Cache:", cachedId);
+        await verifyAndLaunch(cachedId, user);
+        return;
+    }
+
+    // 3. Database Search (Fallback - Costs Reads)
+    try {
+        const collegesRef = collection(db, "colleges");
+        const [adminSnap, staffSnap] = await Promise.all([
+            getDocs(query(collegesRef, where("allowedUsers", "array-contains", user.email))),
+            getDocs(query(collegesRef, where("staffAccessList", "array-contains", user.email)))
+        ]);
+
+        if (!adminSnap.empty) {
+            await verifyAndLaunch(adminSnap.docs[0].id, user);
+            return;
+        }
+        if (!staffSnap.empty) {
+            await verifyAndLaunch(staffSnap.docs[0].id, user);
+            return;
+        }
+
+        alert("⛔ Access Denied. Your email is not found in any college.");
+        signOut(auth);
+        document.getElementById('login-btn').innerText = "Login with Google";
+
+    } catch (e) {
+        console.error("Login Error:", e);
+        alert("Login Error: " + e.message);
+    }
+}
+
+// Helper: Verify permission and launch dashboard
+async function verifyAndLaunch(collegeId, user) {
+    try {
+        const docRef = doc(db, "colleges", collegeId);
+        const snap = await getDoc(docRef);
+
+        if (snap.exists()) {
+            const data = snap.data();
+            
+            // Check Role
+            const isAdmin = data.allowedUsers?.includes(user.email);
+            const isStaff = data.staffAccessList?.includes(user.email);
+            const sList = JSON.parse(data.examStaffData || '[]');
+            const isStaffData = sList.some(s => s.email.toLowerCase() === user.email.toLowerCase());
+
+            if (isAdmin || isStaff || isStaffData) {
+                // Success: Cache ID and Start
+                localStorage.setItem('my_college_id', collegeId);
+                const role = isAdmin ? "Admin" : "Staff";
+                initializeSession(collegeId, isAdmin, role);
+            } else {
+                throw new Error("Permission Denied.");
+            }
+        } else {
+            throw new Error("College not found.");
+        }
+    } catch (e) {
+        console.error("Launch Error:", e);
+        localStorage.removeItem('my_college_id'); // Clear invalid cache
+        alert("⛔ Login Failed: " + e.message);
+        signOut(auth);
+        document.getElementById('login-btn').innerText = "Login with Google";
+    }
+}
+
+function initializeSession(id, adminStatus, roleName) {
+    console.log(`✅ Initializing Session: ${id} as ${roleName}`);
+    currentCollegeId = id;
+    isAdmin = adminStatus;
+
+    if (typeof window.initLivePresence === 'function') {
+        window.initLivePresence(currentUser.email, currentUser.displayName || roleName, isAdmin);
+    }
+
+    // Start Data Sync (This loads the dashboard)
+    setupLiveSync(currentCollegeId, isAdmin ? 'admin' : 'staff');
+}
+
 function setupLiveSync(collegeId, mode) {
     console.log(`📡 Setting up Live Sync in ${mode} mode for ${collegeId}`);
     
