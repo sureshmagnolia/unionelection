@@ -6919,7 +6919,6 @@ if (staffSearchInput) {
     });
 }
 
-
 // --- HoD MONITORING LOGIC (Day & Session Wise) ---
 window.openHodMonitorModal = function () {
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
@@ -6948,10 +6947,12 @@ window.openHodMonitorModal = function () {
         }
 
         // 2. Aggregate Data by Day & Session
-        // Structure: { "YYYY-MM-DD": { dateObj, dateStr, FN: { assigned: [], posted: [], unavailable: [] }, AN: { ... } } }
         const schedule = {};
 
         const getDayEntry = (dateObj, dateStr) => {
+            // Safety Check: Ensure dateObj is valid before calling toISOString
+            if (isNaN(dateObj.getTime())) return null;
+
             const key = dateObj.toISOString().split('T')[0];
             if (!schedule[key]) {
                 schedule[key] = {
@@ -6964,23 +6965,27 @@ window.openHodMonitorModal = function () {
             return schedule[key];
         };
 
-        // A. Process Invigilation Slots (Duties & Slot-Specific Leaves)
+        // A. Process Invigilation Slots
         Object.keys(invigilationSlots).forEach(key => {
+            // Safety: Ensure key has date part
+            if (!key.includes(' | ')) return;
+
             const date = parseDate(key);
-            if (date < today) return; // Filter Past
+            if (isNaN(date.getTime()) || date < today) return; // Skip Invalid/Past
 
             const [dStr, tStr] = key.split(' | ');
             const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
             const sess = isAN ? "AN" : "FN";
 
             const dayEntry = getDayEntry(date, dStr);
+            if (!dayEntry) return;
+
             const slot = invigilationSlots[key];
 
-            // Assigned & Posted (Exchange)
+            // Assigned & Posted
             slot.assigned.forEach(email => {
                 if (deptStaffEmails.has(email)) {
                     dayEntry[sess].assigned.push(email);
-                    // Check if they posted it for exchange
                     if (slot.exchangeRequests && slot.exchangeRequests.includes(email)) {
                         dayEntry[sess].posted.push(email);
                     }
@@ -6999,23 +7004,33 @@ window.openHodMonitorModal = function () {
             }
         });
 
-        // B. Process Advance Unavailability (General Leaves)
+        // B. Process Advance Unavailability (The Fix is Here)
         Object.keys(advanceUnavailability).forEach(dateStr => {
+            // 1. Validate Format (Must have dots)
+            if (!dateStr || !dateStr.includes('.')) return;
+
             const [d, m, y] = dateStr.split('.');
             const date = new Date(y, m - 1, d);
 
+            // 2. Validate Date Object
+            if (isNaN(date.getTime())) return; 
             if (date < today) return;
 
             const dayEntry = getDayEntry(date, dateStr);
+            if (!dayEntry) return;
 
             ['FN', 'AN'].forEach(sess => {
                 if (advanceUnavailability[dateStr][sess]) {
                     advanceUnavailability[dateStr][sess].forEach(u => {
-                        if (deptStaffEmails.has(u.email)) {
-                            // Avoid duplicates if already caught in slot-specific above
-                            const exists = dayEntry[sess].unavailable.some(x => x.email === u.email);
+                        // Handle legacy string vs new object format
+                        const email = (typeof u === 'string' ? u : u.email);
+                        const reason = (typeof u === 'object' ? u.reason : "OD/Leave");
+
+                        if (deptStaffEmails.has(email)) {
+                            // Avoid duplicates
+                            const exists = dayEntry[sess].unavailable.some(x => x.email === email);
                             if (!exists) {
-                                dayEntry[sess].unavailable.push({ email: u.email, reason: u.reason });
+                                dayEntry[sess].unavailable.push({ email: email, reason: reason });
                             }
                         }
                     });
@@ -7025,14 +7040,12 @@ window.openHodMonitorModal = function () {
 
         // 3. Sort & Render
         const sortedKeys = Object.keys(schedule).sort();
-
         let html = "";
 
         sortedKeys.forEach(dateKey => {
             const dayData = schedule[dateKey];
             const dayName = dayData.dateObj.toLocaleString('en-us', { weekday: 'long' });
 
-            // Only render if there is data for this day
             const hasFN = dayData.FN.assigned.length > 0 || dayData.FN.unavailable.length > 0;
             const hasAN = dayData.AN.assigned.length > 0 || dayData.AN.unavailable.length > 0;
 
@@ -7093,6 +7106,7 @@ window.openHodMonitorModal = function () {
 
     }, 50);
 }
+
 
 // --- NEW: Open Dashboard Modal (Admin Side) ---
 window.openDashboardInvigModal = function (sessionKey) {
