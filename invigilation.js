@@ -351,23 +351,6 @@ function setupLiveSync(collegeId, mode) {
     }
 }
 
-// --- Helper to start the session ---
-function initializeSession(id, adminStatus, roleName) {
-    console.log(`✅ Initializing Session: ${id} as ${roleName}`);
-    currentCollegeId = id;
-    isAdmin = adminStatus;
-
-    // Start Live Presence
-    if (typeof window.initLivePresence === 'function') {
-        window.initLivePresence(currentUser.email, currentUser.displayName || roleName, isAdmin);
-    }
-
-    // Start Data Sync
-    setupLiveSync(currentCollegeId, isAdmin ? 'admin' : 'staff');
-}
-
-
-
 // Helper to apply config (Shared by Cache & Live)
 function applyCollegeConfig(data, mode, triggerRender) {
     collegeData = data;
