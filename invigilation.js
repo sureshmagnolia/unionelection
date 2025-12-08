@@ -8,16 +8,20 @@ import { initializeAppCheck, ReCaptchaV3Provider }
 import { getApp } 
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 
-// --- INITIALIZE APP CHECK (Add this block) ---
-// This grabs the Firebase App instance that you initialized in your other file/HTML
+// --- INITIALIZE APP CHECK ---
 const app = getApp(); 
 
-// 1. CONDITIONAL DEBUG MODE
-// Only enable the debug token if the URL is localhost or 127.0.0.1.
-// Real users on the live site will skip this and use standard reCAPTCHA.
-if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+// 1. DYNAMIC DEBUG MODE
+// This automatically detects if you are running locally or on the live web.
+const hostname = window.location.hostname;
+
+if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.includes("192.168.")) {
+    // DEVELOPMENT MODE: Use Debug Token
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    console.log("🛡️ App Check: Debug Mode Enabled (Localhost)");
+    console.log(`🛡️ App Check: Debug Mode Enabled for ${hostname}`);
+} else {
+    // PRODUCTION MODE: Use Real reCAPTCHA
+    console.log("🛡️ App Check: Production Mode (Live Site)");
 }
 
 // 2. START APP CHECK
@@ -28,7 +32,6 @@ const appCheck = initializeAppCheck(app, {
     // Automatically refresh the token in the background
     isTokenAutoRefreshEnabled: true 
 });
-
 const auth = window.firebase.auth;
 const db = window.firebase.db;
 const provider = window.firebase.provider;
