@@ -3450,10 +3450,18 @@ window.postForExchange = async function (key, email) {
     }
 }
 window.withdrawExchange = async function (key, email) {
-    // 1. ADDED CONFIRMATION CHECK
+    const slot = invigilationSlots[key];
+
+    // --- NEW: ADMIN LOCK CHECK ---
+    // Freezes the market state. Users cannot enter OR leave the market.
+    if (slot.isAdminLocked) {
+        return alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. Withdrawal is disabled to prevent roster changes.");
+    }
+    // -----------------------------
+
+    // 1. CONFIRMATION CHECK
     if (!confirm("Are you sure you want to withdraw this request and keep the duty?")) return;
 
-    const slot = invigilationSlots[key];
     if (slot.exchangeRequests) {
         // 2. Update Local Data
         slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
