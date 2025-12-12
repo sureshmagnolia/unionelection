@@ -71,10 +71,22 @@ export default function NominalRollPage() {
         }
     };
 
+    const handleAddStudent = () => {
+        setEditingStudent({ sl: -1, name: "", admNo: "", gender: "Male", dept: "", year: "", stream: "" });
+    };
+
     const handleUpdateStudent = (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingStudent) return;
-        setStudents(students.map(s => s.sl === editingStudent.sl ? editingStudent : s));
+
+        if (editingStudent.sl === -1) {
+            // Create New
+            const newStudent = { ...editingStudent, sl: students.length + 1 };
+            setStudents([...students, newStudent]);
+        } else {
+            // Update Existing
+            setStudents(students.map(s => s.sl === editingStudent.sl ? editingStudent : s));
+        }
         setEditingStudent(null);
     };
 
@@ -95,137 +107,45 @@ export default function NominalRollPage() {
                 <div className="flex gap-2">
                     {!isLocked && (
                         <>
-                            <a
-                                href="/nominal_roll_template.csv"
-                                download="NominalRoll_Template.csv"
-                                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm text-decoration-none"
+                            <button 
+                                onClick={handleAddStudent}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
                             >
-                                <Download size={16} />
-                                <span>Template</span>
-                            </a>
-                            <label className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors font-medium text-sm">
-                                <Upload size={16} />
-                                <span>Import CSV</span>
-                                <input
-                                    type="file"
-                                    accept=".csv"
-                                    className="hidden"
-                                    onChange={handleFileUpload}
-                                />
-                            </label>
+                                <Plus size={16} /> Add Student
+                            </button>
+                            <a
+                                href="/nominal_roll_template.csv" ...>...</a>
+                            <label ...>...</label>
                         </>
                     )}
-                    <button
-                        onClick={() => window.print()}
-                        disabled={students.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 font-medium text-sm disabled:opacity-50"
-                    >
-                        <Printer size={16} /> Print
-                    </button>
-                    <button
-                        onClick={() => setIsLocked(!isLocked)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium text-sm transition-colors ${isLocked ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
-                    >
-                        {isLocked ? <><Lock size={16} /> Finalized</> : <><Unlock size={16} /> Finalize List</>}
-                    </button>
-                </div>
-            </header>
+                    <button ...>...</button>
+                    <button ...>...</button>
+                </div >
+            </header >
 
-            {/* Print Header */}
-            <div className="hidden print-block mb-8 text-center border-b-2 border-black pb-4">
-                <h1 className="text-3xl font-bold uppercase mb-2">Union Election 2025</h1>
-                <h2 className="text-xl font-semibold uppercase">Nominal Roll</h2>
-                <div className="mt-4 inline-block px-4 py-1 border-2 border-black font-bold uppercase">
-                    {isLocked ? "FINAL ROLL" : "DRAFT LIST - SUBJECT TO CORRECTION"}
+        {/* ... rest of UI ... */ }
+
+    {/* Edit Modal (Updated Title) */ }
+    {
+        editingStudent && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                        <h3 className="font-bold text-lg text-gray-900">
+                            {editingStudent.sl === -1 ? "Add New Student" : "Edit Student"}
+                        </h3>
+                        <button onClick={() => setEditingStudent(null)} className="text-gray-400 hover:text-gray-600">
+                            <X size={20} />
+                        </button>
+                    </div>
+                    {/* ... form ... */}
                 </div>
             </div>
-
-            {/* Stats / Controls */}
-            <div className="no-print bg-blue-50 border border-blue-100 p-4 rounded-lg flex justify-between items-center text-sm text-blue-800">
-                <div className="flex gap-4">
-                    <span><strong>Total Voters:</strong> {students.length}</span>
-                    <span><strong>Status:</strong> {isLocked ? "Locked (Ready for Election)" : "Draft (Edits Allowed)"}</span>
-                </div>
-                {!isLocked && <span className="text-xs bg-white px-2 py-1 rounded border border-blue-200">Tip: Click 'Finalize List' to lock editing before printing final roll.</span>}
-            </div>
-
-            {/* Table Section */}
-            {students.length > 0 && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden print-shadow-none">
-                    <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 no-print">
-                        <div className="relative w-72">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <input
-                                type="text"
-                                placeholder="Search by Name or Adm No..."
-                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left text-gray-600">
-                            <thead className="bg-gray-100 text-gray-700 font-semibold uppercase text-xs print-bg-transparent print-text-black">
-                                <tr>
-                                    <th className="px-6 py-3 border-b border-gray-200">Sl.</th>
-                                    <th className="px-6 py-3 border-b border-gray-200">Name</th>
-                                    <th className="px-6 py-3 border-b border-gray-200">Adm No</th>
-                                    <th className="px-6 py-3 border-b border-gray-200">Dept</th>
-                                    <th className="px-6 py-3 border-b border-gray-200">Year</th>
-                                    <th className="px-6 py-3 border-b border-gray-200">Stream</th>
-                                    <th className="px-6 py-3 border-b border-gray-200">Gender</th>
-                                    {!isLocked && <th className="px-6 py-3 border-b border-gray-200 no-print">Action</th>}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {filteredStudents.slice(0, isLocked ? undefined : 100).map((student) => (
-                                    <tr key={student.sl} className="hover:bg-gray-50/80 transition-colors print-hover-none">
-                                        <td className="px-6 py-3 font-medium">{student.sl}</td>
-                                        <td className="px-6 py-3 font-semibold text-gray-900">{student.name}</td>
-                                        <td className="px-6 py-3 font-mono text-xs">{student.admNo}</td>
-                                        <td className="px-6 py-3">{student.dept}</td>
-                                        <td className="px-6 py-3">{student.year}</td>
-                                        <td className="px-6 py-3">{student.stream}</td>
-                                        <td className="px-6 py-3">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${student.gender.toLowerCase() === 'female' ? 'text-pink-600' : 'text-blue-600'}`}>
-                                                {student.gender}
-                                            </span>
-                                        </td>
-                                        {!isLocked && (
-                                            <td className="px-6 py-3 no-print">
-                                                <button
-                                                    onClick={() => setEditingStudent(student)}
-                                                    className="p-1 hover:bg-gray-200 rounded text-gray-500 hover:text-blue-600 transition-colors"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                            </td>
-                                        )}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {!isLocked && (
-                            <div className="p-3 text-center text-xs text-gray-400 border-t border-gray-100 no-print">
-                                Showing top 100 results. Finalize list to view/print all.
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Edit Modal */}
-            {editingStudent && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="font-bold text-lg text-gray-900">Edit Student</h3>
-                            <button onClick={() => setEditingStudent(null)} className="text-gray-400 hover:text-gray-600">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <form onSubmit={handleUpdateStudent} className="p-6 space-y-4">
+        )
+    }
+        </div >
+    );
+}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
                                 <input
@@ -302,10 +222,10 @@ export default function NominalRollPage() {
                                     Save Changes
                                 </button>
                             </div>
-                        </form>
-                    </div>
-                </div>
+                        </form >
+                    </div >
+                </div >
             )}
-        </div>
+        </div >
     );
 }
