@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Papa from "papaparse";
-import { Upload, FileUp, Trophy, Search, FileSpreadsheet, Download, Lock, CheckCircle, Edit2, X, Printer, Unlock } from "lucide-react";
+import { Upload, FileUp, Trophy, Search, FileSpreadsheet, Download, Lock, CheckCircle, Edit2, X, Printer, Unlock, Plus } from "lucide-react";
 
 interface Student {
     sl: number;
