@@ -138,94 +138,88 @@ export default function NominalRollPage() {
                             <X size={20} />
                         </button>
                     </div>
-                    {/* ... form ... */}
+                    <form onSubmit={handleUpdateStudent} className="p-6 space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
+                            <input
+                                type="text"
+                                value={editingStudent.name}
+                                onChange={e => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                                className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Admission No</label>
+                                <input
+                                    type="text"
+                                    value={editingStudent.admNo}
+                                    onChange={e => setEditingStudent({ ...editingStudent, admNo: e.target.value })}
+                                    className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Gender</label>
+                                <select
+                                    value={editingStudent.gender}
+                                    onChange={e => setEditingStudent({ ...editingStudent, gender: e.target.value })}
+                                    className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                                >
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Dept</label>
+                                <input
+                                    type="text"
+                                    value={editingStudent.dept}
+                                    onChange={e => setEditingStudent({ ...editingStudent, dept: e.target.value })}
+                                    className="w-full p-2 border border-gray-200 rounded-lg"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Year</label>
+                                <input
+                                    type="text"
+                                    value={editingStudent.year}
+                                    onChange={e => setEditingStudent({ ...editingStudent, year: e.target.value })}
+                                    className="w-full p-2 border border-gray-200 rounded-lg"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Stream</label>
+                                <input
+                                    type="text"
+                                    value={editingStudent.stream}
+                                    onChange={e => setEditingStudent({ ...editingStudent, stream: e.target.value })}
+                                    className="w-full p-2 border border-gray-200 rounded-lg"
+                                />
+                            </div>
+                        </div>
+                        <div className="pt-4 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setEditingStudent(null)}
+                                className="flex-1 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg shadow-blue-200"
+                            >
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         )
     }
-        </div >
-    );
-}
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
-                                <input
-                                    type="text"
-                                    value={editingStudent.name}
-                                    onChange={e => setEditingStudent({ ...editingStudent, name: e.target.value })}
-                                    className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Admission No</label>
-                                    <input
-                                        type="text"
-                                        value={editingStudent.admNo}
-                                        onChange={e => setEditingStudent({ ...editingStudent, admNo: e.target.value })}
-                                        className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Gender</label>
-                                    <select
-                                        value={editingStudent.gender}
-                                        onChange={e => setEditingStudent({ ...editingStudent, gender: e.target.value })}
-                                        className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                                    >
-                                        <option value="Male">Male</option>
-                                        <option value="Female">Female</option>
-                                        <option value="Other">Other</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Dept</label>
-                                    <input
-                                        type="text"
-                                        value={editingStudent.dept}
-                                        onChange={e => setEditingStudent({ ...editingStudent, dept: e.target.value })}
-                                        className="w-full p-2 border border-gray-200 rounded-lg"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Year</label>
-                                    <input
-                                        type="text"
-                                        value={editingStudent.year}
-                                        onChange={e => setEditingStudent({ ...editingStudent, year: e.target.value })}
-                                        className="w-full p-2 border border-gray-200 rounded-lg"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Stream</label>
-                                    <input
-                                        type="text"
-                                        value={editingStudent.stream}
-                                        onChange={e => setEditingStudent({ ...editingStudent, stream: e.target.value })}
-                                        className="w-full p-2 border border-gray-200 rounded-lg"
-                                    />
-                                </div>
-                            </div>
-                            <div className="pt-4 flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setEditingStudent(null)}
-                                    className="flex-1 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg shadow-blue-200"
-                                >
-                                    Save Changes
-                                </button>
-                            </div>
-                        </form >
-                    </div >
-                </div >
-            )}
         </div >
     );
 }
